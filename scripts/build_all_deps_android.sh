@@ -22,22 +22,33 @@ OCCT_DIR="$(pwd)/engine/src/main/occt"
 ROOT="$(pwd)"
 mkdir -p "$JNI_IMPORTS_DIR" "$OCCT_DIR"
 
-# Download with retries: CI runners hit transient mirror failures, and this
-# script runs inside `||`-guarded calls where `set -e` is suppressed, so a
-# failed curl must never silently cascade into configure/make garbage.
+# Download with mirror fallback + retries: upstream hosts go down (gmplib.org
+# has timed out for entire runs) and this script runs inside ||-guarded calls
+# where `set -e` is suppressed, so a failed download must never silently
+# cascade into configure/make garbage. Tries each mirror in order; short
+# connect timeout so dead hosts fail fast instead of burning 133s per attempt.
 fetch() {
-    local url="$1" out="$2" i
-    for i in 1 2 3 4 5; do
-        if curl -fsSL --retry 3 --retry-all-errors -o "$out" "$url" \
-           && [ -s "$out" ]; then
-            return 0
-        fi
-        echo "--- [fetch] attempt $i/5 failed for $url; retrying ---" >&2
-        sleep "$((i * 5))"
+    local out="$1"; shift
+    local url i
+    for url in "$@"; do
+        for i in 1 2 3; do
+            if curl -fsSL --connect-timeout 20 --max-time 300 \
+                    --retry 2 --retry-all-errors -o "$out" "$url" \
+               && [ -s "$out" ]; then
+                return 0
+            fi
+            echo "--- [fetch] attempt $i/3 failed for $url ---" >&2
+            sleep "$((i * 5))"
+        done
+        echo "--- [fetch] mirror exhausted: $url ---" >&2
+        rm -f "$out"
     done
-    echo "--- [fetch] ERROR: could not download $url after 5 attempts ---" >&2
+    echo "--- [fetch] ERROR: all mirrors failed for $out ---" >&2
     return 1
 }
+
+GMP_URLS="https://gmplib.org/download/gmp/gmp-6.2.1.tar.xz https://ftp.gnu.org/gnu/gmp/gmp-6.2.1.tar.xz https://ftpmirror.gnu.org/gmp/gmp-6.2.1.tar.xz"
+MPFR_URLS="https://www.mpfr.org/mpfr-4.2.0/mpfr-4.2.0.tar.xz https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.0.tar.xz https://ftpmirror.gnu.org/mpfr/mpfr-4.2.0.tar.xz"
 
 WORK_DIR="${WORK_DIR:-/tmp/build_android_deps}"
 mkdir -p "$WORK_DIR"
@@ -229,7 +240,8 @@ build_gmp_mpfr() {
 
     # --- GMP -----------------------------------------------------------------
     if [ ! -d "gmp-6.2.1" ]; then
-        fetch https://gmplib.org/download/gmp/gmp-6.2.1.tar.xz gmp.tar.xz || return 1
+        # shellcheck disable=SC2086
+        fetch gmp.tar.xz $GMP_URLS || return 1
         tar xf gmp.tar.xz || return 1
     fi
     cd gmp-6.2.1 || return 1
@@ -244,7 +256,8 @@ build_gmp_mpfr() {
 
     # --- MPFR (against the just-installed GMP) -------------------------------
     if [ ! -d "mpfr-4.2.0" ]; then
-        fetch https://www.mpfr.org/mpfr-4.2.0/mpfr-4.2.0.tar.xz mpfr.tar.xz || return 1
+        # shellcheck disable=SC2086
+        fetch mpfr.tar.xz $MPFR_URLS || return 1
         tar xf mpfr.tar.xz || return 1
     fi
     cd mpfr-4.2.0 || return 1

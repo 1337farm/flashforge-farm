@@ -5,6 +5,9 @@
 #   1. Check the latest build hash on GitHub ("the proper hash").
 #   2. If CI has a successful run for EXACTLY this commit -> download the APK
 #      bundle ("FlashForgeFarm-Debug-APK" artifact) instead of building.
+#   2b. Else fall back to the rolling farm-apk-latest release (sha-verified;
+#      artifacts expire after 7 days, releases persist). Commit mismatch only
+#      warns — the .so assertion still gates the copy.
 #   3. Otherwise build locally: stage the engine bundle + native deps (via
 #      scripts/fetch-native-deps.sh) so Gradle compiles the thin libfarm.so JNI
 #      bridge and assembles the APK.
@@ -133,6 +136,37 @@ if [ "$BUILD_ONLY" -eq 0 ] && [ -z "$(find "$DL_CACHE" -name 'FlashForgeFarm_*.a
   else
     log "no successful CI run for commit $LOCAL_SHA yet; building locally"
   fi
+fi
+
+# --- path 1b: rolling APK release (any commit; artifacts expire, releases persist)
+if [ "$BUILD_ONLY" -eq 0 ] && [ -z "$(find "$DL_CACHE" -name 'FlashForgeFarm_*.apk' 2>/dev/null | head -1)" ]; then
+  mkdir -p "$DL_CACHE"
+  if gh release download farm-apk-latest \
+       --pattern 'FlashForgeFarm_*.apk' --pattern 'apk-manifest.json' \
+       --dir "$DL_CACHE" --clobber 2>"$DL_CACHE/.rel.err"; then
+    APK="$(find "$DL_CACHE" -name 'FlashForgeFarm_*.apk' | head -1)"
+    MAN="$DL_CACHE/apk-manifest.json"
+    if [ -n "$APK" ] && [ -f "$MAN" ]; then
+      WANT="$(python3 -c "import json,glob,os; m=json.load(open('$MAN')); n=[k for k in m['files'] if k.endswith('.apk')][0]; print(m['files'][n])" 2>/dev/null || true)"
+      GOT="$(sha256sum "$APK" | cut -d' ' -f1)"
+      BUILT="$(python3 -c "import json; print(json.load(open('$MAN')).get('commit','?'))" 2>/dev/null || echo ?)"
+      if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
+        if [ "$BUILT" = "$LOCAL_SHA" ]; then
+          log "release APK verified, built for this commit ($BUILT)"
+        else
+          log "WARNING: release APK is for commit $BUILT, not $LOCAL_SHA; using it (assert still enforced)"
+        fi
+        publish_apk "$APK"
+        exit 0
+      else
+        err "release APK sha mismatch; ignoring"
+      fi
+    fi
+  else
+    cat "$DL_CACHE/.rel.err" >&2 || true
+  fi
+  rm -f "$DL_CACHE/.rel.err"
+  log "no usable release APK; continuing"
 fi
 
 if [ "$DOWNLOAD_ONLY" -eq 1 ]; then

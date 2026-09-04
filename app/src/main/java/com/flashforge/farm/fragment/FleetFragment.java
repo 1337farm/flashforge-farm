@@ -97,7 +97,7 @@ public class FleetFragment extends Fragment {
             saveTargetSpinner.setSelection(0); // default USB
             saveTargetSpinner.setLayoutParams(new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            saveTargetSpinner.setPrompt(R.string.FleetSaveTarget);
+            saveTargetSpinner.setPromptId(R.string.FleetSaveTarget);
             contentLayout.addView(saveTargetSpinner);
 
             Button provisionBtn = new Button(ctx);

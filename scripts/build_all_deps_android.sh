@@ -22,6 +22,34 @@ OCCT_DIR="$(pwd)/engine/src/main/occt"
 ROOT="$(pwd)"
 mkdir -p "$JNI_IMPORTS_DIR" "$OCCT_DIR"
 
+# Download with mirror fallback + retries: upstream hosts go down (gmplib.org
+# has timed out for entire runs) and this script runs inside ||-guarded calls
+# where `set -e` is suppressed, so a failed download must never silently
+# cascade into configure/make garbage. Tries each mirror in order; short
+# connect timeout so dead hosts fail fast instead of burning 133s per attempt.
+fetch() {
+    local out="$1"; shift
+    local url i
+    for url in "$@"; do
+        for i in 1 2 3; do
+            if curl -fsSL --connect-timeout 20 --max-time 300 \
+                    --retry 2 --retry-all-errors -o "$out" "$url" \
+               && [ -s "$out" ]; then
+                return 0
+            fi
+            echo "--- [fetch] attempt $i/3 failed for $url ---" >&2
+            sleep "$((i * 5))"
+        done
+        echo "--- [fetch] mirror exhausted: $url ---" >&2
+        rm -f "$out"
+    done
+    echo "--- [fetch] ERROR: all mirrors failed for $out ---" >&2
+    return 1
+}
+
+GMP_URLS="https://gmplib.org/download/gmp/gmp-6.2.1.tar.xz https://ftp.gnu.org/gnu/gmp/gmp-6.2.1.tar.xz https://ftpmirror.gnu.org/gmp/gmp-6.2.1.tar.xz"
+MPFR_URLS="https://www.mpfr.org/mpfr-4.2.0/mpfr-4.2.0.tar.xz https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.0.tar.xz https://ftpmirror.gnu.org/mpfr/mpfr-4.2.0.tar.xz"
+
 WORK_DIR="${WORK_DIR:-/tmp/build_android_deps}"
 mkdir -p "$WORK_DIR"
 cd "$WORK_DIR"
@@ -210,39 +238,67 @@ build_gmp_mpfr() {
     export CXXFLAGS="-O3 -fPIC --sysroot=$SYSROOT"
     export LDFLAGS="--sysroot=$SYSROOT"
 
+    # Fail fast on a broken toolchain (flaky CI runners have shipped dead NDK
+    # installs); without this, autotools dies cryptically mid-configure.
+    "$CC" --version >/dev/null 2>&1 || { echo "--- [GMP/MPFR] ERROR: compiler $CC not working ---" >&2; return 1; }
+
     # --- GMP -----------------------------------------------------------------
+    # Hermetic source: tarballs are vendored in engine/vendor/ (sha256-pinned
+    # in SHA256SUMS, corroborated across independent mirrors). No network
+    # needed; mirrors below are a fallback only if vendor/ is absent.
     if [ ! -d "gmp-6.2.1" ]; then
-        curl -fsSL -o gmp.tar.xz https://gmplib.org/download/gmp/gmp-6.2.1.tar.xz
-        tar xf gmp.tar.xz
+        if [ -f "$ROOT/engine/vendor/gmp-6.2.1.tar.xz" ] \
+           && grep "gmp-6.2.1.tar.xz" "$ROOT/engine/vendor/SHA256SUMS" \
+              | (cd "$ROOT/engine/vendor" && sha256sum -c --status -); then
+            echo "--- [GMP/MPFR] using vendored gmp-6.2.1.tar.xz (sha verified) ---"
+            cp "$ROOT/engine/vendor/gmp-6.2.1.tar.xz" gmp.tar.xz
+        else
+            # shellcheck disable=SC2086
+            fetch gmp.tar.xz $GMP_URLS || return 1
+        fi
+        tar xf gmp.tar.xz || return 1
     fi
-    cd gmp-6.2.1
+    cd gmp-6.2.1 || return 1
     # Scope ABI=64 to this configure: the outer script exports ABI=arm64-v8a,
     # which GMP's configure misreads as a 32/64 selection ("arm64-v8a is not
     # among 64 32"). aarch64 => 64-bit, so pin ABI=64 for the child process.
     env ABI=64 ./configure --host=$HOST_PREFIX --prefix="$STAGE" --disable-assembly \
-        --enable-shared --disable-static --enable-cxx
-    make -j"$N_CORES"
-    make install
+        --enable-shared --disable-static --enable-cxx || return 1
+    make -j"$N_CORES" || return 1
+    make install || return 1
     cd ..
 
     # --- MPFR (against the just-installed GMP) -------------------------------
     if [ ! -d "mpfr-4.2.0" ]; then
-        curl -fsSL -o mpfr.tar.xz https://www.mpfr.org/mpfr-4.2.0/mpfr-4.2.0.tar.xz
-        tar xf mpfr.tar.xz
+        if [ -f "$ROOT/engine/vendor/mpfr-4.2.0.tar.xz" ] \
+           && grep "mpfr-4.2.0.tar.xz" "$ROOT/engine/vendor/SHA256SUMS" \
+              | (cd "$ROOT/engine/vendor" && sha256sum -c --status -); then
+            echo "--- [GMP/MPFR] using vendored mpfr-4.2.0.tar.xz (sha verified) ---"
+            cp "$ROOT/engine/vendor/mpfr-4.2.0.tar.xz" mpfr.tar.xz
+        else
+            # shellcheck disable=SC2086
+            fetch mpfr.tar.xz $MPFR_URLS || return 1
+        fi
+        tar xf mpfr.tar.xz || return 1
     fi
-    cd mpfr-4.2.0
+    cd mpfr-4.2.0 || return 1
     env ABI=64 ./configure --host=$HOST_PREFIX --prefix="$STAGE" \
         --enable-shared --disable-static \
-        --with-gmp-include="$STAGE/include" --with-gmp-lib="$STAGE/lib"
-    make -j"$N_CORES"
-    make install
+        --with-gmp-include="$STAGE/include" --with-gmp-lib="$STAGE/lib" || return 1
+    make -j"$N_CORES" || return 1
+    make install || return 1
     cd ..
 
     # --- copy into the Android source tree ------------------------------------
     mkdir -p "$JNI_SO_DIR" "$GMP_HDR_DIR"
-    cp "$STAGE/lib/libgmp.so" "$STAGE/lib/libgmpxx.so" "$STAGE/lib/libmpfr.so" "$JNI_SO_DIR/"
+    cp "$STAGE/lib/libgmp.so" "$STAGE/lib/libgmpxx.so" "$STAGE/lib/libmpfr.so" "$JNI_SO_DIR/" || return 1
     cp "$STAGE/include/gmp.h"  "$STAGE/include/gmpxx.h"  "$GMP_HDR_DIR/"
-    cp "$STAGE/include/mpfr.h" "$STAGE/include/mpf2mpfr.h" "$GMP_HDR_DIR/" 2>/dev/null || true
+    # mpfr.h is REQUIRED (CGAL includes it); copy it unconditionally so a
+    # failure breaks the build loudly. mpf2mpfr.h only exists in older MPFR
+    # releases, so its copy stays best-effort — it must never share a cp
+    # invocation with mpfr.h (one missing source voids the whole copy).
+    cp "$STAGE/include/mpfr.h" "$GMP_HDR_DIR/"
+    cp "$STAGE/include/mpf2mpfr.h" "$GMP_HDR_DIR/" 2>/dev/null || true
     echo "--- [GMP/MPFR] copied .so -> $JNI_SO_DIR; headers -> $GMP_HDR_DIR ---"
 }
 

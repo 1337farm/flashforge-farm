@@ -11,20 +11,31 @@ import sys
 repo = Path(__file__).resolve().parents[1]
 engine = repo / "engine"
 cmake = (engine / "CMakeLists.txt").read_text()
-abi = sys.argv[1] if len(sys.argv) > 1 else "arm64-v8a"
+
+args = sys.argv[1:]
+abi = "arm64-v8a"
+only = None
+i = 0
+while i < len(args):
+    if args[i] == "--dep" and i + 1 < len(args):
+        only = args[i + 1]
+        i += 2
+    else:
+        abi = args[i]
+        i += 1
 
 checks = []
 
 for name in ["tbb", "tbbmalloc"]:
-    checks.append((name, engine / f"src/main/jniImports/oneTBB/lib/{abi}/lib{name}.a"))
+    checks.append(("tbb", name, engine / f"src/main/jniImports/oneTBB/lib/{abi}/lib{name}.a"))
 
 for name in ["gmp", "gmpxx", "mpfr"]:
-    checks.append((name, engine / f"src/main/jniLibs/{abi}/lib{name}.so"))
+    checks.append(("gmp", name, engine / f"src/main/jniLibs/{abi}/lib{name}.so"))
 
 occt = re.search(r"set\(OCCT_LIBS\s+([^\)]+)\)", cmake, re.S)
 if occt:
     for name in occt.group(1).split():
-        checks.append((f"occt_{name}", engine / f"src/main/occt/jniLibs/{abi}/lib{name}.so"))
+        checks.append(("occt", f"occt_{name}", engine / f"src/main/occt/jniLibs/{abi}/lib{name}.so"))
 
 boost = re.search(r"set\(BOOST_LIBS\s+([^\)]+)\)", cmake, re.S)
 boost_arch = {
@@ -35,11 +46,14 @@ boost_arch = {
 }.get(abi)
 if boost and boost_arch:
     for name in boost.group(1).split():
-        checks.append((f"boost_{name}", engine / f"src/main/jniImports/boost/lib/{abi}/lib/libboost_{name}-clang-mt-{boost_arch}-1_85.a"))
+        checks.append(("boost", f"boost_{name}", engine / f"src/main/jniImports/boost/lib/{abi}/lib/libboost_{name}-clang-mt-{boost_arch}-1_85.a"))
+
+if only:
+    checks = [(d, label, path) for (d, label, path) in checks if d == only]
 
 present = []
 missing = []
-for label, path in checks:
+for _dep, label, path in checks:
     (present if path.exists() else missing).append((label, path.relative_to(repo)))
 
 print(f"ABI: {abi}")

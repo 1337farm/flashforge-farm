@@ -1,4 +1,4 @@
-name: Build Native Engine (from source)
+name: native
 
 # Builds libslic3r.so (and Boost/oneTBB/OCCT deps) from source on an x86_64
 # runner using the official NDK. The C++ engine source lives in the top-level
@@ -11,15 +11,45 @@ name: Build Native Engine (from source)
 # before the APK is assembled.
 #
 # Split into chained jobs so each stays well under the 6h per-job limit:
-#   1. build-dep     -> Boost + oneTBB + OCCT + GMP/MPFR each built on its OWN
-#                       runner via a matrix (no CPU contention; each dep cached
+#   0. test         -> fast suite, no SDK/NDK (~30s): CI guards (job names vs
+#                       ruleset), JNI Java<->C++ contract, python compile,
+#                       bash syntax. Fails the run early on repo hygiene.
+#   1. build-dep     -> Boost + oneTBB + OCCT each built on its OWN runner via
+#                       a matrix (no CPU contention; each dep cached
 #                       separately). The compiled deps live ONLY in the GitHub
 #                       actions cache, keyed by <dep>-<os>-<sha>-<scripts> —
 #                       the same key every consumer restores by.
-#   2. build-engine  -> compiles libslic3r.so (cached), restoring the compiled
-#                       deps straight from that cache by key on a miss
-#   3. package-apk   -> assembles the final debug APK with the source-built .so
-#                       (needs only the OCCT + GMP/MPFR runtime bits from cache)
+#   2. build-engine  -> builds GMP/MPFR fresh every run (uncached by design:
+#                       ~4 min, and immune to cache poisoning), restores the
+#                       cached deps, then compiles libslic3r.so (cached),
+#                       restoring the compiled deps straight from that cache
+#                       by key on a miss. Ships the GMP trees to package-apk
+#                       via artifact (not cache).
+#   3. package-apk   -> runs Android unit tests, then assembles the final
+#                       debug APK with the source-built .so
+#                       (needs only the OCCT + GMP/MPFR runtime bits: OCCT from
+#                       cache, GMP from the engine job's artifact)
+#
+# Publishing is per-step, not gated on the full build: each dep leg publishes
+# its own rolling release (dep-<name>-latest) when it builds, build-engine
+# publishes engine-latest when it compiles, and package-apk publishes
+# farm-apk-latest when it assembles. Publishing runs on main and same-repo
+# PRs (never forks). A later step failing never discards an earlier step's
+# good outputs; every release carries a sha256 manifest.
+#
+# Reuse order per dep: published release first (sha-verified; survives any
+# cache-key churn), then actions cache, then fresh build. Releases also let
+# local builds skip compiling entirely.
+#
+# Trust policy (poison-proof caches):
+# - Restored caches must pass exact-file checks (sentinels in build-dep,
+#   full check-native-prebuilts in build-engine), not just non-empty dirs.
+# - A failed check revokes the poisoned cache key (gh cache delete) and fails
+#   fast; the next run rebuilds fresh. Fresh builds must pass the same checks
+#   before save/publish.
+# - Publishing backfills: any verified content publishes, whether freshly
+#   built or restored, so a past run's unpublished-but-good outputs get
+#   released by the next green run.
 #
 # Caching: heavy builds write their outputs both to a primary output cache and
 # to ccache. On re-runs, if the primary cache hits (inputs unchanged) the heavy
@@ -35,15 +65,37 @@ env:
   NDK_VERSION: "23.1.7779620"
 
 jobs:
+  test:
+    name: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Fast test suite (no SDK/NDK, ~30s)
+        run: |
+          set -e
+          python3 -c "import yaml" 2>/dev/null || pip install --quiet pyyaml
+          python3 scripts/tests/test_ci_guards.py
+          python3 scripts/tests/test_jni_contract.py
+          python3 -m py_compile scripts/*.py scripts/tests/*.py
+          for f in scripts/*.sh; do bash -n "$f"; done
+          echo "fast tests OK"
+
   build-dep:
-    name: Build ${{ matrix.name }} deps
+    name: dep-${{ matrix.dep }}
     runs-on: ubuntu-24.04
     timeout-minutes: 350
+    permissions:
+      contents: write
+      actions: write
     outputs:
       tbb_dep_key: ${{ steps.sha.outputs.tbb_dep_key }}
       boost_dep_key: ${{ steps.sha.outputs.boost_dep_key }}
       occt_dep_key: ${{ steps.sha.outputs.occt_dep_key }}
-      gmp_dep_key: ${{ steps.sha.outputs.gmp_dep_key }}
     strategy:
       fail-fast: false
       matrix:
@@ -51,7 +103,6 @@ jobs:
           - { dep: tbb,   name: oneTBB, dir: openvdb-android,   path: engine/src/main/jniImports/oneTBB, url: https://github.com/syoyo/openvdb-android.git,         rec: false }
           - { dep: boost, name: Boost,  dir: Boost-for-Android, path: engine/src/main/jniImports/boost, url: https://github.com/moritz-wundke/Boost-for-Android.git, rec: true  }
           - { dep: occt,  name: OCCT,   dir: OCCT,              path: engine/src/main/occt,              url: https://github.com/Open-Cascade-SAS/OCCT.git,            rec: false }
-          - { dep: gmp,   name: GMP/MPFR, dir: gmp,             path: engine/src/main/jniLibs,           url: none,                                              rec: false }
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
@@ -80,8 +131,34 @@ jobs:
           echo "scripts=$SCRIPTS_SHA" >> "$GITHUB_OUTPUT"
           echo "${{ matrix.dep }}_dep_key=${{ matrix.dep }}-${{ runner.os }}-$SHA-$SCRIPTS_SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Restore from release (published build reuse)
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REL_HIT=0
+          DL="$RUNNER_TEMP/rel-dl"
+          mkdir -p "$DL"
+          if gh release download "dep-${{ matrix.dep }}-latest" \
+               --pattern '${{ matrix.dep }}-deps.tar.gz' --pattern '${{ matrix.dep }}-manifest.json' \
+               --dir "$DL" --clobber >/dev/null 2>&1; then
+            WANT="$(python3 -c "import json;print(json.load(open('$DL/${{ matrix.dep }}-manifest.json'))['files']['${{ matrix.dep }}-deps.tar.gz'])" 2>/dev/null || true)"
+            GOT="$(sha256sum "$DL/${{ matrix.dep }}-deps.tar.gz" 2>/dev/null | cut -d' ' -f1)"
+            if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
+              tar -xzf "$DL/${{ matrix.dep }}-deps.tar.gz"
+              REL_HIT=1
+              echo "release dep-${{ matrix.dep }}-latest verified and staged"
+            else
+              echo "release sha mismatch; ignoring"
+            fi
+          else
+            echo "no usable dep-${{ matrix.dep }}-latest release; continuing"
+          fi
+          echo "rel_hit=$REL_HIT" >> "$GITHUB_OUTPUT"
+
       - name: Restore compiled ${{ matrix.name }}
         id: dep-cache
+        if: steps.rel.outputs.rel_hit != '1'
         uses: actions/cache/restore@v5
         with:
           path: ${{ matrix.path }}
@@ -89,19 +166,48 @@ jobs:
 
       - name: Validate restored ${{ matrix.name }}
         id: validate
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           NEED=1
-          if [ "${{ steps.dep-cache.outputs.cache-hit }}" = "true" ]; then
-            if [ -n "$(ls -A '${{ matrix.path }}' 2>/dev/null)" ] \
-               && find '${{ matrix.path }}' -type f | grep -q .; then
-              echo "restored '${{ matrix.path }}' is non-empty; reusing it"
+          REUSED=0
+          have_trees() {
+            case '${{ matrix.dep }}' in
+              tbb)
+                test -f "engine/src/main/jniImports/oneTBB/lib/$ABI/libtbb.a" \
+                && test -f "engine/src/main/jniImports/oneTBB/lib/$ABI/libtbbmalloc.a" ;;
+              boost)
+                [ "$(ls engine/src/main/jniImports/boost/lib/$ABI/lib/libboost_*.a 2>/dev/null | wc -l)" -ge 30 ] ;;
+              occt)
+                [ "$(ls engine/src/main/occt/jniLibs/$ABI/libTK*.so 2>/dev/null | wc -l)" -ge 20 ] \
+                && [ -n "$(ls -A engine/src/main/occt/include/$ABI 2>/dev/null)" ] ;;
+            esac
+          }
+          if [ "${{ steps.rel.outputs.rel_hit }}" = "1" ]; then
+            if have_trees; then
+              echo "release-staged trees pass sentinels; reusing (already published, no republish)"
               NEED=0
+              REUSED=1
             else
-              echo "cache restored but '${{ matrix.path }}' is empty; forcing rebuild"
+              echo "release-staged trees fail sentinels; discarding"
               rm -rf '${{ matrix.path }}'
             fi
           fi
+          if [ "$NEED" = "1" ] && [ "${{ steps.dep-cache.outputs.cache-hit }}" = "true" ]; then
+            if have_trees; then
+              echo "cache-restored trees pass sentinels; reusing it"
+              NEED=0
+              REUSED=1
+            else
+              KEY="${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}-${{ steps.sha.outputs.scripts }}"
+              echo "revoking poisoned cache $KEY and forcing rebuild"
+              rm -rf '${{ matrix.path }}'
+              gh cache delete "$KEY" --repo "${{ github.repository }}" 2>&1 \
+                || echo "revoke failed (key held elsewhere); rebuild proceeds"
+            fi
+          fi
           echo "need=$NEED" >> "$GITHUB_OUTPUT"
+          echo "reused=$REUSED" >> "$GITHUB_OUTPUT"
 
       - name: Checkout repository
         if: steps.validate.outputs.need == '1'
@@ -188,19 +294,54 @@ jobs:
           chmod +x scripts/build_occt_headers.sh
           WORK_DIR=/tmp/build_android_deps ABI="$ABI" ./scripts/build_occt_headers.sh
 
+      - name: Verify built ${{ matrix.name }} exactly
+        id: verify-built
+        if: steps.validate.outputs.need == '1'
+        run: |
+          python3 scripts/check-native-prebuilts.py --dep '${{ matrix.dep }}' "$ABI"
+          echo "verified=1" >> "$GITHUB_OUTPUT"
+
       - name: Save compiled ${{ matrix.name }}
-        if: steps.build-dep.outcome == 'success'
+        if: steps.build-dep.outcome == 'success' && steps.verify-built.outputs.verified == '1'
         uses: actions/cache/save@v5
         with:
           path: ${{ matrix.path }}
           key: ${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}-${{ steps.sha.outputs.scripts }}
 
+      - name: Publish ${{ matrix.name }} release
+        if: (steps.validate.outputs.reused == '1' && steps.rel.outputs.rel_hit != '1' || steps.verify-built.outputs.verified == '1') && (github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          OUT="$RUNNER_TEMP/dep-release"
+          mkdir -p "$OUT"
+          TARBALL="${{ matrix.dep }}-deps.tar.gz"
+          # shellcheck disable=SC2086
+          tar -czf "$OUT/$TARBALL" ${{ matrix.path }}
+          SHA="$(git rev-parse --short=10 HEAD 2>/dev/null || echo "${{ github.sha }}")"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          SUM="$(sha256sum "$OUT/$TARBALL" | cut -d' ' -f1)"
+          printf '{"commit":"%s","built_at":"%s","abi":"%s","dep":"%s","cache_key":"%s","files":{"%s":"%s"}}\n' \
+            "$SHA" "$DATE" "$ABI" "${{ matrix.dep }}" \
+            "${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}-${{ steps.sha.outputs.scripts }}" \
+            "$TARBALL" "$SUM" > "$OUT/${{ matrix.dep }}-manifest.json"
+          TAG="dep-${{ matrix.dep }}-latest"
+          gh release delete "$TAG" --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
+          gh release create "$TAG" "$OUT/$TARBALL" "$OUT/${{ matrix.dep }}-manifest.json" --repo "${{ github.repository }}" \
+            --title "${{ matrix.name }} deps (latest)" \
+            --notes "Rolling release of the ${{ matrix.name }} native deps built from source. Re-published whenever the dep rebuilds."
+
   build-engine:
-    name: Compile libslic3r.so
+    name: engine
     runs-on: ubuntu-24.04
     needs: [build-dep]
     timeout-minutes: 350
+    permissions:
+      contents: write
+      actions: write
     env:
+      ABI: arm64-v8a
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/23.1.7779620
@@ -213,8 +354,8 @@ jobs:
       - name: Compute engine cache key
         id: engine-key
         run: |
-          DEPKEY="${{ needs.build-dep.outputs.tbb_dep_key }}|${{ needs.build-dep.outputs.boost_dep_key }}|${{ needs.build-dep.outputs.occt_dep_key }}|${{ needs.build-dep.outputs.gmp_dep_key }}"
-          echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','app/build.gradle') }}-$DEPKEY" >> "$GITHUB_OUTPUT"
+          DEPKEY="${{ needs.build-dep.outputs.tbb_dep_key }}|${{ needs.build-dep.outputs.boost_dep_key }}|${{ needs.build-dep.outputs.occt_dep_key }}"
+          echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','app/build.gradle','scripts/build_all_deps_android.sh') }}-$DEPKEY" >> "$GITHUB_OUTPUT"
 
       - name: Restore built libslic3r.so
         id: engine-cache
@@ -236,10 +377,11 @@ jobs:
         uses: android-actions/setup-android@v4
 
       - name: Install NDK ${{ env.NDK_VERSION }}
-        if: steps.engine-cache.outputs.cache-hit != 'true'
         run: |
           yes | sdkmanager --licenses || true
           sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-35" "cmake;3.22.1"
+          "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" --version \
+            || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
 
       - name: Install ccache
         if: steps.engine-cache.outputs.cache-hit != 'true'
@@ -280,20 +422,86 @@ jobs:
           key: ${{ needs.build-dep.outputs.occt_dep_key }}
           fail-on-cache-miss: true
 
-      - name: Restore GMP/MPFR
-        if: steps.engine-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v5
-        with:
-          path: engine/src/main/jniLibs
-          key: ${{ needs.build-dep.outputs.gmp_dep_key }}
-          fail-on-cache-miss: true
-
       - name: Validate restored deps
         if: steps.engine-cache.outputs.cache-hit != 'true'
         run: |
-          for d in engine/src/main/jniImports/boost engine/src/main/jniImports/oneTBB engine/src/main/occt engine/src/main/jniLibs; do
+          for d in engine/src/main/jniImports/boost engine/src/main/jniImports/oneTBB engine/src/main/occt; do
             test -n "$(ls -A "$d" 2>/dev/null)" || { echo "ERROR: missing restored deps at $d"; exit 1; }
           done
+
+      - name: Test restored deps exactly (revoke poison on failure)
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          OUT="$(python3 scripts/check-native-prebuilts.py --dep tbb "$ABI" 2>&1 || true)"
+          echo "$OUT" | tail -3
+          echo "$OUT" | grep -q "All native prebuilts are present." || {
+            echo "tbb cache failed exact check; revoking ${{ needs.build-dep.outputs.tbb_dep_key }}"
+            gh cache delete "${{ needs.build-dep.outputs.tbb_dep_key }}" --repo "${{ github.repository }}" 2>&1 || true
+            exit 1
+          }
+          OUT="$(python3 scripts/check-native-prebuilts.py --dep boost "$ABI" 2>&1 || true)"
+          echo "$OUT" | tail -3
+          echo "$OUT" | grep -q "All native prebuilts are present." || {
+            echo "boost cache failed exact check; revoking ${{ needs.build-dep.outputs.boost_dep_key }}"
+            gh cache delete "${{ needs.build-dep.outputs.boost_dep_key }}" --repo "${{ github.repository }}" 2>&1 || true
+            exit 1
+          }
+          OUT="$(python3 scripts/check-native-prebuilts.py --dep occt "$ABI" 2>&1 || true)"
+          echo "$OUT" | tail -3
+          echo "$OUT" | grep -q "All native prebuilts are present." || {
+            echo "occt cache failed exact check; revoking ${{ needs.build-dep.outputs.occt_dep_key }}"
+            gh cache delete "${{ needs.build-dep.outputs.occt_dep_key }}" --repo "${{ github.repository }}" 2>&1 || true
+            exit 1
+          }
+          echo "all restored deps pass exact-file checks"
+
+      - name: Build GMP/MPFR fresh (uncached, ~4 min)
+        run: |
+          sudo apt-get update && sudo apt-get install -y build-essential
+          chmod +x scripts/build_all_deps_android.sh
+          ./scripts/build_all_deps_android.sh gmp
+          for f in \
+            "engine/src/main/jniLibs/$ABI/libgmp.so" \
+            "engine/src/main/jniLibs/$ABI/libgmpxx.so" \
+            "engine/src/main/jniLibs/$ABI/libmpfr.so" \
+            "engine/src/main/jniImports/gmp/include/$ABI/gmp.h" \
+            "engine/src/main/jniImports/gmp/include/$ABI/gmpxx.h" \
+            "engine/src/main/jniImports/gmp/include/$ABI/mpfr.h"; do
+            test -f "$f" || { echo "ERROR: GMP build did not produce $f"; exit 1; }
+          done
+          echo "GMP/MPFR staged and verified"
+          tar -czf /tmp/gmp-deps.tar.gz engine/src/main/jniLibs engine/src/main/jniImports/gmp
+          tar -tzf /tmp/gmp-deps.tar.gz | grep -q "libmpfr.so" || { echo "ERROR: tarball missing libmpfr.so"; exit 1; }
+          tar -tzf /tmp/gmp-deps.tar.gz | grep -q "mpfr.h" || { echo "ERROR: tarball missing mpfr.h"; exit 1; }
+          echo "gmp-deps.tar.gz packaged and content-verified"
+
+      - name: Upload GMP trees artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: gmp-trees
+          path: /tmp/gmp-deps.tar.gz
+          retention-days: 7
+
+      - name: Publish GMP release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          OUT="$RUNNER_TEMP/gmp-release"
+          mkdir -p "$OUT"
+          cp /tmp/gmp-deps.tar.gz "$OUT/gmp-deps.tar.gz"
+          SHA="$(git rev-parse --short=10 HEAD)"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          SUM="$(sha256sum "$OUT/gmp-deps.tar.gz" | cut -d' ' -f1)"
+          printf '{"commit":"%s","built_at":"%s","abi":"%s","dep":"gmp","files":{"gmp-deps.tar.gz":"%s"}}\n' \
+            "$SHA" "$DATE" "$ABI" "$SUM" > "$OUT/gmp-manifest.json"
+          gh release delete dep-gmp-latest --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
+          gh release create dep-gmp-latest "$OUT/gmp-deps.tar.gz" "$OUT/gmp-manifest.json" --repo "${{ github.repository }}" \
+            --title "GMP/MPFR deps (latest)" \
+            --notes "Rolling release of the GMP/MPFR native deps built from source. Re-published whenever the dep rebuilds."
 
       - name: Build native engine .so from source (standalone CMake)
         if: steps.engine-cache.outputs.cache-hit != 'true'
@@ -334,11 +542,48 @@ jobs:
           path: ${{ steps.find-so.outputs.so_artifact }}
           retention-days: 7
 
+      - name: Publish engine release
+        if: github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          OUT="$RUNNER_TEMP/engine-release"
+          mkdir -p "$OUT"
+          SO="${{ steps.find-so.outputs.so_artifact }}"
+          test -f "$SO" || { echo "ERROR: no libslic3r.so to publish"; exit 1; }
+          # Quality gate: real engine .so is tens of MB, links gmp/mpfr, and
+          # carries engine markers. NOTE: farm JNI strings (SliceListener)
+          # live in libfarm.so (app bridge), never in libslic3r.so — do not
+          # assert them here. Publishes (including backfill of cache-hit
+          # builds) only pass here.
+          SZ="$(stat -c%s "$SO")"
+          test "$SZ" -gt 10000000 || { echo "ERROR: libslic3r.so too small ($SZ bytes)"; exit 1; }
+          readelf -d "$SO" | grep -q "libgmp" || { echo "ERROR: libslic3r.so missing libgmp NEEDED"; exit 1; }
+          readelf -d "$SO" | grep -q "libmpfr" || { echo "ERROR: libslic3r.so missing libmpfr NEEDED"; exit 1; }
+          strings "$SO" | grep -q -F 'Orca Slicer' \
+            || { echo "ERROR: libslic3r.so missing engine marker"; exit 1; }
+          strings "$SO" | grep -q -F 'Arachne' \
+            || { echo "ERROR: libslic3r.so missing Arachne marker"; exit 1; }
+          echo "libslic3r.so quality OK ($SZ bytes, gmp/mpfr linked, engine markers present)"
+          cp "$SO" "$OUT/libslic3r.so"
+          SHA="$(git rev-parse --short=10 HEAD)"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          SUM="$(sha256sum "$OUT/libslic3r.so" | cut -d' ' -f1)"
+          printf '{"commit":"%s","built_at":"%s","abi":"%s","files":{"libslic3r.so":"%s"}}\n' \
+            "$SHA" "$DATE" "$ABI" "$SUM" > "$OUT/engine-manifest.json"
+          gh release delete engine-latest --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
+          gh release create engine-latest "$OUT/libslic3r.so" "$OUT/engine-manifest.json" --repo "${{ github.repository }}" \
+            --title "Engine libslic3r.so (latest)" \
+            --notes "Rolling release of libslic3r.so built from source. Re-published whenever the engine rebuilds."
+
   package-apk:
-    name: Assemble Debug APK
+    name: apk
     runs-on: ubuntu-24.04
     needs: [build-dep, build-engine]
     timeout-minutes: 120
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -367,17 +612,26 @@ jobs:
           key: ${{ needs.build-dep.outputs.occt_dep_key }}
           fail-on-cache-miss: true
 
-      - name: Restore GMP/MPFR
-        uses: actions/cache/restore@v5
+      - name: Download GMP trees artifact
+        uses: actions/download-artifact@v6
         with:
-          path: engine/src/main/jniLibs
-          key: ${{ needs.build-dep.outputs.gmp_dep_key }}
-          fail-on-cache-miss: true
+          name: gmp-trees
+          path: /tmp/gmp-trees-artifact
+
+      - name: Install GMP trees + validate
+        run: |
+          tar -xzf /tmp/gmp-trees-artifact/gmp-deps.tar.gz
+          for f in \
+            engine/src/main/jniLibs/arm64-v8a/libgmp.so \
+            engine/src/main/jniLibs/arm64-v8a/libgmpxx.so \
+            engine/src/main/jniLibs/arm64-v8a/libmpfr.so; do
+            test -f "$f" || { echo "ERROR: missing GMP runtime $f"; exit 1; }
+          done
 
       - name: Validate restored deps
         run: |
           test -n "$(ls -A engine/src/main/occt 2>/dev/null)" || { echo "ERROR: missing restored OCCT"; exit 1; }
-          test -n "$(ls -A engine/src/main/jniLibs 2>/dev/null)" || { echo "ERROR: missing restored GMP/MPFR jniLibs"; exit 1; }
+          test -n "$(ls -A engine/src/main/jniLibs 2>/dev/null)" || { echo "ERROR: missing GMP/MPFR jniLibs"; exit 1; }
 
       - name: Download libslic3r.so artifact
         uses: actions/download-artifact@v6
@@ -394,12 +648,16 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      - name: Verify corrected package in built .so
+      - name: Verify staged engine .so is genuine
         run: |
           SO=engine/output/arm64-v8a/libslic3r.so
-          strings "$SO" | grep -q 'com/flashforge/farm/slic3r/SliceListener' \
-            && echo "OK: .so targets com.flashforge.farm" \
-            || { echo "ERROR: .so does not target com.flashforge.farm"; exit 1; }
+          strings "$SO" | grep -q -F 'Orca Slicer' \
+            && strings "$SO" | grep -q -F 'Arachne' \
+            && echo "OK: staged engine .so carries engine markers" \
+            || { echo "ERROR: staged engine .so failed marker check"; exit 1; }
+
+      - name: Run Android unit tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
 
       - name: Assemble debug APK
         run: ./gradlew assembleDebug -PskipNativeRebuild=true --stacktrace
@@ -411,3 +669,25 @@ jobs:
           name: FlashForgeFarm-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 7
+
+      - name: Publish APK release
+        if: github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          OUT="$RUNNER_TEMP/apk-release"
+          mkdir -p "$OUT"
+          APK="$(find app/build/outputs/apk/debug -name 'FlashForgeFarm_*.apk' | head -1)"
+          test -n "$APK" || { echo "ERROR: no APK to publish"; exit 1; }
+          cp "$APK" "$OUT/"
+          APK_NAME="$(basename "$APK")"
+          SHA="$(git rev-parse --short=10 HEAD)"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          SUM="$(sha256sum "$OUT/$APK_NAME" | cut -d' ' -f1)"
+          printf '{"commit":"%s","built_at":"%s","abi":"arm64-v8a","files":{"%s":"%s"}}\n' \
+            "$SHA" "$DATE" "$APK_NAME" "$SUM" > "$OUT/apk-manifest.json"
+          gh release delete farm-apk-latest --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
+          gh release create farm-apk-latest "$OUT/$APK_NAME" "$OUT/apk-manifest.json" --repo "${{ github.repository }}" \
+            --title "FlashForge Farm APK (latest)" \
+            --notes "Rolling sideloadable debug APK built from source. Re-published on every green build."

@@ -146,43 +146,6 @@ def copyApkToDownloads = tasks.register('copyApkToDownloads') {
             }
             println "Copied ${apk.name} -> ${downloadsDir}"
         }
-        tasks.named("assemble${variant.name.capitalize()}") { finalizedBy copyApkToDownloads }
-    }
-}
-
-def copyApkToDownloads = tasks.register('copyApkToDownloads') {
-    def downloadsRoot = file(System.getenv('HOME') + '/storage/downloads')
-    def downloadsDir = file(downloadsRoot.path + '/FlashForgeFarm-Debug-APK')
-    def requiredSo = ['libslic3r.so', 'libc++_shared.so', 'libgmp.so', 'libgmpxx.so', 'libmpfr.so']
-    doLast {
-        if (!downloadsRoot.isDirectory()) {
-            logger.warn("Downloads root not found at ${downloadsRoot}; skipping APK copy (run termux-setup-storage)")
-            return
-        }
-        def apks = fileTree("$buildDir/outputs/apk/debug") { include '*.apk' }.files
-        if (apks.isEmpty()) {
-            logger.warn("No APK found in ${buildDir}/outputs/apk/debug")
-            return
-        }
-        apks.each { apk ->
-            def zip = new java.util.zip.ZipFile(apk)
-            try {
-                def names = Collections.list(zip.entries()).collect { it.isDirectory() ? null : it.name }.findAll { it != null }
-                def missing = requiredSo.findAll { !names.contains("lib/arm64-v8a/$it") }
-                if (!missing.isEmpty()) {
-                    throw new GradleException(
-                            "Refusing to copy incomplete APK ${apk.name}: missing ${missing} in lib/arm64-v8a. " +
-                            "Build with staged native deps (scripts/ensure-apk.sh) or ship libslic3r.so.")
-                }
-            } finally {
-                zip.close()
-            }
-            copy {
-                from apk
-                into downloadsDir
-            }
-            println "Copied ${apk.name} -> ${downloadsDir}"
-        }
     }
 }
 

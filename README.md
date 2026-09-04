@@ -1,5 +1,7 @@
 # FlashForge Farm
 
+[![Build Native Engine (from source)](https://github.com/1337farm/flashforge-farm/actions/workflows/native-engine-build.yml/badge.svg)](https://github.com/1337farm/flashforge-farm/actions/workflows/native-engine-build.yml)
+
 A 3D printing slicer for Android, powered by the **flashforge-farm** slicing engine.
 
 FlashForge Farm is a full-featured Android slicer built on the flashforge-farm `libslic3r` engine — the same engine you use on the desktop.
@@ -38,6 +40,7 @@ Note: the Java package is `com.flashforge.farm` and the `applicationId` is `com.
 FlashForge Farm is built on:
 
 - [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer) by SoftFever — slicing engine
+- [OrcaSlicer-Mobile](https://github.com/CodeMasterCody3D/OrcaSlicer-Mobile) — Android JNI bridge and mobile shell (itself based on [SliceBeam](https://github.com/utkabobr/SliceBeam))
 - [PrusaSlicer](https://github.com/prusa3d/PrusaSlicer) / Slic3r and [Bambu Studio](https://github.com/bambulab/BambuStudio) — which flashforge-farm is built upon
 
 ## Status

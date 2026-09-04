@@ -45,6 +45,8 @@ vendor/upstream-apk/
 
 # Local tooling / transient files (not part of the app)
 venv/
+__pycache__/
+*.pyc
 .agents/
 scratch/
 .ci-artifacts/

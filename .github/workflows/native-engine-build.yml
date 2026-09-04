@@ -552,15 +552,19 @@ jobs:
           SO="${{ steps.find-so.outputs.so_artifact }}"
           test -f "$SO" || { echo "ERROR: no libslic3r.so to publish"; exit 1; }
           # Quality gate: real engine .so is tens of MB, links gmp/mpfr, and
-          # carries the app's JNI package strings. Publishes (including
-          # backfill of cache-hit builds) only pass here.
+          # carries engine markers. NOTE: farm JNI strings (SliceListener)
+          # live in libfarm.so (app bridge), never in libslic3r.so — do not
+          # assert them here. Publishes (including backfill of cache-hit
+          # builds) only pass here.
           SZ="$(stat -c%s "$SO")"
           test "$SZ" -gt 10000000 || { echo "ERROR: libslic3r.so too small ($SZ bytes)"; exit 1; }
           readelf -d "$SO" | grep -q "libgmp" || { echo "ERROR: libslic3r.so missing libgmp NEEDED"; exit 1; }
           readelf -d "$SO" | grep -q "libmpfr" || { echo "ERROR: libslic3r.so missing libmpfr NEEDED"; exit 1; }
-          strings "$SO" | grep -q 'com/flashforge/farm/slic3r/SliceListener' \
-            || { echo "ERROR: libslic3r.so missing farm JNI package"; exit 1; }
-          echo "libslic3r.so quality OK ($SZ bytes, gmp/mpfr linked, farm JNI present)"
+          strings "$SO" | grep -q -F 'Orca Slicer' \
+            || { echo "ERROR: libslic3r.so missing engine marker"; exit 1; }
+          strings "$SO" | grep -q -F 'Arachne' \
+            || { echo "ERROR: libslic3r.so missing Arachne marker"; exit 1; }
+          echo "libslic3r.so quality OK ($SZ bytes, gmp/mpfr linked, engine markers present)"
           cp "$SO" "$OUT/libslic3r.so"
           SHA="$(git rev-parse --short=10 HEAD)"
           DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -643,12 +647,13 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      - name: Verify corrected package in built .so
+      - name: Verify staged engine .so is genuine
         run: |
           SO=engine/output/arm64-v8a/libslic3r.so
-          strings "$SO" | grep -q 'com/flashforge/farm/slic3r/SliceListener' \
-            && echo "OK: .so targets com.flashforge.farm" \
-            || { echo "ERROR: .so does not target com.flashforge.farm"; exit 1; }
+          strings "$SO" | grep -q -F 'Orca Slicer' \
+            && strings "$SO" | grep -q -F 'Arachne' \
+            && echo "OK: staged engine .so carries engine markers" \
+            || { echo "ERROR: staged engine .so failed marker check"; exit 1; }
 
       - name: Run Android unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace

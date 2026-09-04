@@ -1,5 +1,7 @@
 # FlashForge Farm
 
+[![Build Native Engine (from source)](https://github.com/1337farm/flashforge-farm/actions/workflows/native-engine-build.yml/badge.svg)](https://github.com/1337farm/flashforge-farm/actions/workflows/native-engine-build.yml)
+
 A 3D printing slicer for Android, powered by the **flashforge-farm** slicing engine.
 
 FlashForge Farm is a full-featured Android slicer built on the flashforge-farm `libslic3r` engine — the same engine you use on the desktop.

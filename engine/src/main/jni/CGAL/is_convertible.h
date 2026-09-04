@@ -20,7 +20,7 @@
 #include <boost/type_traits/integral_constant.hpp>
 #include <boost/type_traits/is_convertible.hpp>
 #ifdef CGAL_USE_GMPXX
-#include "gmpxx.h"
+#include <gmpxx.h>
 #endif
 
 namespace CGAL {

@@ -19,7 +19,7 @@
                                      // warning on - applied on unsigned number
 #endif
 
-#include "gmp.h"
+#include <gmp.h>
 
 
 #if defined(BOOST_MSVC)

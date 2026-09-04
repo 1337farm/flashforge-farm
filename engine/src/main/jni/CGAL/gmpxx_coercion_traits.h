@@ -21,9 +21,9 @@
 
 #include <CGAL/Coercion_traits.h>
 
-#include <cstring> // needed by GMP 4.1.4 since "gmpxx.h" misses it.
-#include "gmpxx.h"
-#include "mpfr.h"
+#include <cstring> // needed by GMP 4.1.4 since <gmpxx.h> misses it.
+#include <gmpxx.h>
+#include <mpfr.h>
 
 namespace CGAL {
 

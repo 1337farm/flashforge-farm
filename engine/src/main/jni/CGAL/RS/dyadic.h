@@ -13,8 +13,8 @@
 
 #include <stdio.h>
 #include <math.h>
-#include "gmp.h"
-#include "mpfr.h"
+#include <gmp.h>
+#include <mpfr.h>
 #include <CGAL/assertions.h>
 
 // for c++, compile with -lgmpxx

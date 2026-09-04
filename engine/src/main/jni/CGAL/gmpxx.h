@@ -30,7 +30,7 @@
 #ifndef CGAL_GMPXX_H
 #define CGAL_GMPXX_H
 
-#include <cstring> // needed by GMP 4.1.4 since "gmpxx.h" misses it.
+#include <cstring> // needed by GMP 4.1.4 since <gmpxx.h> misses it.
 #include "gmpxx.h"
 #include <utility>
 

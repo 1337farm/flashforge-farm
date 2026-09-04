@@ -13,10 +13,10 @@
 
 #include <CGAL/config.h>
 #include <CGAL/gmp.h>
-#include "mpfr.h"
+#include <mpfr.h>
 #include <CGAL/GMP/Gmpfr_type.h>
 #include <CGAL/GMP/Gmpq_type.h>
-#include "mpfi.h"
+#include <mpfi.h>
 #include <boost/operators.hpp>
 #include <CGAL/Uncertain.h>
 #include <CGAL/tss.h>

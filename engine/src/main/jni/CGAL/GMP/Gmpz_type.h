@@ -22,7 +22,7 @@
 #include <CGAL/IO/io.h>
 
 #include <CGAL/gmp.h>
-#include "mpfr.h"
+#include <mpfr.h>
 
 #include <boost/operators.hpp>
 #include <CGAL/Handle_for.h>

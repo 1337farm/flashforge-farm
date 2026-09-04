@@ -51,7 +51,7 @@
 #include <stdlib.h>
 
 #ifdef USE_GNU_GMP_CLASSES
-#	include "gmpxx.h"
+#	include <gmpxx.h>
 #endif
 
 // Call the following function (once per thread) before using these number types

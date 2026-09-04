@@ -214,6 +214,8 @@
     <string name="SettingsInterfaceColorReset">Reset to default</string>
     <string name="SettingsInterfaceResolutionScale">3D Resolution scale</string>
     <string name="SettingsInterfaceResolutionScaleDescription">May improve performance by lowering resolution</string>
+    <string name="SettingsIrohSpike">P2P spike (bind iroh endpoint)</string>
+    <string name="SettingsIrohSpikeStarted">Binding iroh endpoint — watch logcat for IrohSpike</string>
     <string name="SettingsAbout">About app</string>
     <string name="SettingsAddPrinter">Add printer from presets</string>
     <string name="SettingsAboutVersion">v%s\nFlashForge Farm\nBased on PrusaSlicer, Slic3r, and flashforge-farm-compatible profiles</string>

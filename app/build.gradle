@@ -1,5 +1,6 @@
 plugins {
     id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
 }
 
 def commit = getGitCommitHash(file('.'))
@@ -162,6 +163,15 @@ static String getGitCommitHash(File dir) {
 dependencies {
     testImplementation "junit:junit:4.13.2"
     implementation 'com.google.code.gson:gson:2.14.0'
+    // Iroh P2P (spike): official Kotlin FFI, Maven Central artifact bundles
+    // libiroh_ffi.so for all Android ABIs. The artifact's transitive plain-jar
+    // JNA conflicts with Android packaging, so exclude it and depend on the
+    // @aar variant (which carries libjnidispatch.so per ABI) instead.
+    implementation('computer.iroh:iroh:1.0.0') {
+        exclude group: 'net.java.dev.jna', module: 'jna'
+    }
+    implementation 'net.java.dev.jna:jna:5.17.0@aar'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1'
     implementation 'com.github.instacart:truetime-android:4.0.0.alpha'
     implementation 'com.github.mrudultora:Colorpicker:1.2.0'
     implementation 'com.github.bumptech.glide:glide:4.16.0'

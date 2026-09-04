@@ -64,7 +64,7 @@ public class Camera {
     }
 
     public void setZoom(float zoom) {
-        this.zoom = zoom;
+        this.zoom = MathUtils.clamp(zoom, 0.25f, 10f);
     }
 
     public Vec3d calcScreenMovement(float x, float y) {

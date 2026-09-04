@@ -463,7 +463,17 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             float ratioVertical = aspectRatio < 1 ? 1f / aspectRatio : 1;
             DoubleMatrix.orthoM(projectionMatrix, 0, -scale * ratioHorizontal, scale * ratioHorizontal, -scale * ratioVertical, scale * ratioVertical, NEAR_PLANE, FAR_PLANE);
         } else {
-            DoubleMatrix.perspectiveM(projectionMatrix, 0, FOV * invZoom * (viewportWidth > viewportHeight ? 1 / aspectRatio : 1), aspectRatio, NEAR_PLANE, FAR_PLANE);
+            // Map zoom to field-of-view via focal length (fovy = 2*atan(tan(FOV/2)/zoom)).
+            // The naive FOV*invZoom breaks when zoomed out: at min zoom 0.25 it
+            // yields fovy=240deg, outside the valid (0,180) range, flipping the
+            // projection (tan goes negative). The atan form stays valid for the
+            // whole [0.25, 10] zoom range (134deg wide .. 6.8deg telephoto).
+            // No aspect correction on fovy: the aspect parameter already shapes
+            // the horizontal field; scaling fovy by 1/aspect made the view jump
+            // on rotation.
+            float halfFovTan = (float) Math.tan(Math.toRadians(FOV / 2f));
+            float fovy = (float) Math.toDegrees(2f * Math.atan(halfFovTan * (1f / camera.getZoom())));
+            DoubleMatrix.perspectiveM(projectionMatrix, 0, fovy, aspectRatio, NEAR_PLANE, FAR_PLANE);
         }
     }
 

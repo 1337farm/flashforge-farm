@@ -11,6 +11,9 @@ name: native
 # before the APK is assembled.
 #
 # Split into chained jobs so each stays well under the 6h per-job limit:
+#   0. test         -> fast suite, no SDK/NDK (~30s): CI guards (job names vs
+#                       ruleset), JNI Java<->C++ contract, python compile,
+#                       bash syntax. Fails the run early on repo hygiene.
 #   1. build-dep     -> Boost + oneTBB + OCCT each built on its OWN runner via
 #                       a matrix (no CPU contention; each dep cached
 #                       separately). The compiled deps live ONLY in the GitHub
@@ -22,7 +25,8 @@ name: native
 #                       restoring the compiled deps straight from that cache
 #                       by key on a miss. Ships the GMP trees to package-apk
 #                       via artifact (not cache).
-#   3. package-apk   -> assembles the final debug APK with the source-built .so
+#   3. package-apk   -> runs Android unit tests, then assembles the final
+#                       debug APK with the source-built .so
 #                       (needs only the OCCT + GMP/MPFR runtime bits: OCCT from
 #                       cache, GMP from the engine job's artifact)
 #
@@ -56,6 +60,25 @@ env:
   NDK_VERSION: "23.1.7779620"
 
 jobs:
+  test:
+    name: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Fast test suite (no SDK/NDK, ~30s)
+        run: |
+          set -e
+          python3 scripts/tests/test_ci_guards.py
+          python3 scripts/tests/test_jni_contract.py
+          python3 -m py_compile scripts/*.py scripts/tests/*.py
+          for f in scripts/*.sh; do bash -n "$f"; done
+          echo "fast tests OK"
+
   build-dep:
     name: dep-${{ matrix.dep }}
     runs-on: ubuntu-24.04
@@ -589,6 +612,9 @@ jobs:
           strings "$SO" | grep -q 'com/flashforge/farm/slic3r/SliceListener' \
             && echo "OK: .so targets com.flashforge.farm" \
             || { echo "ERROR: .so does not target com.flashforge.farm"; exit 1; }
+
+      - name: Run Android unit tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
 
       - name: Assemble debug APK
         run: ./gradlew assembleDebug -PskipNativeRebuild=true --stacktrace

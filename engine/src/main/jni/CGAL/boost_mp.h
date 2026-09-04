@@ -49,7 +49,7 @@
 # include <CGAL/enable_warnings.h>
 #endif
 #ifdef CGAL_USE_MPFR
-# include <mpfr.h>
+# include "mpfr.h"
 #endif
 
 // TODO: work on the coercions (end of the file)

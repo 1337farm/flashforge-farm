@@ -27,7 +27,7 @@
 #include <CGAL/GMP/Gmpfr_type.h>
 
 #include <CGAL/gmp.h>
-#include <mpfr.h>
+#include "mpfr.h"
 #include <utility>
 #include <string>
 

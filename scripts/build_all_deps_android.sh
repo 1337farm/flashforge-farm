@@ -239,9 +239,19 @@ build_gmp_mpfr() {
     export LDFLAGS="--sysroot=$SYSROOT"
 
     # --- GMP -----------------------------------------------------------------
+    # Hermetic source: tarballs are vendored in engine/vendor/ (sha256-pinned
+    # in SHA256SUMS, corroborated across independent mirrors). No network
+    # needed; mirrors below are a fallback only if vendor/ is absent.
     if [ ! -d "gmp-6.2.1" ]; then
-        # shellcheck disable=SC2086
-        fetch gmp.tar.xz $GMP_URLS || return 1
+        if [ -f "$ROOT/engine/vendor/gmp-6.2.1.tar.xz" ] \
+           && grep "gmp-6.2.1.tar.xz" "$ROOT/engine/vendor/SHA256SUMS" \
+              | (cd "$ROOT/engine/vendor" && sha256sum -c --status -); then
+            echo "--- [GMP/MPFR] using vendored gmp-6.2.1.tar.xz (sha verified) ---"
+            cp "$ROOT/engine/vendor/gmp-6.2.1.tar.xz" gmp.tar.xz
+        else
+            # shellcheck disable=SC2086
+            fetch gmp.tar.xz $GMP_URLS || return 1
+        fi
         tar xf gmp.tar.xz || return 1
     fi
     cd gmp-6.2.1 || return 1
@@ -256,8 +266,15 @@ build_gmp_mpfr() {
 
     # --- MPFR (against the just-installed GMP) -------------------------------
     if [ ! -d "mpfr-4.2.0" ]; then
-        # shellcheck disable=SC2086
-        fetch mpfr.tar.xz $MPFR_URLS || return 1
+        if [ -f "$ROOT/engine/vendor/mpfr-4.2.0.tar.xz" ] \
+           && grep "mpfr-4.2.0.tar.xz" "$ROOT/engine/vendor/SHA256SUMS" \
+              | (cd "$ROOT/engine/vendor" && sha256sum -c --status -); then
+            echo "--- [GMP/MPFR] using vendored mpfr-4.2.0.tar.xz (sha verified) ---"
+            cp "$ROOT/engine/vendor/mpfr-4.2.0.tar.xz" mpfr.tar.xz
+        else
+            # shellcheck disable=SC2086
+            fetch mpfr.tar.xz $MPFR_URLS || return 1
+        fi
         tar xf mpfr.tar.xz || return 1
     fi
     cd mpfr-4.2.0 || return 1

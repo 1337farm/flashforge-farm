@@ -11,15 +11,20 @@ name: Build Native Engine (from source)
 # before the APK is assembled.
 #
 # Split into chained jobs so each stays well under the 6h per-job limit:
-#   1. build-dep     -> Boost + oneTBB + OCCT + GMP/MPFR each built on its OWN
-#                       runner via a matrix (no CPU contention; each dep cached
+#   1. build-dep     -> Boost + oneTBB + OCCT each built on its OWN runner via
+#                       a matrix (no CPU contention; each dep cached
 #                       separately). The compiled deps live ONLY in the GitHub
 #                       actions cache, keyed by <dep>-<os>-<sha>-<scripts> —
 #                       the same key every consumer restores by.
-#   2. build-engine  -> compiles libslic3r.so (cached), restoring the compiled
-#                       deps straight from that cache by key on a miss
+#   2. build-engine  -> builds GMP/MPFR fresh every run (uncached by design:
+#                       ~4 min, and immune to cache poisoning), restores the
+#                       cached deps, then compiles libslic3r.so (cached),
+#                       restoring the compiled deps straight from that cache
+#                       by key on a miss. Ships the GMP trees to package-apk
+#                       via artifact (not cache).
 #   3. package-apk   -> assembles the final debug APK with the source-built .so
-#                       (needs only the OCCT + GMP/MPFR runtime bits from cache)
+#                       (needs only the OCCT + GMP/MPFR runtime bits: OCCT from
+#                       cache, GMP from the engine job's artifact)
 #
 # Publishing is per-step, not gated on the full build: each dep leg publishes
 # its own rolling release (dep-<name>-latest) when it builds, build-engine
@@ -51,7 +56,6 @@ jobs:
       tbb_dep_key: ${{ steps.sha.outputs.tbb_dep_key }}
       boost_dep_key: ${{ steps.sha.outputs.boost_dep_key }}
       occt_dep_key: ${{ steps.sha.outputs.occt_dep_key }}
-      gmp_dep_key: ${{ steps.sha.outputs.gmp_dep_key }}
     strategy:
       fail-fast: false
       matrix:
@@ -59,7 +63,6 @@ jobs:
           - { dep: tbb,   name: oneTBB, dir: openvdb-android,   path: engine/src/main/jniImports/oneTBB, url: https://github.com/syoyo/openvdb-android.git,         rec: false }
           - { dep: boost, name: Boost,  dir: Boost-for-Android, path: engine/src/main/jniImports/boost, url: https://github.com/moritz-wundke/Boost-for-Android.git, rec: true  }
           - { dep: occt,  name: OCCT,   dir: OCCT,              path: engine/src/main/occt,              url: https://github.com/Open-Cascade-SAS/OCCT.git,            rec: false }
-          - { dep: gmp,   name: GMP/MPFR, dir: gmp,             path: "engine/src/main/jniLibs\nengine/src/main/jniImports/gmp", url: none, rec: false }
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
@@ -258,8 +261,8 @@ jobs:
       - name: Compute engine cache key
         id: engine-key
         run: |
-          DEPKEY="${{ needs.build-dep.outputs.tbb_dep_key }}|${{ needs.build-dep.outputs.boost_dep_key }}|${{ needs.build-dep.outputs.occt_dep_key }}|${{ needs.build-dep.outputs.gmp_dep_key }}"
-          echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','app/build.gradle') }}-$DEPKEY" >> "$GITHUB_OUTPUT"
+          DEPKEY="${{ needs.build-dep.outputs.tbb_dep_key }}|${{ needs.build-dep.outputs.boost_dep_key }}|${{ needs.build-dep.outputs.occt_dep_key }}"
+          echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','app/build.gradle','scripts/build_all_deps_android.sh') }}-$DEPKEY" >> "$GITHUB_OUTPUT"
 
       - name: Restore built libslic3r.so
         id: engine-cache
@@ -325,22 +328,58 @@ jobs:
           key: ${{ needs.build-dep.outputs.occt_dep_key }}
           fail-on-cache-miss: true
 
-      - name: Restore GMP/MPFR
-        if: steps.engine-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v5
-        with:
-          path: |
-            engine/src/main/jniLibs
-            engine/src/main/jniImports/gmp
-          key: ${{ needs.build-dep.outputs.gmp_dep_key }}
-          fail-on-cache-miss: true
-
       - name: Validate restored deps
         if: steps.engine-cache.outputs.cache-hit != 'true'
         run: |
-          for d in engine/src/main/jniImports/boost engine/src/main/jniImports/oneTBB engine/src/main/jniImports/gmp engine/src/main/occt engine/src/main/jniLibs; do
+          for d in engine/src/main/jniImports/boost engine/src/main/jniImports/oneTBB engine/src/main/occt; do
             test -n "$(ls -A "$d" 2>/dev/null)" || { echo "ERROR: missing restored deps at $d"; exit 1; }
           done
+
+      - name: Build GMP/MPFR fresh (uncached, ~4 min)
+        run: |
+          sudo apt-get update && sudo apt-get install -y build-essential
+          chmod +x scripts/build_all_deps_android.sh
+          ./scripts/build_all_deps_android.sh gmp
+          for f in \
+            "engine/src/main/jniLibs/$ABI/libgmp.so" \
+            "engine/src/main/jniLibs/$ABI/libgmpxx.so" \
+            "engine/src/main/jniLibs/$ABI/libmpfr.so" \
+            "engine/src/main/jniImports/gmp/include/$ABI/gmp.h" \
+            "engine/src/main/jniImports/gmp/include/$ABI/gmpxx.h" \
+            "engine/src/main/jniImports/gmp/include/$ABI/mpfr.h"; do
+            test -f "$f" || { echo "ERROR: GMP build did not produce $f"; exit 1; }
+          done
+          echo "GMP/MPFR staged and verified"
+          tar -czf /tmp/gmp-deps.tar.gz engine/src/main/jniLibs engine/src/main/jniImports/gmp
+          tar -tzf /tmp/gmp-deps.tar.gz | grep -q "libmpfr.so" || { echo "ERROR: tarball missing libmpfr.so"; exit 1; }
+          tar -tzf /tmp/gmp-deps.tar.gz | grep -q "mpfr.h" || { echo "ERROR: tarball missing mpfr.h"; exit 1; }
+          echo "gmp-deps.tar.gz packaged and content-verified"
+
+      - name: Upload GMP trees artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: gmp-trees
+          path: /tmp/gmp-deps.tar.gz
+          retention-days: 7
+
+      - name: Publish GMP release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          OUT="$RUNNER_TEMP/gmp-release"
+          mkdir -p "$OUT"
+          cp /tmp/gmp-deps.tar.gz "$OUT/gmp-deps.tar.gz"
+          SHA="$(git rev-parse --short=10 HEAD)"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          SUM="$(sha256sum "$OUT/gmp-deps.tar.gz" | cut -d' ' -f1)"
+          printf '{"commit":"%s","built_at":"%s","abi":"%s","dep":"gmp","files":{"gmp-deps.tar.gz":"%s"}}\n' \
+            "$SHA" "$DATE" "$ABI" "$SUM" > "$OUT/gmp-manifest.json"
+          gh release delete dep-gmp-latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create dep-gmp-latest "$OUT/gmp-deps.tar.gz" "$OUT/gmp-manifest.json" \
+            --title "GMP/MPFR deps (latest)" \
+            --notes "Rolling release of the GMP/MPFR native deps built from source. Re-published whenever the dep rebuilds."
 
       - name: Build native engine .so from source (standalone CMake)
         if: steps.engine-cache.outputs.cache-hit != 'true'
@@ -435,20 +474,26 @@ jobs:
           key: ${{ needs.build-dep.outputs.occt_dep_key }}
           fail-on-cache-miss: true
 
-      - name: Restore GMP/MPFR
-        uses: actions/cache/restore@v5
+      - name: Download GMP trees artifact
+        uses: actions/download-artifact@v6
         with:
-          path: |
-            engine/src/main/jniLibs
-            engine/src/main/jniImports/gmp
-          key: ${{ needs.build-dep.outputs.gmp_dep_key }}
-          fail-on-cache-miss: true
+          name: gmp-trees
+          path: /tmp/gmp-trees-artifact
+
+      - name: Install GMP trees + validate
+        run: |
+          tar -xzf /tmp/gmp-trees-artifact/gmp-deps.tar.gz
+          for f in \
+            engine/src/main/jniLibs/arm64-v8a/libgmp.so \
+            engine/src/main/jniLibs/arm64-v8a/libgmpxx.so \
+            engine/src/main/jniLibs/arm64-v8a/libmpfr.so; do
+            test -f "$f" || { echo "ERROR: missing GMP runtime $f"; exit 1; }
+          done
 
       - name: Validate restored deps
         run: |
           test -n "$(ls -A engine/src/main/occt 2>/dev/null)" || { echo "ERROR: missing restored OCCT"; exit 1; }
-          test -n "$(ls -A engine/src/main/jniLibs 2>/dev/null)" || { echo "ERROR: missing restored GMP/MPFR jniLibs"; exit 1; }
-          test -n "$(ls -A engine/src/main/jniImports/gmp 2>/dev/null)" || { echo "ERROR: missing restored GMP headers"; exit 1; }
+          test -n "$(ls -A engine/src/main/jniLibs 2>/dev/null)" || { echo "ERROR: missing GMP/MPFR jniLibs"; exit 1; }
 
       - name: Download libslic3r.so artifact
         uses: actions/download-artifact@v6

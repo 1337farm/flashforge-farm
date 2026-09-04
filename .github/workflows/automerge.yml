@@ -1,0 +1,30 @@
+name: automerge
+
+# Enables squash auto-merge on same-repo PRs (never forks): once all required
+# checks pass, the PR merges itself. Draft PRs are skipped (API rejects them).
+# The repo allows squash merges only, so the method is fixed regardless.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  auto:
+    name: auto
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write
+    if: github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Enable squash auto-merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR="${{ github.event.pull_request.number }}"
+          if gh pr view "$PR" --repo "${{ github.repository }}" \
+               --json autoMergeRequest --jq -e '.autoMergeRequest == null' >/dev/null; then
+            gh pr merge "$PR" --repo "${{ github.repository }}" --auto --squash
+          else
+            echo "auto-merge already enabled on #$PR"
+          fi

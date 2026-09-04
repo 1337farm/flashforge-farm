@@ -51,7 +51,7 @@ jobs:
           - { dep: tbb,   name: oneTBB, dir: openvdb-android,   path: engine/src/main/jniImports/oneTBB, url: https://github.com/syoyo/openvdb-android.git,         rec: false }
           - { dep: boost, name: Boost,  dir: Boost-for-Android, path: engine/src/main/jniImports/boost, url: https://github.com/moritz-wundke/Boost-for-Android.git, rec: true  }
           - { dep: occt,  name: OCCT,   dir: OCCT,              path: engine/src/main/occt,              url: https://github.com/Open-Cascade-SAS/OCCT.git,            rec: false }
-          - { dep: gmp,   name: GMP/MPFR, dir: gmp,             path: engine/src/main/jniLibs,           url: none,                                              rec: false }
+          - { dep: gmp,   name: GMP/MPFR, dir: gmp,             path: "engine/src/main/jniLibs\nengine/src/main/jniImports/gmp", url: none, rec: false }
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
@@ -92,14 +92,24 @@ jobs:
         run: |
           NEED=1
           if [ "${{ steps.dep-cache.outputs.cache-hit }}" = "true" ]; then
-            if [ -n "$(ls -A '${{ matrix.path }}' 2>/dev/null)" ] \
-               && find '${{ matrix.path }}' -type f | grep -q .; then
-              echo "restored '${{ matrix.path }}' is non-empty; reusing it"
-              NEED=0
-            else
-              echo "cache restored but '${{ matrix.path }}' is empty; forcing rebuild"
-              rm -rf '${{ matrix.path }}'
-            fi
+            # matrix.path may list several trees (gmp stages both jniLibs and
+            # jniImports/gmp); every listed tree must be non-empty to reuse.
+            OK=1
+            while IFS= read -r p; do
+              p="$(printf '%s' "$p" | tr -d '[:space:]')"
+              [ -n "$p" ] || continue
+              if [ -z "$(ls -A "$p" 2>/dev/null)" ] \
+                 || ! find "$p" -type f | grep -q .; then
+                echo "cache restored but '$p' is empty; forcing rebuild"
+                rm -rf "$p"
+                OK=0
+              else
+                echo "restored '$p' is non-empty; reusing it"
+              fi
+            done <<EOF
+          ${{ matrix.path }}
+          EOF
+            [ "$OK" = "1" ] && NEED=0
           fi
           echo "need=$NEED" >> "$GITHUB_OUTPUT"
 
@@ -284,14 +294,16 @@ jobs:
         if: steps.engine-cache.outputs.cache-hit != 'true'
         uses: actions/cache/restore@v5
         with:
-          path: engine/src/main/jniLibs
+          path: |
+            engine/src/main/jniLibs
+            engine/src/main/jniImports/gmp
           key: ${{ needs.build-dep.outputs.gmp_dep_key }}
           fail-on-cache-miss: true
 
       - name: Validate restored deps
         if: steps.engine-cache.outputs.cache-hit != 'true'
         run: |
-          for d in engine/src/main/jniImports/boost engine/src/main/jniImports/oneTBB engine/src/main/occt engine/src/main/jniLibs; do
+          for d in engine/src/main/jniImports/boost engine/src/main/jniImports/oneTBB engine/src/main/jniImports/gmp engine/src/main/occt engine/src/main/jniLibs; do
             test -n "$(ls -A "$d" 2>/dev/null)" || { echo "ERROR: missing restored deps at $d"; exit 1; }
           done
 
@@ -370,7 +382,9 @@ jobs:
       - name: Restore GMP/MPFR
         uses: actions/cache/restore@v5
         with:
-          path: engine/src/main/jniLibs
+          path: |
+            engine/src/main/jniLibs
+            engine/src/main/jniImports/gmp
           key: ${{ needs.build-dep.outputs.gmp_dep_key }}
           fail-on-cache-miss: true
 
@@ -378,6 +392,7 @@ jobs:
         run: |
           test -n "$(ls -A engine/src/main/occt 2>/dev/null)" || { echo "ERROR: missing restored OCCT"; exit 1; }
           test -n "$(ls -A engine/src/main/jniLibs 2>/dev/null)" || { echo "ERROR: missing restored GMP/MPFR jniLibs"; exit 1; }
+          test -n "$(ls -A engine/src/main/jniImports/gmp 2>/dev/null)" || { echo "ERROR: missing restored GMP headers"; exit 1; }
 
       - name: Download libslic3r.so artifact
         uses: actions/download-artifact@v6

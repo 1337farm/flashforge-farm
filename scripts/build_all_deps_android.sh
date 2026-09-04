@@ -242,7 +242,12 @@ build_gmp_mpfr() {
     mkdir -p "$JNI_SO_DIR" "$GMP_HDR_DIR"
     cp "$STAGE/lib/libgmp.so" "$STAGE/lib/libgmpxx.so" "$STAGE/lib/libmpfr.so" "$JNI_SO_DIR/"
     cp "$STAGE/include/gmp.h"  "$STAGE/include/gmpxx.h"  "$GMP_HDR_DIR/"
-    cp "$STAGE/include/mpfr.h" "$STAGE/include/mpf2mpfr.h" "$GMP_HDR_DIR/" 2>/dev/null || true
+    # mpfr.h is REQUIRED (CGAL includes it); copy it unconditionally so a
+    # failure breaks the build loudly. mpf2mpfr.h only exists in older MPFR
+    # releases, so its copy stays best-effort — it must never share a cp
+    # invocation with mpfr.h (one missing source voids the whole copy).
+    cp "$STAGE/include/mpfr.h" "$GMP_HDR_DIR/"
+    cp "$STAGE/include/mpf2mpfr.h" "$GMP_HDR_DIR/" 2>/dev/null || true
     echo "--- [GMP/MPFR] copied .so -> $JNI_SO_DIR; headers -> $GMP_HDR_DIR ---"
 }
 

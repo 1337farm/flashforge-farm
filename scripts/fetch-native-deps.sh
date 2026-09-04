@@ -2,11 +2,14 @@
 # scripts/fetch-native-deps.sh — stage the native dependencies AND the OrcaSlicer
 # engine for a LOCAL app build.
 #
-# Fast path (default): download the CI-published rolling releases
-# (native-deps-latest + engine-latest) with sha256 manifest verification and
-# stage them into engine/. Slow path: compile everything from source via the
-# in-repo scripts (matches the CI workflow, native-engine-build.yml).
+# Fast path (default): download the CI-published rolling per-dep releases
+# (dep-tbb-latest, dep-boost-latest, dep-occt-latest, dep-gmp-latest) plus
+# engine-latest, with sha256 manifest verification, and stage them into
+# engine/. Slow path: compile everything from source via the in-repo scripts
+# (matches the CI workflow, native-engine-build.yml).
 # There is no separate engine/deps release repo: releases live on this repo.
+# Publishing is per-step in CI, so a dep release is usable even when a later
+# pipeline step failed.
 #
 # Usage:
 #   scripts/fetch-native-deps.sh                    # releases first, else build
@@ -50,17 +53,25 @@ ENGINE_OK=0
 if [ "$FORCE_SOURCE" -eq 0 ] && command -v gh >/dev/null 2>&1; then
   DL="$(mktemp -d)"
   trap 'rm -rf "$DL"' EXIT
-  if [ "$MODE" != "--engine" ] \
-     && gh release download native-deps-latest \
-          --pattern 'native-deps.tar.gz' --pattern 'deps-manifest.json' \
-          --dir "$DL" --clobber >/dev/null 2>&1 \
-     && verify_manifest "$DL" deps-manifest.json native-deps.tar.gz; then
-    echo "[fetch] deps release verified; extracting into engine/src/main/"
-    tar -xzf "$DL/native-deps.tar.gz"
+  if [ "$MODE" != "--engine" ]; then
     DEPS_OK=1
-  else
-    echo "[fetch] deps release unavailable/invalid; will build from source"
-    DEPS_OK=0
+    for DEP in tbb boost occt gmp; do
+      TARBALL="$DEP-deps.tar.gz"
+      MANIFEST="$DEP-manifest.json"
+      if gh release download "dep-$DEP-latest" \
+           --pattern "$TARBALL" --pattern "$MANIFEST" \
+           --dir "$DL" --clobber >/dev/null 2>&1 \
+         && verify_manifest "$DL" "$MANIFEST" "$TARBALL"; then
+        echo "[fetch] dep-$DEP release verified; extracting"
+        tar -xzf "$DL/$TARBALL"
+      else
+        echo "[fetch] dep-$DEP release unavailable/invalid"
+        DEPS_OK=0
+      fi
+    done
+    if [ "$DEPS_OK" = "0" ]; then
+      echo "[fetch] one or more dep releases missing; will build deps from source"
+    fi
   fi
   if [ "$MODE" != "--deps-only" ] \
      && gh release download engine-latest \

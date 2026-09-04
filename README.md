@@ -40,6 +40,7 @@ Note: the Java package is `com.flashforge.farm` and the `applicationId` is `com.
 FlashForge Farm is built on:
 
 - [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer) by SoftFever — slicing engine
+- [OrcaSlicer-Mobile](https://github.com/CodeMasterCody3D/OrcaSlicer-Mobile) — Android JNI bridge and mobile shell (itself based on [SliceBeam](https://github.com/utkabobr/SliceBeam))
 - [PrusaSlicer](https://github.com/prusa3d/PrusaSlicer) / Slic3r and [Bambu Studio](https://github.com/bambulab/BambuStudio) — which flashforge-farm is built upon
 
 ## Status

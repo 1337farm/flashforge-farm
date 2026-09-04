@@ -377,10 +377,11 @@ jobs:
         uses: android-actions/setup-android@v4
 
       - name: Install NDK ${{ env.NDK_VERSION }}
-        if: steps.engine-cache.outputs.cache-hit != 'true'
         run: |
           yes | sdkmanager --licenses || true
           sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-35" "cmake;3.22.1"
+          "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" --version \
+            || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
 
       - name: Install ccache
         if: steps.engine-cache.outputs.cache-hit != 'true'

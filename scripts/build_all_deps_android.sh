@@ -238,6 +238,10 @@ build_gmp_mpfr() {
     export CXXFLAGS="-O3 -fPIC --sysroot=$SYSROOT"
     export LDFLAGS="--sysroot=$SYSROOT"
 
+    # Fail fast on a broken toolchain (flaky CI runners have shipped dead NDK
+    # installs); without this, autotools dies cryptically mid-configure.
+    "$CC" --version >/dev/null 2>&1 || { echo "--- [GMP/MPFR] ERROR: compiler $CC not working ---" >&2; return 1; }
+
     # --- GMP -----------------------------------------------------------------
     # Hermetic source: tarballs are vendored in engine/vendor/ (sha256-pinned
     # in SHA256SUMS, corroborated across independent mirrors). No network

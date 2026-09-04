@@ -1,4 +1,4 @@
-name: Build Native Engine (from source)
+name: native
 
 # Builds libslic3r.so (and Boost/oneTBB/OCCT deps) from source on an x86_64
 # runner using the official NDK. The C++ engine source lives in the top-level
@@ -32,6 +32,16 @@ name: Build Native Engine (from source)
 # farm-apk-latest when it assembles. A later step failing never discards an
 # earlier step's good outputs; every release carries a sha256 manifest.
 #
+# Trust policy (poison-proof caches):
+# - Restored caches must pass exact-file checks (sentinels in build-dep,
+#   full check-native-prebuilts in build-engine), not just non-empty dirs.
+# - A failed check revokes the poisoned cache key (gh cache delete) and fails
+#   fast; the next run rebuilds fresh. Fresh builds must pass the same checks
+#   before save/publish.
+# - Publishing backfills: any verified content publishes, whether freshly
+#   built or restored, so a past run's unpublished-but-good outputs get
+#   released by the next green run.
+#
 # Caching: heavy builds write their outputs both to a primary output cache and
 # to ccache. On re-runs, if the primary cache hits (inputs unchanged) the heavy
 # build step is SKIPPED entirely, keeping re-runs fast.
@@ -47,11 +57,12 @@ env:
 
 jobs:
   build-dep:
-    name: Build ${{ matrix.name }} deps
+    name: dep-${{ matrix.dep }}
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     permissions:
       contents: write
+      actions: write
     outputs:
       tbb_dep_key: ${{ steps.sha.outputs.tbb_dep_key }}
       boost_dep_key: ${{ steps.sha.outputs.boost_dep_key }}
@@ -100,29 +111,43 @@ jobs:
 
       - name: Validate restored ${{ matrix.name }}
         id: validate
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           NEED=1
+          REUSED=0
           if [ "${{ steps.dep-cache.outputs.cache-hit }}" = "true" ]; then
-            # matrix.path may list several trees (gmp stages both jniLibs and
-            # jniImports/gmp); every listed tree must be non-empty to reuse.
+            # Sentinel check (no checkout yet): exact-file verification runs
+            # post-build and in build-engine. Sentinels catch poisoned/empty
+            # entries; the full script gates save/publish later.
             OK=1
-            while IFS= read -r p; do
-              p="$(printf '%s' "$p" | tr -d '[:space:]')"
-              [ -n "$p" ] || continue
-              if [ -z "$(ls -A "$p" 2>/dev/null)" ] \
-                 || ! find "$p" -type f | grep -q .; then
-                echo "cache restored but '$p' is empty; forcing rebuild"
-                rm -rf "$p"
-                OK=0
-              else
-                echo "restored '$p' is non-empty; reusing it"
-              fi
-            done <<EOF
-          ${{ matrix.path }}
-          EOF
-            [ "$OK" = "1" ] && NEED=0
+            case '${{ matrix.dep }}' in
+              tbb)
+                for f in "engine/src/main/jniImports/oneTBB/lib/$ABI/libtbb.a" \
+                         "engine/src/main/jniImports/oneTBB/lib/$ABI/libtbbmalloc.a"; do
+                  test -f "$f" || { echo "missing $f"; OK=0; }; done ;;
+              boost)
+                N="$(ls engine/src/main/jniImports/boost/lib/$ABI/lib/libboost_*.a 2>/dev/null | wc -l)"
+                [ "$N" -ge 30 ] || { echo "only $N boost libs"; OK=0; } ;;
+              occt)
+                N="$(ls engine/src/main/occt/jniLibs/$ABI/libTK*.so 2>/dev/null | wc -l)"
+                { [ "$N" -ge 20 ] && [ -n "$(ls -A engine/src/main/occt/include/$ABI 2>/dev/null)" ]; } \
+                  || { echo "only $N OCCT toolkits"; OK=0; } ;;
+            esac
+            if [ "$OK" = "1" ]; then
+              echo "restored '${{ matrix.path }}' passes sentinels; reusing it"
+              NEED=0
+              REUSED=1
+            else
+              KEY="${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}-${{ steps.sha.outputs.scripts }}"
+              echo "revoking poisoned cache $KEY and forcing rebuild"
+              rm -rf '${{ matrix.path }}'
+              gh cache delete "$KEY" --repo "${{ github.repository }}" 2>&1 \
+                || echo "revoke failed (key held elsewhere); rebuild proceeds"
+            fi
           fi
           echo "need=$NEED" >> "$GITHUB_OUTPUT"
+          echo "reused=$REUSED" >> "$GITHUB_OUTPUT"
 
       - name: Checkout repository
         if: steps.validate.outputs.need == '1'
@@ -209,15 +234,22 @@ jobs:
           chmod +x scripts/build_occt_headers.sh
           WORK_DIR=/tmp/build_android_deps ABI="$ABI" ./scripts/build_occt_headers.sh
 
+      - name: Verify built ${{ matrix.name }} exactly
+        id: verify-built
+        if: steps.validate.outputs.need == '1'
+        run: |
+          python3 scripts/check-native-prebuilts.py --dep '${{ matrix.dep }}' "$ABI"
+          echo "verified=1" >> "$GITHUB_OUTPUT"
+
       - name: Save compiled ${{ matrix.name }}
-        if: steps.build-dep.outcome == 'success'
+        if: steps.build-dep.outcome == 'success' && steps.verify-built.outputs.verified == '1'
         uses: actions/cache/save@v5
         with:
           path: ${{ matrix.path }}
           key: ${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}-${{ steps.sha.outputs.scripts }}
 
       - name: Publish ${{ matrix.name }} release
-        if: steps.build-dep.outcome == 'success' && github.ref == 'refs/heads/main'
+        if: (steps.validate.outputs.reused == '1' || steps.verify-built.outputs.verified == '1') && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -241,12 +273,13 @@ jobs:
             --notes "Rolling release of the ${{ matrix.name }} native deps built from source. Re-published whenever the dep rebuilds."
 
   build-engine:
-    name: Compile libslic3r.so
+    name: engine
     runs-on: ubuntu-24.04
     needs: [build-dep]
     timeout-minutes: 350
     permissions:
       contents: write
+      actions: write
     env:
       ABI: arm64-v8a
       CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -335,6 +368,34 @@ jobs:
             test -n "$(ls -A "$d" 2>/dev/null)" || { echo "ERROR: missing restored deps at $d"; exit 1; }
           done
 
+      - name: Test restored deps exactly (revoke poison on failure)
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          OUT="$(python3 scripts/check-native-prebuilts.py --dep tbb "$ABI" 2>&1 || true)"
+          echo "$OUT" | tail -3
+          echo "$OUT" | grep -q "All native prebuilts are present." || {
+            echo "tbb cache failed exact check; revoking ${{ needs.build-dep.outputs.tbb_dep_key }}"
+            gh cache delete "${{ needs.build-dep.outputs.tbb_dep_key }}" --repo "${{ github.repository }}" 2>&1 || true
+            exit 1
+          }
+          OUT="$(python3 scripts/check-native-prebuilts.py --dep boost "$ABI" 2>&1 || true)"
+          echo "$OUT" | tail -3
+          echo "$OUT" | grep -q "All native prebuilts are present." || {
+            echo "boost cache failed exact check; revoking ${{ needs.build-dep.outputs.boost_dep_key }}"
+            gh cache delete "${{ needs.build-dep.outputs.boost_dep_key }}" --repo "${{ github.repository }}" 2>&1 || true
+            exit 1
+          }
+          OUT="$(python3 scripts/check-native-prebuilts.py --dep occt "$ABI" 2>&1 || true)"
+          echo "$OUT" | tail -3
+          echo "$OUT" | grep -q "All native prebuilts are present." || {
+            echo "occt cache failed exact check; revoking ${{ needs.build-dep.outputs.occt_dep_key }}"
+            gh cache delete "${{ needs.build-dep.outputs.occt_dep_key }}" --repo "${{ github.repository }}" 2>&1 || true
+            exit 1
+          }
+          echo "all restored deps pass exact-file checks"
+
       - name: Build GMP/MPFR fresh (uncached, ~4 min)
         run: |
           sudo apt-get update && sudo apt-get install -y build-essential
@@ -421,14 +482,26 @@ jobs:
           retention-days: 7
 
       - name: Publish engine release
-        if: steps.engine-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
           OUT="$RUNNER_TEMP/engine-release"
           mkdir -p "$OUT"
-          cp "${{ steps.find-so.outputs.so_artifact }}" "$OUT/libslic3r.so"
+          SO="${{ steps.find-so.outputs.so_artifact }}"
+          test -f "$SO" || { echo "ERROR: no libslic3r.so to publish"; exit 1; }
+          # Quality gate: real engine .so is tens of MB, links gmp/mpfr, and
+          # carries the app's JNI package strings. Publishes (including
+          # backfill of cache-hit builds) only pass here.
+          SZ="$(stat -c%s "$SO")"
+          test "$SZ" -gt 10000000 || { echo "ERROR: libslic3r.so too small ($SZ bytes)"; exit 1; }
+          readelf -d "$SO" | grep -q "libgmp" || { echo "ERROR: libslic3r.so missing libgmp NEEDED"; exit 1; }
+          readelf -d "$SO" | grep -q "libmpfr" || { echo "ERROR: libslic3r.so missing libmpfr NEEDED"; exit 1; }
+          strings "$SO" | grep -q 'com/flashforge/farm/slic3r/SliceListener' \
+            || { echo "ERROR: libslic3r.so missing farm JNI package"; exit 1; }
+          echo "libslic3r.so quality OK ($SZ bytes, gmp/mpfr linked, farm JNI present)"
+          cp "$SO" "$OUT/libslic3r.so"
           SHA="$(git rev-parse --short=10 HEAD)"
           DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           SUM="$(sha256sum "$OUT/libslic3r.so" | cut -d' ' -f1)"
@@ -440,7 +513,7 @@ jobs:
             --notes "Rolling release of libslic3r.so built from source. Re-published whenever the engine rebuilds."
 
   package-apk:
-    name: Assemble Debug APK
+    name: apk
     runs-on: ubuntu-24.04
     needs: [build-dep, build-engine]
     timeout-minutes: 120

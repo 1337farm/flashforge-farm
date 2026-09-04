@@ -33,8 +33,13 @@ name: native
 # Publishing is per-step, not gated on the full build: each dep leg publishes
 # its own rolling release (dep-<name>-latest) when it builds, build-engine
 # publishes engine-latest when it compiles, and package-apk publishes
-# farm-apk-latest when it assembles. A later step failing never discards an
-# earlier step's good outputs; every release carries a sha256 manifest.
+# farm-apk-latest when it assembles. Publishing runs on main and same-repo
+# PRs (never forks). A later step failing never discards an earlier step's
+# good outputs; every release carries a sha256 manifest.
+#
+# Reuse order per dep: published release first (sha-verified; survives any
+# cache-key churn), then actions cache, then fresh build. Releases also let
+# local builds skip compiling entirely.
 #
 # Trust policy (poison-proof caches):
 # - Restored caches must pass exact-file checks (sentinels in build-dep,
@@ -125,8 +130,34 @@ jobs:
           echo "scripts=$SCRIPTS_SHA" >> "$GITHUB_OUTPUT"
           echo "${{ matrix.dep }}_dep_key=${{ matrix.dep }}-${{ runner.os }}-$SHA-$SCRIPTS_SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Restore from release (published build reuse)
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REL_HIT=0
+          DL="$RUNNER_TEMP/rel-dl"
+          mkdir -p "$DL"
+          if gh release download "dep-${{ matrix.dep }}-latest" \
+               --pattern '${{ matrix.dep }}-deps.tar.gz' --pattern '${{ matrix.dep }}-manifest.json' \
+               --dir "$DL" --clobber >/dev/null 2>&1; then
+            WANT="$(python3 -c "import json;print(json.load(open('$DL/${{ matrix.dep }}-manifest.json'))['files']['${{ matrix.dep }}-deps.tar.gz'])" 2>/dev/null || true)"
+            GOT="$(sha256sum "$DL/${{ matrix.dep }}-deps.tar.gz" 2>/dev/null | cut -d' ' -f1)"
+            if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
+              tar -xzf "$DL/${{ matrix.dep }}-deps.tar.gz"
+              REL_HIT=1
+              echo "release dep-${{ matrix.dep }}-latest verified and staged"
+            else
+              echo "release sha mismatch; ignoring"
+            fi
+          else
+            echo "no usable dep-${{ matrix.dep }}-latest release; continuing"
+          fi
+          echo "rel_hit=$REL_HIT" >> "$GITHUB_OUTPUT"
+
       - name: Restore compiled ${{ matrix.name }}
         id: dep-cache
+        if: steps.rel.outputs.rel_hit != '1'
         uses: actions/cache/restore@v5
         with:
           path: ${{ matrix.path }}
@@ -139,26 +170,31 @@ jobs:
         run: |
           NEED=1
           REUSED=0
-          if [ "${{ steps.dep-cache.outputs.cache-hit }}" = "true" ]; then
-            # Sentinel check (no checkout yet): exact-file verification runs
-            # post-build and in build-engine. Sentinels catch poisoned/empty
-            # entries; the full script gates save/publish later.
-            OK=1
+          have_trees() {
             case '${{ matrix.dep }}' in
               tbb)
-                for f in "engine/src/main/jniImports/oneTBB/lib/$ABI/libtbb.a" \
-                         "engine/src/main/jniImports/oneTBB/lib/$ABI/libtbbmalloc.a"; do
-                  test -f "$f" || { echo "missing $f"; OK=0; }; done ;;
+                test -f "engine/src/main/jniImports/oneTBB/lib/$ABI/libtbb.a" \
+                && test -f "engine/src/main/jniImports/oneTBB/lib/$ABI/libtbbmalloc.a" ;;
               boost)
-                N="$(ls engine/src/main/jniImports/boost/lib/$ABI/lib/libboost_*.a 2>/dev/null | wc -l)"
-                [ "$N" -ge 30 ] || { echo "only $N boost libs"; OK=0; } ;;
+                [ "$(ls engine/src/main/jniImports/boost/lib/$ABI/lib/libboost_*.a 2>/dev/null | wc -l)" -ge 30 ] ;;
               occt)
-                N="$(ls engine/src/main/occt/jniLibs/$ABI/libTK*.so 2>/dev/null | wc -l)"
-                { [ "$N" -ge 20 ] && [ -n "$(ls -A engine/src/main/occt/include/$ABI 2>/dev/null)" ]; } \
-                  || { echo "only $N OCCT toolkits"; OK=0; } ;;
+                [ "$(ls engine/src/main/occt/jniLibs/$ABI/libTK*.so 2>/dev/null | wc -l)" -ge 20 ] \
+                && [ -n "$(ls -A engine/src/main/occt/include/$ABI 2>/dev/null)" ] ;;
             esac
-            if [ "$OK" = "1" ]; then
-              echo "restored '${{ matrix.path }}' passes sentinels; reusing it"
+          }
+          if [ "${{ steps.rel.outputs.rel_hit }}" = "1" ]; then
+            if have_trees; then
+              echo "release-staged trees pass sentinels; reusing (already published, no republish)"
+              NEED=0
+              REUSED=1
+            else
+              echo "release-staged trees fail sentinels; discarding"
+              rm -rf '${{ matrix.path }}'
+            fi
+          fi
+          if [ "$NEED" = "1" ] && [ "${{ steps.dep-cache.outputs.cache-hit }}" = "true" ]; then
+            if have_trees; then
+              echo "cache-restored trees pass sentinels; reusing it"
               NEED=0
               REUSED=1
             else
@@ -272,7 +308,7 @@ jobs:
           key: ${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}-${{ steps.sha.outputs.scripts }}
 
       - name: Publish ${{ matrix.name }} release
-        if: (steps.validate.outputs.reused == '1' || steps.verify-built.outputs.verified == '1') && github.ref == 'refs/heads/main'
+        if: (steps.validate.outputs.reused == '1' && steps.rel.outputs.rel_hit != '1' || steps.verify-built.outputs.verified == '1') && (github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -505,7 +541,7 @@ jobs:
           retention-days: 7
 
       - name: Publish engine release
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -628,7 +664,7 @@ jobs:
           retention-days: 7
 
       - name: Publish APK release
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

@@ -12,6 +12,7 @@ import android.net.Uri;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.Toast;
 
 import com.mrudultora.colorpicker.ColorPickerPopUp;
 
@@ -142,6 +143,13 @@ public class SettingsFragment extends ProfileListFragment {
                 null,
                 null,
                 null,
+                new OptionElement(R.drawable.refresh_outline_28, getContext().getString(R.string.SettingsIrohSpike)).setOnClick(() -> {
+                    Context ctx = getContext();
+                    if (ctx != null) {
+                        Toast.makeText(ctx, R.string.SettingsIrohSpikeStarted, Toast.LENGTH_SHORT).show();
+                        com.flashforge.farm.iroh.IrohSpike.INSTANCE.bindAndLog(ctx);
+                    }
+                }),
                 new OptionElement(R.drawable.refresh_outline_28, getContext().getString(R.string.SettingsResetToDefault)).setColor(R.attr.textColorNegative, false).setOnClick(() -> {
                     Context ctx = getContext();
                     if (ctx instanceof Activity) {

@@ -78,6 +78,7 @@ jobs:
       - name: Fast test suite (no SDK/NDK, ~30s)
         run: |
           set -e
+          python3 -c "import yaml" 2>/dev/null || pip install --quiet pyyaml
           python3 scripts/tests/test_ci_guards.py
           python3 scripts/tests/test_jni_contract.py
           python3 -m py_compile scripts/*.py scripts/tests/*.py

@@ -1,0 +1,19 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Base.Theme.FarmApp" parent="Theme.Material3.Light.NoActionBar">
+        <item name="android:windowBackground">#FFF</item>
+        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="s">@drawable/icon_adaptive_foreground</item>
+        <item name="android:windowSplashScreenIconBackgroundColor" tools:targetApi="s">#2B2B2B</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="q">false</item>
+        <item name="android:forceDarkAllowed" tools:targetApi="q">false</item>
+    </style>
+
+    <style name="Theme.FarmApp" parent="Base.Theme.FarmApp" />
+
+    <style name="Theme.FarmApp.NavigationTextFix" parent="@style/TextAppearance.Material3.LabelMedium">
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="Theme.FarmApp.NavigationTextFixActive" parent="@style/TextAppearance.Material3.LabelMedium">
+        <item name="android:textSize">11.5sp</item>
+    </style>
+</resources>

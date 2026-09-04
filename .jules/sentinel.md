@@ -1,0 +1,4 @@
+## 2024-05-24 - [Path Traversal in WebView Javascript Interface]
+**Vulnerability:** A Path Traversal vulnerability existed in the `@JavascriptInterface` of `WebViewMenu.java`. The `beginDownload(String filename)` method used the raw `filename` provided by the Javascript context to create a `File` within the cache directory without sanitizing it. This allowed a potentially malicious Javascript snippet to pass paths like `../../../../data/data/com.app/shared_prefs/prefs.xml` and overwrite application files.
+**Learning:** Data coming from Javascript interfaces exposed to WebViews should be treated as untrusted user input, especially for file operations, since WebViews could be loaded with external or untrusted URLs.
+**Prevention:** Always sanitize filenames provided by external sources. In Java, this can be done effectively by extracting the base name using `new File(filename).getName()`.

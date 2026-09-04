@@ -1,0 +1,10 @@
+[
+	{
+		"name": "FlashForge Vendor Profiles",
+		"description": "Vendor printer profiles for FlashForge Adventurer 5M",
+		"visibility": "",
+		"id": "flashforge-fff",
+    "url": "https://raw.githubusercontent.com/1337farm/flashforge-farm/refs/heads/main/.profiledumpsrepo/",
+		"index_url": "https://raw.githubusercontent.com/1337farm/flashforge-farm/refs/heads/main/.profiledumpsrepo/vendor_indices.zip"
+	}
+]

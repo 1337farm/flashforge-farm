@@ -1,0 +1,413 @@
+name: Build Native Engine (from source)
+
+# Builds libslic3r.so (and Boost/oneTBB/OCCT deps) from source on an x86_64
+# runner using the official NDK. The C++ engine source lives in the top-level
+# engine/ folder (vendored libslic3r + NDK CMake build), cleanly separated
+# from the Android app/. The native source (farm_native.cpp) targets
+# com.flashforge.farm, so the resulting .so packages the correct JNI symbols /
+# FindClass paths. There is no vendored/prebuilt native binary and no dependency
+# on a separate engine/deps release repo: the engine is always compiled from
+# source here (cmake -S engine) and its output staged into engine/output/
+# before the APK is assembled.
+#
+# Split into chained jobs so each stays well under the 6h per-job limit:
+#   1. build-dep     -> Boost + oneTBB + OCCT + GMP/MPFR each built on its OWN
+#                       runner via a matrix (no CPU contention; each dep cached
+#                       separately). The compiled deps live ONLY in the GitHub
+#                       actions cache, keyed by <dep>-<os>-<sha>-<scripts> —
+#                       the same key every consumer restores by.
+#   2. build-engine  -> compiles libslic3r.so (cached), restoring the compiled
+#                       deps straight from that cache by key on a miss
+#   3. package-apk   -> assembles the final debug APK with the source-built .so
+#                       (needs only the OCCT + GMP/MPFR runtime bits from cache)
+#
+# Caching: heavy builds write their outputs both to a primary output cache and
+# to ccache. On re-runs, if the primary cache hits (inputs unchanged) the heavy
+# build step is SKIPPED entirely, keeping re-runs fast.
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main", "master", "security-fix-remove-cloud-code"]
+  pull_request:
+    branches: ["main", "master"]
+
+env:
+  NDK_VERSION: "23.1.7779620"
+
+jobs:
+  build-dep:
+    name: Build ${{ matrix.name }} deps
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    outputs:
+      tbb_dep_key: ${{ steps.sha.outputs.tbb_dep_key }}
+      boost_dep_key: ${{ steps.sha.outputs.boost_dep_key }}
+      occt_dep_key: ${{ steps.sha.outputs.occt_dep_key }}
+      gmp_dep_key: ${{ steps.sha.outputs.gmp_dep_key }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { dep: tbb,   name: oneTBB, dir: openvdb-android,   path: engine/src/main/jniImports/oneTBB, url: https://github.com/syoyo/openvdb-android.git,         rec: false }
+          - { dep: boost, name: Boost,  dir: Boost-for-Android, path: engine/src/main/jniImports/boost, url: https://github.com/moritz-wundke/Boost-for-Android.git, rec: true  }
+          - { dep: occt,  name: OCCT,   dir: OCCT,              path: engine/src/main/occt,              url: https://github.com/Open-Cascade-SAS/OCCT.git,            rec: false }
+          - { dep: gmp,   name: GMP/MPFR, dir: gmp,             path: engine/src/main/jniLibs,           url: none,                                              rec: false }
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/23.1.7779620
+      ABI: arm64-v8a
+      API_LEVEL: "21"
+    steps:
+      - name: Resolve ${{ matrix.name }} version
+        id: sha
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ matrix.url }}" = "none" ]; then
+            SHA="none"
+          elif [ "${{ matrix.dep }}" = "occt" ]; then
+            SHA=$(gh api "repos/Open-Cascade-SAS/OCCT/git/ref/tags/V7_9_0" -q '.object.sha')
+          else
+            REPO="${{ matrix.url }}"
+            OWNER_REPO="${REPO#https://github.com/}"
+            OWNER_REPO="${OWNER_REPO%.git}"
+            SHA=$(gh api "repos/$OWNER_REPO/commits?per_page=1" -q '.[0].sha' 2>/dev/null)
+            [ -n "$SHA" ] || { echo "::error::Failed to resolve $OWNER_REPO"; exit 1; }
+          fi
+          echo "value=$SHA" >> "$GITHUB_OUTPUT"
+          SCRIPTS_SHA=$(gh api "repos/${{ github.repository }}/contents/scripts/build_all_deps_android.sh?ref=${{ github.sha }}" -q '.sha' 2>/dev/null || echo none)
+          echo "scripts=$SCRIPTS_SHA" >> "$GITHUB_OUTPUT"
+          echo "${{ matrix.dep }}_dep_key=${{ matrix.dep }}-${{ runner.os }}-$SHA-$SCRIPTS_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Restore compiled ${{ matrix.name }}
+        id: dep-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ matrix.path }}
+          key: ${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}-${{ steps.sha.outputs.scripts }}
+
+      - name: Validate restored ${{ matrix.name }}
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.dep-cache.outputs.cache-hit }}" = "true" ]; then
+            if [ -n "$(ls -A '${{ matrix.path }}' 2>/dev/null)" ] \
+               && find '${{ matrix.path }}' -type f | grep -q .; then
+              echo "restored '${{ matrix.path }}' is non-empty; reusing it"
+              NEED=0
+            else
+              echo "cache restored but '${{ matrix.path }}' is empty; forcing rebuild"
+              rm -rf '${{ matrix.path }}'
+            fi
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        if: steps.validate.outputs.need == '1'
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Restore ccache
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: deps-ccache-${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}
+          restore-keys: |
+            deps-ccache-${{ runner.os }}-
+
+      - name: Install build essentials
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ccache build-essential cmake ninja-build unzip
+
+      - name: Set up Android SDK / NDK
+        if: steps.validate.outputs.need == '1'
+        uses: android-actions/setup-android@v4
+
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-35" "cmake;3.22.1"
+
+      - name: Initialize ccache
+        if: steps.validate.outputs.need == '1'
+        run: |
+          ccache -M 6G
+          ccache -z
+
+      - name: Build ${{ matrix.name }} from source
+        id: build-dep
+        if: steps.validate.outputs.need == '1'
+        run: |
+          export PATH="/usr/lib/ccache:$PATH"
+          chmod +x scripts/build_all_deps_android.sh
+          ./scripts/build_all_deps_android.sh ${{ matrix.dep }}
+
+      - name: Show ccache stats
+        if: steps.validate.outputs.need == '1'
+        run: ccache -s
+
+      - name: Normalize Boost include layout
+        if: steps.validate.outputs.need == '1' && matrix.dep == 'boost'
+        run: |
+          INC="${{ matrix.path }}/include"
+          if [ -d "$INC/boost-1_85" ]; then
+            cp -r "$INC/boost-1_85/." "$INC/"
+            rm -rf "$INC/boost-1_85"
+            echo "normalized Boost include layout (boost/ -> include/boost)"
+          else
+            echo "Boost include layout already flat (include/boost exists)"
+          fi
+          test -d "$INC/boost" || { echo "ERROR: include/boost missing after normalize"; exit 1; }
+
+      - name: Add oneAPI TBB include bridge (classic -> oneapi/tbb)
+        if: steps.validate.outputs.need == '1' && matrix.dep == 'tbb'
+        run: |
+          chmod +x scripts/build_tbb_bridge.sh
+          ./scripts/build_tbb_bridge.sh "${{ matrix.path }}/include"
+
+      - name: Upload ${{ matrix.name }} build log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dep-build-log-${{ matrix.dep }}
+          path: /tmp/build_android_deps_${{ matrix.dep }}.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Stage complete OCCT headers
+        if: steps.validate.outputs.need == '1' && matrix.dep == 'occt'
+        run: |
+          git -C /tmp/build_android_deps/OCCT fetch --depth 1 origin tag V7_9_0
+          git -C /tmp/build_android_deps/OCCT checkout -f V7_9_0
+          chmod +x scripts/build_occt_headers.sh
+          WORK_DIR=/tmp/build_android_deps ABI="$ABI" ./scripts/build_occt_headers.sh
+
+      - name: Save compiled ${{ matrix.name }}
+        if: steps.build-dep.outcome == 'success'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ matrix.path }}
+          key: ${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}-${{ steps.sha.outputs.scripts }}
+
+  build-engine:
+    name: Compile libslic3r.so
+    runs-on: ubuntu-24.04
+    needs: [build-dep]
+    timeout-minutes: 350
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/23.1.7779620
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Compute engine cache key
+        id: engine-key
+        run: |
+          DEPKEY="${{ needs.build-dep.outputs.tbb_dep_key }}|${{ needs.build-dep.outputs.boost_dep_key }}|${{ needs.build-dep.outputs.occt_dep_key }}|${{ needs.build-dep.outputs.gmp_dep_key }}"
+          echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','app/build.gradle') }}-$DEPKEY" >> "$GITHUB_OUTPUT"
+
+      - name: Restore built libslic3r.so
+        id: engine-cache
+        uses: actions/cache@v5
+        with:
+          path: /tmp/engine-output
+          key: ${{ runner.os }}-${{ steps.engine-key.outputs.key }}
+
+      - name: Set up JDK 17
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Set up Android SDK / NDK
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        uses: android-actions/setup-android@v4
+
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-35" "cmake;3.22.1"
+
+      - name: Install ccache
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ccache
+
+      - name: Restore ccache
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: engine-ccache-${{ runner.os }}-${{ steps.engine-key.outputs.key }}
+          restore-keys: |
+            engine-ccache-${{ runner.os }}-
+
+      - name: Restore Boost
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/src/main/jniImports/boost
+          key: ${{ needs.build-dep.outputs.boost_dep_key }}
+          fail-on-cache-miss: true
+
+      - name: Restore oneTBB
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/src/main/jniImports/oneTBB
+          key: ${{ needs.build-dep.outputs.tbb_dep_key }}
+          fail-on-cache-miss: true
+
+      - name: Restore OCCT
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/src/main/occt
+          key: ${{ needs.build-dep.outputs.occt_dep_key }}
+          fail-on-cache-miss: true
+
+      - name: Restore GMP/MPFR
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/src/main/jniLibs
+          key: ${{ needs.build-dep.outputs.gmp_dep_key }}
+          fail-on-cache-miss: true
+
+      - name: Validate restored deps
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        run: |
+          for d in engine/src/main/jniImports/boost engine/src/main/jniImports/oneTBB engine/src/main/occt engine/src/main/jniLibs; do
+            test -n "$(ls -A "$d" 2>/dev/null)" || { echo "ERROR: missing restored deps at $d"; exit 1; }
+          done
+
+      - name: Build native engine .so from source (standalone CMake)
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        run: |
+          export PATH="/usr/lib/ccache:$PATH"
+          cmake -S engine -B engine/build \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_STL=c++_shared \
+            -DANDROID_PLATFORM=android-21 \
+            -DCMAKE_BUILD_TYPE=Release \
+            "-DSLIC3R_VERSION=\"0.4.6\"" \
+            "-DSLIC3R_BUILD_ID=\"4\""
+          cmake --build engine/build --target slic3r -j"$(nproc)"
+
+      - name: Locate built libslic3r.so
+        id: find-so
+        run: |
+          SO=$(find engine/build -name 'libslic3r.so' 2>/dev/null | head -1)
+          echo "SO_PATH=$SO"
+          echo "so_artifact=$SO" >> "$GITHUB_OUTPUT"
+          test -n "$SO" || { echo "FAILED: libslic3r.so not found"; exit 1; }
+
+      - name: Show ccache stats
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        run: ccache -s
+
+      - name: Save built libslic3r.so to cache
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p /tmp/engine-output
+          cp "${{ steps.find-so.outputs.so_artifact }}" /tmp/engine-output/libslic3r.so
+
+      - name: Upload libslic3r.so artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: libslic3r
+          path: ${{ steps.find-so.outputs.so_artifact }}
+          retention-days: 7
+
+  package-apk:
+    name: Assemble Debug APK
+    runs-on: ubuntu-24.04
+    needs: [build-dep, build-engine]
+    timeout-minutes: 120
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Set up Android SDK / NDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-35" "cmake;3.22.1"
+
+      - name: Restore OCCT
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/src/main/occt
+          key: ${{ needs.build-dep.outputs.occt_dep_key }}
+          fail-on-cache-miss: true
+
+      - name: Restore GMP/MPFR
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/src/main/jniLibs
+          key: ${{ needs.build-dep.outputs.gmp_dep_key }}
+          fail-on-cache-miss: true
+
+      - name: Validate restored deps
+        run: |
+          test -n "$(ls -A engine/src/main/occt 2>/dev/null)" || { echo "ERROR: missing restored OCCT"; exit 1; }
+          test -n "$(ls -A engine/src/main/jniLibs 2>/dev/null)" || { echo "ERROR: missing restored GMP/MPFR jniLibs"; exit 1; }
+
+      - name: Download libslic3r.so artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: libslic3r
+          path: /tmp/libslic3r-artifact
+
+      - name: Install source-built engine into engine/output/
+        run: |
+          mkdir -p engine/output/arm64-v8a
+          find /tmp/libslic3r-artifact -name 'libslic3r.so' -exec cp {} engine/output/arm64-v8a/libslic3r.so \;
+          test -f engine/output/arm64-v8a/libslic3r.so
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Verify corrected package in built .so
+        run: |
+          SO=engine/output/arm64-v8a/libslic3r.so
+          strings "$SO" | grep -q 'com/flashforge/farm/slic3r/SliceListener' \
+            && echo "OK: .so targets com.flashforge.farm" \
+            || { echo "ERROR: .so does not target com.flashforge.farm"; exit 1; }
+
+      - name: Assemble debug APK
+        run: ./gradlew assembleDebug -PskipNativeRebuild=true --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: FlashForgeFarm-Debug-APK
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7

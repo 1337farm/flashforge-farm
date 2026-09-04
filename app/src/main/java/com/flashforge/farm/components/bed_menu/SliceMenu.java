@@ -1,0 +1,888 @@
+package com.flashforge.farm.components.bed_menu;
+
+import com.flashforge.farm.Bus;
+
+import static com.flashforge.farm.utils.DebugUtils.assertTrue;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.content.res.ColorStateList;
+import android.net.Uri;
+import android.os.Build;
+import android.text.TextUtils;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.View;
+import com.flashforge.farm.utils.PrintQueueManager;
+import com.flashforge.farm.utils.PrinterFleetManager;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.app.AlertDialog;
+import android.text.InputType;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.IOException;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.Space;
+import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.core.content.FileProvider;
+import androidx.core.util.Pair;
+
+import com.google.android.material.checkbox.MaterialCheckBox;
+import com.loopj.android.http.AsyncHttpClient;
+import com.loopj.android.http.AsyncHttpResponseHandler;
+import com.loopj.android.http.RequestParams;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.text.DecimalFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+
+import cz.msebera.android.httpclient.Header;
+import cz.msebera.android.httpclient.entity.ContentType;
+import cz.msebera.android.httpclient.message.BasicHeader;
+import com.flashforge.farm.BuildConfig;
+import com.flashforge.farm.MainActivity;
+import com.flashforge.farm.R;
+import com.flashforge.farm.FarmApp;
+import com.flashforge.farm.components.FarmAlertDialogBuilder;
+import com.flashforge.farm.components.UnfoldMenu;
+import com.flashforge.farm.config.ConfigObject;
+import com.flashforge.farm.events.NeedDismissSnackbarEvent;
+import com.flashforge.farm.events.NeedSnackbarEvent;
+import com.flashforge.farm.fragment.BedFragment;
+import com.flashforge.farm.recycler.SimpleRecyclerItem;
+import com.flashforge.farm.slic3r.GCodeProcessorResult;
+import com.flashforge.farm.slic3r.GCodeViewer;
+import com.flashforge.farm.slic3r.Slic3rLocalization;
+import com.flashforge.farm.theme.IThemeView;
+import com.flashforge.farm.theme.ThemesRepo;
+import com.flashforge.farm.utils.Prefs;
+import com.flashforge.farm.utils.ViewUtils;
+import com.flashforge.farm.view.DividerView;
+import com.flashforge.farm.view.PositionScrollView;
+import com.flashforge.farm.view.SegmentsView;
+import com.flashforge.farm.view.SnackbarsLayout;
+
+public class SliceMenu extends ListBedMenu {
+    private AsyncHttpClient client = new AsyncHttpClient();
+
+    {
+        client.setLoggingEnabled(true);
+        client.setMaxRetriesAndTimeout(0, 10000);
+    }
+
+    private final static List<String> SUPPORTED_SEND = Collections.singletonList("octoprint");
+    private int lastUid;
+
+    @Override
+    protected List<SimpleRecyclerItem> onCreateItems(boolean portrait) {
+        lastUid = FarmApp.CONFIG_UID;
+        List<SimpleRecyclerItem> items = new ArrayList<>(Arrays.asList(
+                new BedMenuItem(R.string.MenuSliceInfo, R.drawable.clock_circle_dashed_outline_24).onClick(v -> fragment.showUnfoldMenu(new InfoMenu(this), v)),
+                new BedMenuItem(R.string.MenuSliceLayers, R.drawable.square_stack_up_outline_28).onClick(v -> fragment.showUnfoldMenu(new LayersMenu(), v)),
+                new BedMenuItem(R.string.MenuSliceExportToFile, R.drawable.folder_simple_arrow_right_outline_28).onClick(v -> {
+                    if (fragment.getContext() instanceof Activity) {
+                        Activity act = (Activity) fragment.getContext();
+                        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                        i.setType("application/x-gcode");
+                        i.putExtra(Intent.EXTRA_TITLE, fragment.getGlView().getRenderer().getGcodeResult().getRecommendedName());
+                        act.startActivityForResult(i, MainActivity.REQUEST_CODE_EXPORT_GCODE);
+                    }
+                }),
+                new BedMenuItem(R.string.MenuSliceShare, R.drawable.share_external_28).onClick(v -> {
+                    if (fragment.getContext() instanceof Activity) {
+                        File f = BedFragment.getTempGCodePath();
+
+                        Activity act = (Activity) fragment.getContext();
+                        Intent i = new Intent(Intent.ACTION_SEND_MULTIPLE);
+                        i.setType("application/x-gcode");
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                            // Simple trick for Samsung to display "1 element" instead of "temp.gcode"
+                            // It doesn't actually resolve name from provider and uses path-parsing instead, bruh.
+                            i.putParcelableArrayListExtra(Intent.EXTRA_STREAM, new ArrayList<>(Collections.singletonList(FileProvider.getUriForFile(act, BuildConfig.APPLICATION_ID + ".provider", f, BedFragment.getTempFileName()))));
+                            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        } else {
+                            i.putExtra(Intent.EXTRA_STREAM, Uri.fromFile(f));
+                        }
+                        act.startActivity(Intent.createChooser(i, null));
+                    }
+                }),
+                new BedMenuItem(R.string.MenuSlicePerformance, R.drawable.sparkle_28)
+                        .setTitleTextSize(8f)
+                        .setCheckable((buttonView, isChecked) -> {
+                            Prefs.setPerformanceModeEnabled(isChecked);
+                            GCodeViewer viewer = fragment.getGlView().getRenderer().getViewer();
+                            if (viewer != null) {
+                                viewer.setInfillVisibilityDepth(isChecked ? 5 : -1);
+                                fragment.getGlView().requestRender();
+                            }
+                        }, Prefs.isPerformanceModeEnabled())
+        ));
+        ConfigObject obj = FarmApp.CONFIG.findPrinter(FarmApp.CONFIG.presets.get("printer"));
+        assertTrue(obj != null);
+        String type = obj.get("host_type");
+        if (type == null) type = "octoprint";
+        String host = obj.get("print_host");
+        String apiKey = obj.get("printhost_apikey");
+        items.add(new BedMenuItem(R.string.MenuSliceEnqueuePrint, R.drawable.send_28).onClick(v -> enqueuePrint()));
+        return items;
+    }
+
+
+    private void enqueuePrint() {
+        android.content.Context ctx = fragment.getContext();
+        AlertDialog.Builder builder = new AlertDialog.Builder(ctx);
+        builder.setTitle(R.string.MenuSliceEnqueuePrint);
+
+        LinearLayout layout = new LinearLayout(ctx);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(ViewUtils.dp(20), ViewUtils.dp(20), ViewUtils.dp(20), ViewUtils.dp(20));
+
+        final EditText nozzleInput = new EditText(ctx);
+        nozzleInput.setHint(R.string.FleetNozzleSize);
+        nozzleInput.setText("0.4");
+        layout.addView(nozzleInput);
+
+        final EditText typeInput = new EditText(ctx);
+        typeInput.setHint(R.string.FleetFilamentType);
+        typeInput.setText("PLA");
+        layout.addView(typeInput);
+
+        final EditText colorInput = new EditText(ctx);
+        colorInput.setHint(R.string.FleetFilamentColor);
+        layout.addView(colorInput);
+
+        builder.setView(layout);
+
+        builder.setPositiveButton("Add to Queue", (dialog, which) -> {
+            String gcodePath = fragment.getContext().getFilesDir().getAbsolutePath() + "/" + System.currentTimeMillis() + "_queue.gcode";
+
+            try {
+                FileInputStream fis = new FileInputStream(BedFragment.getTempGCodePath());
+                FileOutputStream fos = new FileOutputStream(gcodePath);
+                byte[] buffer = new byte[1024];
+                int read;
+                while ((read = fis.read(buffer)) != -1) {
+                    fos.write(buffer, 0, read);
+                }
+                fis.close();
+                fos.close();
+
+                PrintQueueManager.QueueItem item = new PrintQueueManager.QueueItem(
+                    String.valueOf(System.currentTimeMillis()),
+                    gcodePath,
+                    nozzleInput.getText().toString(),
+                    typeInput.getText().toString(),
+                    colorInput.getText().toString()
+                );
+                PrintQueueManager.enqueueJob(item);
+                Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(SnackbarsLayout.Type.DONE, R.string.MenuSliceSendToPrinterOK));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> dialog.cancel());
+
+        builder.show();
+    }
+
+    private void upload(String type, String host, String apiKey, boolean print) {
+        String name = fragment.getGlView().getRenderer().getGcodeResult().getRecommendedName();
+        switch (type) {
+            default:
+            case "octoprint":
+                if (!host.startsWith("http://")) {
+                    host = "http://" + host;
+                }
+                String tag = UUID.randomUUID().toString();
+                Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(SnackbarsLayout.Type.LOADING, R.string.MenuSliceSendToPrinterLoading).tag(tag));
+                Header[] headers = TextUtils.isEmpty(apiKey) ? new Header[0] : new Header[] {new BasicHeader("X-Api-Key", apiKey)};
+                RequestParams params = new RequestParams();
+                try {
+                    params.put("file", new FileInputStream(BedFragment.getTempGCodePath()), name, ContentType.TEXT_PLAIN.getMimeType());
+                } catch (FileNotFoundException e) {
+                    throw new RuntimeException(e);
+                }
+                params.put("select", String.valueOf(print));
+                params.put("print", String.valueOf(print));
+
+                client.post(FarmApp.INSTANCE, host + "/api/files/local", headers, params, null, new AsyncHttpResponseHandler() {
+                    @Override
+                    public void onSuccess(int statusCode, Header[] headers, byte[] responseBody) {
+                        try {
+                            boolean hasAction = false;
+                            boolean hasFiles = false;
+
+                            try (com.google.gson.stream.JsonReader reader = new com.google.gson.stream.JsonReader(
+                                    new java.io.InputStreamReader(new java.io.ByteArrayInputStream(responseBody), java.nio.charset.StandardCharsets.UTF_8))) {
+                                reader.beginObject();
+                                while (reader.hasNext()) {
+                                    String name = reader.nextName();
+                                    if (name.equals("action")) {
+                                        hasAction = true;
+                                        reader.skipValue();
+                                    } else if (name.equals("files")) {
+                                        hasFiles = true;
+                                        reader.skipValue();
+                                    } else {
+                                        reader.skipValue();
+                                    }
+                                }
+                                reader.endObject();
+                            } catch (Exception ioE) {
+                                throw new JSONException("Malformed JSON: " + ioE.getMessage());
+                            }
+
+                            if (!hasAction && !hasFiles) {
+                                // To avoid creating a large String object on every failure callback,
+                                // we truncate the string to at most 100 characters.
+                                int len = Math.min(responseBody.length, 100);
+                                throw new JSONException("Invalid response structure. Starts with: " +
+                                    new String(responseBody, 0, len, java.nio.charset.StandardCharsets.UTF_8));
+                            }
+                            Bus.DISMISS_SNACKBAR.postValue(new NeedDismissSnackbarEvent(tag));
+                            Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(print ? SnackbarsLayout.Type.INFO : SnackbarsLayout.Type.DONE, print ? R.string.MenuSliceSendToPrinterPrintStarted : R.string.MenuSliceSendToPrinterOK));
+                        } catch (JSONException e) {
+                            onFailure(statusCode, headers, responseBody, e);
+                        }
+                    }
+
+                    @Override
+                    public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error) {
+                        Bus.DISMISS_SNACKBAR.postValue(new NeedDismissSnackbarEvent(tag));
+                        ViewUtils.postOnMainThread(() -> new FarmAlertDialogBuilder(fragment.getContext())
+                                .setTitle(R.string.MenuSliceSendToPrinterFailed)
+                                .setMessage(error.toString())
+                                .setPositiveButton(android.R.string.ok, null)
+                                .show());
+                    }
+                });
+                break;
+        }
+    }
+
+    @Override
+    public void onViewCreated(View v) {
+        super.onViewCreated(v);
+        v.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(@NonNull View v) {
+                if (lastUid != FarmApp.CONFIG_UID) {
+                    adapter.setItems(onCreateItems(v.getWidth() < v.getHeight()));
+                }
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(@NonNull View v) {}
+        });
+    }
+
+    private final static class InfoMenu extends UnfoldMenu implements IThemeView {
+        private final static String[] SCHEME_NAMES = {
+            "Line type",
+            "Layer height",
+            "Line width",
+            "Speed",
+            "Actual speed",
+            "Fan speed",
+            "Temperature",
+            "Flow",
+            "Actual flow",
+            "Layer time",
+            "Layer time log",
+            "Filament"
+        };
+        private final static int[] SCHEME_VALUES = {
+            GCodeViewer.VIEW_TYPE_FEATURE,
+            1, // Height
+            2, // Width
+            3, // Speed
+            4, // ActualSpeed
+            5, // FanSpeed
+            6, // Temperature
+            7, // VolumetricFlowRate
+            8, // ActualVolumetricFlowRate
+            9, // LayerTimeLinear
+            10, // LayerTimeLogarithmic
+            GCodeViewer.VIEW_TYPE_TOOL
+        };
+
+        private TextView totalView;
+        private SegmentsView segmentsView;
+        private ExtrusionRoleView[] roleViews = new ExtrusionRoleView[GCodeViewer.EXTRUSION_ROLES_COUNT];
+        private static DecimalFormat format = new DecimalFormat("0.##");
+
+        private final SliceMenu parent;
+        public InfoMenu(SliceMenu parent) {
+            this.parent = parent;
+        }
+
+        private GCodeViewer getViewer() {
+            return fragment.getGlView().getRenderer().getViewer();
+        }
+
+        private GCodeProcessorResult getResult() {
+            return fragment.getGlView().getRenderer().getGcodeResult();
+        }
+
+        @Override
+        protected View onCreateView(Context ctx, boolean portrait) {
+            LinearLayout ll = new LinearLayout(ctx);
+            ll.setOrientation(LinearLayout.VERTICAL);
+
+            LinearLayout schemeRow = new LinearLayout(ctx);
+            schemeRow.setOrientation(LinearLayout.HORIZONTAL);
+            schemeRow.setGravity(Gravity.CENTER_VERTICAL);
+            schemeRow.setPadding(ViewUtils.dp(16), ViewUtils.dp(12), ViewUtils.dp(16), ViewUtils.dp(12));
+            schemeRow.setBackground(ViewUtils.createRipple(ThemesRepo.getColor(android.R.attr.colorControlHighlight), 0));
+            
+            TextView schemeLabel = new TextView(ctx);
+            schemeLabel.setText("Color scheme");
+            schemeLabel.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+            schemeLabel.setTextColor(ThemesRepo.getColor(android.R.attr.textColorSecondary));
+            schemeRow.addView(schemeLabel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            
+            TextView schemeValue = new TextView(ctx);
+            schemeValue.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+            schemeValue.setTextColor(ThemesRepo.getColor(android.R.attr.textColorPrimary));
+            schemeValue.setGravity(Gravity.END);
+            
+            GCodeViewer viewer = getViewer();
+            int currentType = viewer != null ? viewer.getViewType() : GCodeViewer.VIEW_TYPE_FEATURE;
+            String initialName = "Line type";
+            for (int i = 0; i < SCHEME_VALUES.length; i++) {
+                if (SCHEME_VALUES[i] == currentType) {
+                    initialName = SCHEME_NAMES[i];
+                    break;
+                }
+            }
+            schemeValue.setText(initialName);
+            schemeRow.addView(schemeValue, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            
+            schemeRow.setOnClickListener(v -> {
+                GCodeViewer vViewer = getViewer();
+                if (vViewer == null) return;
+                
+                int cType = vViewer.getViewType();
+                int selectedIndex = 0;
+                for (int i = 0; i < SCHEME_VALUES.length; i++) {
+                    if (SCHEME_VALUES[i] == cType) {
+                        selectedIndex = i;
+                        break;
+                    }
+                }
+                
+                new FarmAlertDialogBuilder(ctx)
+                    .setTitle("Color scheme")
+                    .setSingleChoiceItems(SCHEME_NAMES, selectedIndex, (dialog, which) -> {
+                        int type = SCHEME_VALUES[which];
+                        schemeValue.setText(SCHEME_NAMES[which]);
+                        fragment.getGlView().queueEvent(() -> {
+                            GCodeViewer glViewer = getViewer();
+                            if (glViewer != null) {
+                                if (type == GCodeViewer.VIEW_TYPE_TOOL) {
+                                    int[] pal = Prefs.getFilamentPalette();
+                                    int[] rgb = new int[pal.length];
+                                    for (int i = 0; i < pal.length; i++) rgb[i] = pal[i] & 0xFFFFFF;
+                                    glViewer.setToolColors(rgb);
+                                }
+                                glViewer.setViewType(type);
+                                fragment.getGlView().requestRender();
+                                ViewUtils.postOnMainThread(() -> parent.adapter.notifyDataSetChanged());
+                            }
+                        });
+                        dialog.dismiss();
+                    })
+                    .show();
+            });
+            
+            ll.addView(schemeRow, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            ll.addView(new DividerView(ctx), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(1f)));
+
+            LinearLayout seamRow = new LinearLayout(ctx);
+            seamRow.setOrientation(LinearLayout.HORIZONTAL);
+            seamRow.setGravity(Gravity.CENTER_VERTICAL);
+            seamRow.setPadding(ViewUtils.dp(16), ViewUtils.dp(12), ViewUtils.dp(16), ViewUtils.dp(12));
+            seamRow.setBackground(ViewUtils.createRipple(ThemesRepo.getColor(android.R.attr.colorControlHighlight), 0));
+
+            TextView seamLabel = new TextView(ctx);
+            seamLabel.setText("Show seams");
+            seamLabel.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+            seamLabel.setTextColor(ThemesRepo.getColor(android.R.attr.textColorPrimary));
+            seamRow.addView(seamLabel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+            MaterialCheckBox seamCheckBox = new MaterialCheckBox(ctx);
+            seamCheckBox.setChecked(viewer != null && viewer.isOptionVisible(GCodeViewer.OPTION_TYPE_SEAMS));
+            seamRow.addView(seamCheckBox, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            seamRow.setOnClickListener(v -> {
+                GCodeViewer vViewer = getViewer();
+                if (vViewer != null) {
+                    vViewer.toggleOptionVisibility(GCodeViewer.OPTION_TYPE_SEAMS);
+                    seamCheckBox.setChecked(!seamCheckBox.isChecked());
+                    fragment.getGlView().requestRender();
+                }
+            });
+            seamCheckBox.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                GCodeViewer vViewer = getViewer();
+                if (vViewer != null && vViewer.isOptionVisible(GCodeViewer.OPTION_TYPE_SEAMS) != isChecked) {
+                    vViewer.toggleOptionVisibility(GCodeViewer.OPTION_TYPE_SEAMS);
+                    fragment.getGlView().requestRender();
+                }
+            });
+
+            ll.addView(seamRow, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            ll.addView(new DividerView(ctx), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(1f)));
+
+            ll.addView(new Space(ctx), new LinearLayout.LayoutParams(0, 0, 1f));
+
+            for (int i = 0; i < GCodeViewer.EXTRUSION_ROLES_COUNT; i++) {
+                ll.addView(roleViews[i] = new ExtrusionRoleView(ctx));
+            }
+
+            ll.addView(new DividerView(ctx), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(1f)));
+
+            totalView = new TextView(ctx);
+            totalView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            totalView.setGravity(Gravity.CENTER);
+            ll.addView(totalView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(18)) {{
+                topMargin = ViewUtils.dp(8);
+            }});
+
+            segmentsView = new SegmentsView(ctx);
+            ll.addView(segmentsView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(12)) {{
+                leftMargin = rightMargin = ViewUtils.dp(12);
+                topMargin = bottomMargin = ViewUtils.dp(8);
+            }});
+
+            ll.addView(new DividerView(ctx), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(1f)));
+            LinearLayout toolbar = new LinearLayout(ctx);
+            toolbar.setPadding(ViewUtils.dp(12), 0, ViewUtils.dp(12), 0);
+            toolbar.setOrientation(LinearLayout.HORIZONTAL);
+            toolbar.setGravity(Gravity.CENTER_VERTICAL);
+            toolbar.setBackground(ViewUtils.createRipple(ThemesRepo.getColor(android.R.attr.colorControlHighlight), 0));
+            toolbar.setOnClickListener(v -> dismiss());
+
+            ImageView icon = new ImageView(ctx);
+            icon.setImageResource(R.drawable.arrow_left_outline_28);
+            icon.setColorFilter(ThemesRepo.getColor(android.R.attr.textColorSecondary));
+            toolbar.addView(icon, new LinearLayout.LayoutParams(ViewUtils.dp(28), ViewUtils.dp(28)));
+
+            TextView title = new TextView(ctx);
+            title.setText(R.string.MenuOrientationPositionBack);
+            title.setTypeface(ViewUtils.getTypeface(ViewUtils.ROBOTO_MEDIUM));
+            title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
+            title.setTextColor(ThemesRepo.getColor(android.R.attr.textColorPrimary));
+            toolbar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f) {{
+                leftMargin = ViewUtils.dp(12);
+            }});
+
+            ll.addView(toolbar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(52)));
+            onApplyTheme();
+            return ll;
+        }
+
+        @Override
+        protected void onCreate() {
+            super.onCreate();
+
+            GCodeViewer viewer = getViewer();
+            GCodeProcessorResult result = getResult();
+            if (viewer != null) {
+                for (int i = 0; i < GCodeViewer.EXTRUSION_ROLES_COUNT; i++) {
+                    boolean visible = viewer.getEstimatedTime(i) != 0;
+                    roleViews[i].setVisibility(visible ? View.VISIBLE : View.GONE);
+                    if (visible) {
+                        roleViews[i].bind(viewer, result, i);
+                    }
+                }
+            }
+            updateValues();
+            ViewUtils.postOnMainThread(() -> segmentsView.startAnimation(), 50);
+        }
+
+        @Override
+        protected void onDestroy() {
+            super.onDestroy();
+
+            segmentsView.setNotVisible();
+        }
+
+        @Override
+        public int getRequestedSize(FrameLayout into, boolean portrait) {
+            if (portrait) {
+                GCodeViewer viewer = getViewer();
+                if (viewer != null) {
+                    int visibleCount = 0;
+                    for (int i = 0; i < GCodeViewer.EXTRUSION_ROLES_COUNT; i++) {
+                        if (viewer.getEstimatedTime(i) != 0) {
+                            visibleCount++;
+                        }
+                    }
+                    return ViewUtils.dp(42) * visibleCount + ViewUtils.dp(28) + ViewUtils.dp(52) + ViewUtils.dp(18 + 8) + ViewUtils.dp(44) + ViewUtils.dp(46);
+                }
+            }
+            return super.getRequestedSize(into, portrait);
+        }
+
+        private float getTotalEstimatedTime() {
+            GCodeViewer viewer = getViewer();
+            if (viewer == null) return 0;
+            float total = 0;
+            for (int i = 0; i < GCodeViewer.EXTRUSION_ROLES_COUNT; i++) {
+                if (viewer.isExtrusionRoleVisible(i)) {
+                    total += viewer.getEstimatedTime(i);
+                }
+            }
+            return total;
+        }
+
+        @SuppressLint("SetTextI18n")
+        private void updateValues() {
+            GCodeViewer viewer = getViewer();
+            GCodeProcessorResult result = getResult();
+            if (viewer == null) return;
+
+            float[] values = new float[2 + GCodeViewer.EXTRUSION_ROLES_COUNT];
+            double totalWeight = 0;
+            double totalLength = 0;
+            values[0] = 0;
+            values[values.length - 1] = 1;
+            float prev = 0;
+            int lastVisible = 0;
+            float totalTime = getTotalEstimatedTime();
+            for (int i = 0; i < GCodeViewer.EXTRUSION_ROLES_COUNT; i++) {
+                if (viewer.isExtrusionRoleVisible(i)) {
+                    float percent = viewer.getEstimatedTime(i) / totalTime;
+                    values[i + 1] = prev + percent;
+                    lastVisible = i;
+                    prev = values[i + 1];
+                    totalLength += result.getUsedFilamentMM(i);
+                    totalWeight += result.getUsedFilamentG(i);
+                } else {
+                    values[i + 1] = prev;
+                }
+            }
+
+            values[lastVisible] = 1;
+
+            segmentsView.setValues(values);
+            totalView.setText(formatComplex(totalWeight, totalLength, totalTime));
+        }
+
+        private static String formatComplex(double weight, double length, float time) {
+            StringBuilder sb = new StringBuilder();
+            if (weight > 0) {
+                sb.append(format.format(weight)).append(" ").append(FarmApp.INSTANCE.getString(R.string.MenuSliceInfoWeight)).append(" | ");
+            }
+            sb.append(format.format(length)).append(" ").append(FarmApp.INSTANCE.getString(R.string.MenuSliceInfoLength)).append(" | ");
+            sb.append(formatTime(time));
+            return sb.toString();
+        }
+
+        private static String formatTime(float time) {
+            int secondsTotal = (int) Math.round(Math.ceil(time));
+            int seconds = secondsTotal % 60;
+            int minutes = ((secondsTotal - seconds) / 60) % 60;
+            int hours = ((secondsTotal - seconds) / 60) / 60;
+
+            StringBuilder sb = new StringBuilder();
+            if (hours > 0) {
+                sb.append(hours).append(" ").append(FarmApp.INSTANCE.getString(R.string.MenuSliceInfoHour));
+            }
+            if (minutes > 0) {
+                if (sb.length() > 0) sb.append(" ");
+
+                sb.append(minutes).append(" ").append(FarmApp.INSTANCE.getString(R.string.MenuSliceInfoMinute));
+            }
+            if (seconds > 0 || sb.length() == 0) {
+                if (sb.length() > 0) sb.append(" ");
+
+                sb.append(seconds).append(" ").append(FarmApp.INSTANCE.getString(R.string.MenuSliceInfoSecond));
+            }
+
+            return sb.toString();
+        }
+
+        @Override
+        public void onApplyTheme() {
+            totalView.setTextColor(ThemesRepo.getColor(android.R.attr.textColorSecondary));
+        }
+
+        private final class ExtrusionRoleView extends LinearLayout implements IThemeView {
+            private MaterialCheckBox checkBox;
+            private TextView titleView;
+            private TextView timeView;
+
+            private Runnable invalidateGl;
+
+            public ExtrusionRoleView(Context context) {
+                super(context);
+                setOrientation(HORIZONTAL);
+                setGravity(Gravity.CENTER_VERTICAL);
+                setPadding(ViewUtils.dp(12), 0, ViewUtils.dp(16), 0);
+
+                checkBox = new MaterialCheckBox(getContext()) {
+                    @Override
+                    public boolean dispatchTouchEvent(MotionEvent event) {
+                        return false;
+                    }
+                };
+                addView(checkBox, new LinearLayout.LayoutParams(ViewUtils.dp(28), ViewUtils.dp(28)));
+
+                titleView = new TextView(context);
+                titleView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+                addView(titleView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f) {{
+                    leftMargin = ViewUtils.dp(12);
+                    rightMargin = ViewUtils.dp(8);
+                }});
+
+                timeView = new TextView(context);
+                timeView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+                addView(timeView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+                setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(42)));
+                onApplyTheme();
+            }
+
+            public void bind(GCodeViewer viewer, GCodeProcessorResult result, @GCodeViewer.ExtrusionRole int role) {
+                switch (role) {
+                    case GCodeViewer.EXTRUSION_ROLE_NONE:
+                        titleView.setText(Slic3rLocalization.getString("Unknown"));
+                        break;
+                    case GCodeViewer.EXTRUSION_ROLE_PERIMETER:
+                        titleView.setText(Slic3rLocalization.getString("Perimeter"));
+                        break;
+                    case GCodeViewer.EXTRUSION_ROLE_EXTERNAL_PERIMETER:
+                        titleView.setText(Slic3rLocalization.getString("External perimeter"));
+                        break;
+                    case GCodeViewer.EXTRUSION_ROLE_OVERHANG_PERIMETER:
+                        titleView.setText(Slic3rLocalization.getString("Overhang perimeter"));
+                        break;
+                    case GCodeViewer.EXTRUSION_ROLE_INTERNAL_INFILL:
+                        titleView.setText(Slic3rLocalization.getString("Internal infill"));
+                        break;
+                    case GCodeViewer.EXTRUSION_ROLE_SOLID_INFILL:
+                        titleView.setText(Slic3rLocalization.getString("Solid infill"));
+                        break;
+                    case GCodeViewer.EXTRUSION_ROLE_TOP_SOLID_INFILL:
+                        titleView.setText(Slic3rLocalization.getString("Top solid infill"));
+                        break;
+                    case GCodeViewer.EXTRUSION_ROLE_IRONING:
+                        titleView.setText(Slic3rLocalization.getString("Ironing"));
+                        break;
+                    case GCodeViewer.EXTRUSION_ROLE_BRIDGE_INFILL:
+                        titleView.setText(Slic3rLocalization.getString("Bridge infill"));
+                        break;
+                    case GCodeViewer.EXTRUSION_ROLE_GAP_FILL:
+                        titleView.setText(Slic3rLocalization.getString("Gap fill"));
+                        break;
+                    case GCodeViewer.EXTRUSION_ROLE_SKIRT:
+                        titleView.setText(Slic3rLocalization.getString("Skirt/Brim"));
+                        break;
+                    case GCodeViewer.EXTRUSION_ROLE_SUPPORT_MATERIAL:
+                        titleView.setText(Slic3rLocalization.getString("Support material"));
+                        break;
+                    case GCodeViewer.EXTRUSION_ROLE_SUPPORT_MATERIAL_INTERFACE:
+                        titleView.setText(Slic3rLocalization.getString("Support material interface"));
+                        break;
+                    case GCodeViewer.EXTRUSION_ROLE_WIPE_TOWER:
+                        titleView.setText(Slic3rLocalization.getString("Wipe tower"));
+                        break;
+                    case GCodeViewer.EXTRUSION_ROLE_CUSTOM:
+                        titleView.setText(Slic3rLocalization.getString("Custom"));
+                        break;
+                }
+
+                timeView.setText(formatComplex(result.getUsedFilamentG(role), result.getUsedFilamentMM(role), viewer.getEstimatedTime(role)));
+
+                checkBox.setChecked(viewer.isExtrusionRoleVisible(role));
+                checkBox.setButtonTintList(ColorStateList.valueOf(SegmentsView.mapColor(role)));
+                setOnClickListener(v -> {
+                    if (getTotalEstimatedTime() == viewer.getEstimatedTime(role)) {
+                        return;
+                    }
+
+                    viewer.toggleExtrusionRoleVisible(role);
+                    checkBox.setChecked(!checkBox.isChecked());
+                    updateValues();
+                    if (invalidateGl != null) ViewUtils.removeCallbacks(invalidateGl);
+                    ViewUtils.postOnMainThread(invalidateGl = () -> {
+                        Pair<Long, Long> p = viewer.getLayersViewRange();
+                        viewer.setLayersViewRange(p.first, p.second);
+                        fragment.getGlView().requestRender();
+                    }, 250);
+                });
+            }
+
+            @Override
+            public void onApplyTheme() {
+                titleView.setTextColor(ThemesRepo.getColor(android.R.attr.textColorPrimary));
+                timeView.setTextColor(ThemesRepo.getColor(android.R.attr.textColorSecondary));
+                setBackground(ViewUtils.createRipple(ThemesRepo.getColor(android.R.attr.colorControlHighlight), 12));
+            }
+        }
+    }
+
+    private final static class LayersMenu extends UnfoldMenu {
+        private PositionScrollView fromTrack, toTrack;
+        private TextView title;
+
+        private Runnable applyCallback;
+
+        private GCodeViewer getViewer() {
+            return fragment.getGlView().getRenderer().getViewer();
+        }
+
+        private void applyView(int from, int to) {
+            if (applyCallback != null) ViewUtils.removeCallbacks(applyCallback);
+
+            GCodeViewer viewer = getViewer();
+            if (viewer == null) {
+                return;
+            }
+            // Set infill visibility depth to optimize performance
+            // Only show infill for 5 layers below the top layer
+            if (Prefs.isPerformanceModeEnabled()) {
+                viewer.setInfillVisibilityDepth(5);
+            } else {
+                viewer.setInfillVisibilityDepth(-1);
+            }
+            viewer.setLayersViewRange(from - 1, to - 1);
+            fragment.getGlView().requestRender();
+
+            title.setText(fragment.getContext().getString(R.string.MenuSliceInfoLayers, from, to));
+        }
+
+        @Override
+        protected View onCreateView(Context ctx, boolean portrait) {
+            LinearLayout ll = new LinearLayout(ctx);
+            ll.setOrientation(LinearLayout.VERTICAL);
+
+            ll.addView(new Space(ctx), new LinearLayout.LayoutParams(0, 0, 1f));
+
+            title = new TextView(ctx);
+            title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+            title.setTypeface(ViewUtils.getTypeface(ViewUtils.ROBOTO_MEDIUM));
+            title.setTextColor(ThemesRepo.getColor(android.R.attr.colorAccent));
+            title.setGravity(Gravity.CENTER);
+            ll.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(20)) {{
+                bottomMargin = ViewUtils.dp(4);
+            }});
+
+            fromTrack = new PositionScrollView(ctx);
+            fromTrack.setProgressListener(integer -> {
+                GCodeViewer viewer = getViewer();
+                if (viewer == null) return;
+                if (Prefs.isPerformanceModeEnabled()) viewer.setFastMode(true);
+                toTrack.setMinMax(integer, (int) viewer.getLayersCount());
+                if (toTrack.getCurrentPosition() < integer) {
+                    toTrack.setCurrentPosition(integer);
+                }
+                title.setText(fragment.getContext().getString(R.string.MenuSliceInfoLayers, fromTrack.getCurrentPosition(), integer));
+
+                ViewUtils.removeCallbacks(applyCallback);
+                ViewUtils.postOnMainThread(applyCallback = ()-> applyView(integer, toTrack.getCurrentPosition()), 50);
+            });
+            fromTrack.setListener(integer -> {
+                GCodeViewer viewer = getViewer();
+                if (viewer != null) viewer.setFastMode(false);
+                applyView(integer, toTrack.getCurrentPosition());
+            });
+            ll.addView(fromTrack, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(80)));
+
+            toTrack = new PositionScrollView(ctx);
+            toTrack.setProgressListener(integer -> {
+                GCodeViewer viewer = getViewer();
+                if (viewer != null && Prefs.isPerformanceModeEnabled()) viewer.setFastMode(true);
+                title.setText(fragment.getContext().getString(R.string.MenuSliceInfoLayers, fromTrack.getCurrentPosition(), integer));
+
+                ViewUtils.removeCallbacks(applyCallback);
+                ViewUtils.postOnMainThread(applyCallback = ()-> applyView(fromTrack.getCurrentPosition(), integer), 50);
+            });
+            toTrack.setListener(integer -> {
+                GCodeViewer viewer = getViewer();
+                if (viewer != null) viewer.setFastMode(false);
+                applyView(fromTrack.getCurrentPosition(), integer);
+            });
+            ll.addView(toTrack, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(80)));
+
+            ll.addView(new DividerView(ctx), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(1f)));
+            LinearLayout toolbar = new LinearLayout(ctx);
+            toolbar.setPadding(ViewUtils.dp(12), 0, ViewUtils.dp(12), 0);
+            toolbar.setOrientation(LinearLayout.HORIZONTAL);
+            toolbar.setGravity(Gravity.CENTER_VERTICAL);
+            toolbar.setBackground(ViewUtils.createRipple(ThemesRepo.getColor(android.R.attr.colorControlHighlight), 0));
+            toolbar.setOnClickListener(v -> dismiss());
+
+            ImageView icon = new ImageView(ctx);
+            icon.setImageResource(R.drawable.arrow_left_outline_28);
+            icon.setColorFilter(ThemesRepo.getColor(android.R.attr.textColorSecondary));
+            toolbar.addView(icon, new LinearLayout.LayoutParams(ViewUtils.dp(28), ViewUtils.dp(28)));
+
+            TextView title = new TextView(ctx);
+            title.setText(R.string.MenuOrientationPositionBack);
+            title.setTypeface(ViewUtils.getTypeface(ViewUtils.ROBOTO_MEDIUM));
+            title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
+            title.setTextColor(ThemesRepo.getColor(android.R.attr.textColorPrimary));
+            toolbar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f) {{
+                leftMargin = ViewUtils.dp(12);
+            }});
+
+            ll.addView(toolbar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(52)));
+            return ll;
+        }
+
+        @Override
+        public int getRequestedSize(FrameLayout into, boolean portrait) {
+            return portrait ? ViewUtils.dp(80) * 2 + ViewUtils.dp(24) + ViewUtils.dp(52) + ViewUtils.dp(12) : super.getRequestedSize(into, false);
+        }
+
+        @Override
+        protected void onCreate() {
+            super.onCreate();
+
+            GCodeViewer viewer = getViewer();
+            if (viewer == null) return;
+            long max = viewer.getLayersCount();
+            fromTrack.setMinMax(1, (int) max);
+            toTrack.setMinMax(1, (int) max);
+
+            Pair<Long, Long> range = viewer.getLayersViewRange();
+            // Layer counts are bounded by Integer.MAX_VALUE in practice; cast safely with bounds check.
+            long fromLayer = Math.min(range.first, range.second) + 1;
+            long toLayer = Math.max(range.first, range.second) + 1;
+            if (fromLayer > Integer.MAX_VALUE) fromLayer = Integer.MAX_VALUE;
+            if (toLayer > Integer.MAX_VALUE) toLayer = Integer.MAX_VALUE;
+            fromTrack.setCurrentPosition((int) fromLayer);
+            toTrack.setCurrentPosition((int) toLayer);
+
+            title.setText(fragment.getContext().getString(R.string.MenuSliceInfoLayers, fromTrack.getCurrentPosition(), toTrack.getCurrentPosition()));
+        }
+
+        @Override
+        protected void onDestroy() {
+            super.onDestroy();
+
+            fromTrack.stopScroll();
+            toTrack.stopScroll();
+        }
+    }
+}

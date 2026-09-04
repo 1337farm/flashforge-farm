@@ -13,7 +13,7 @@
 
 #include <stdio.h>
 #include <math.h>
-#include <gmp.h>
+#include "gmp.h"
 #include "mpfr.h"
 #include <CGAL/assertions.h>
 

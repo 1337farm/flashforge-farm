@@ -26,8 +26,8 @@
 #endif
 
 #if defined(__has_include)
-#  if CGAL_USE_GMP && ! __has_include(<gmp.h>)
-#    pragma CGAL_WARNING(<gmp.h> cannot be found. Less efficient number types will be used instead. Define CGAL_NO_GMP=1 if that is on purpose.)
+#  if CGAL_USE_GMP && ! __has_include("gmp.h")
+#    pragma CGAL_WARNING("gmp.h" cannot be found. Less efficient number types will be used instead. Define CGAL_NO_GMP=1 if that is on purpose.)
 #    undef CGAL_USE_GMP
 #    undef CGAL_USE_MPFR
 #  elif CGAL_USE_MPFR && ! __has_include("mpfr.h")

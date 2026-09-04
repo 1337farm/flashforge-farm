@@ -15,7 +15,7 @@
 #include <CGAL/Polynomial_traits_d.h>
 #include "exact_signat_1.h"
 //#include <boost/mpl/assert.hpp>
-#include <gmp.h>
+#include "gmp.h"
 
 namespace CGAL{
 namespace RS_AK1{

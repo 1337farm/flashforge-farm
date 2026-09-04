@@ -22,6 +22,23 @@ OCCT_DIR="$(pwd)/engine/src/main/occt"
 ROOT="$(pwd)"
 mkdir -p "$JNI_IMPORTS_DIR" "$OCCT_DIR"
 
+# Download with retries: CI runners hit transient mirror failures, and this
+# script runs inside `||`-guarded calls where `set -e` is suppressed, so a
+# failed curl must never silently cascade into configure/make garbage.
+fetch() {
+    local url="$1" out="$2" i
+    for i in 1 2 3 4 5; do
+        if curl -fsSL --retry 3 --retry-all-errors -o "$out" "$url" \
+           && [ -s "$out" ]; then
+            return 0
+        fi
+        echo "--- [fetch] attempt $i/5 failed for $url; retrying ---" >&2
+        sleep "$((i * 5))"
+    done
+    echo "--- [fetch] ERROR: could not download $url after 5 attempts ---" >&2
+    return 1
+}
+
 WORK_DIR="${WORK_DIR:-/tmp/build_android_deps}"
 mkdir -p "$WORK_DIR"
 cd "$WORK_DIR"
@@ -212,35 +229,35 @@ build_gmp_mpfr() {
 
     # --- GMP -----------------------------------------------------------------
     if [ ! -d "gmp-6.2.1" ]; then
-        curl -fsSL -o gmp.tar.xz https://gmplib.org/download/gmp/gmp-6.2.1.tar.xz
-        tar xf gmp.tar.xz
+        fetch https://gmplib.org/download/gmp/gmp-6.2.1.tar.xz gmp.tar.xz || return 1
+        tar xf gmp.tar.xz || return 1
     fi
-    cd gmp-6.2.1
+    cd gmp-6.2.1 || return 1
     # Scope ABI=64 to this configure: the outer script exports ABI=arm64-v8a,
     # which GMP's configure misreads as a 32/64 selection ("arm64-v8a is not
     # among 64 32"). aarch64 => 64-bit, so pin ABI=64 for the child process.
     env ABI=64 ./configure --host=$HOST_PREFIX --prefix="$STAGE" --disable-assembly \
-        --enable-shared --disable-static --enable-cxx
-    make -j"$N_CORES"
-    make install
+        --enable-shared --disable-static --enable-cxx || return 1
+    make -j"$N_CORES" || return 1
+    make install || return 1
     cd ..
 
     # --- MPFR (against the just-installed GMP) -------------------------------
     if [ ! -d "mpfr-4.2.0" ]; then
-        curl -fsSL -o mpfr.tar.xz https://www.mpfr.org/mpfr-4.2.0/mpfr-4.2.0.tar.xz
-        tar xf mpfr.tar.xz
+        fetch https://www.mpfr.org/mpfr-4.2.0/mpfr-4.2.0.tar.xz mpfr.tar.xz || return 1
+        tar xf mpfr.tar.xz || return 1
     fi
-    cd mpfr-4.2.0
+    cd mpfr-4.2.0 || return 1
     env ABI=64 ./configure --host=$HOST_PREFIX --prefix="$STAGE" \
         --enable-shared --disable-static \
-        --with-gmp-include="$STAGE/include" --with-gmp-lib="$STAGE/lib"
-    make -j"$N_CORES"
-    make install
+        --with-gmp-include="$STAGE/include" --with-gmp-lib="$STAGE/lib" || return 1
+    make -j"$N_CORES" || return 1
+    make install || return 1
     cd ..
 
     # --- copy into the Android source tree ------------------------------------
     mkdir -p "$JNI_SO_DIR" "$GMP_HDR_DIR"
-    cp "$STAGE/lib/libgmp.so" "$STAGE/lib/libgmpxx.so" "$STAGE/lib/libmpfr.so" "$JNI_SO_DIR/"
+    cp "$STAGE/lib/libgmp.so" "$STAGE/lib/libgmpxx.so" "$STAGE/lib/libmpfr.so" "$JNI_SO_DIR/" || return 1
     cp "$STAGE/include/gmp.h"  "$STAGE/include/gmpxx.h"  "$GMP_HDR_DIR/"
     # mpfr.h is REQUIRED (CGAL includes it); copy it unconditionally so a
     # failure breaks the build loudly. mpf2mpfr.h only exists in older MPFR

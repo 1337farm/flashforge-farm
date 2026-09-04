@@ -20,6 +20,10 @@ name: Build Native Engine (from source)
 #                       deps straight from that cache by key on a miss
 #   3. package-apk   -> assembles the final debug APK with the source-built .so
 #                       (needs only the OCCT + GMP/MPFR runtime bits from cache)
+#   4. publish-release -> publishes rolling named releases on main
+#                       (native-deps-latest, engine-latest, farm-apk-latest)
+#                       with sha256 manifests, so local builds and users can
+#                       reuse them without recompiling or waiting on artifacts.
 #
 # Caching: heavy builds write their outputs both to a primary output cache and
 # to ccache. On re-runs, if the primary cache hits (inputs unchanged) the heavy
@@ -426,3 +430,113 @@ jobs:
           name: FlashForgeFarm-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 7
+
+  publish-release:
+    name: Publish named releases (deps / engine / APK)
+    runs-on: ubuntu-24.04
+    needs: [build-dep, build-engine, package-apk]
+    if: github.ref == 'refs/heads/main'
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      ABI: arm64-v8a
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore Boost
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/src/main/jniImports/boost
+          key: ${{ needs.build-dep.outputs.boost_dep_key }}
+          fail-on-cache-miss: true
+
+      - name: Restore oneTBB
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/src/main/jniImports/oneTBB
+          key: ${{ needs.build-dep.outputs.tbb_dep_key }}
+          fail-on-cache-miss: true
+
+      - name: Restore OCCT
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/src/main/occt
+          key: ${{ needs.build-dep.outputs.occt_dep_key }}
+          fail-on-cache-miss: true
+
+      - name: Restore GMP/MPFR
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            engine/src/main/jniLibs
+            engine/src/main/jniImports/gmp
+          key: ${{ needs.build-dep.outputs.gmp_dep_key }}
+          fail-on-cache-miss: true
+
+      - name: Download libslic3r.so artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: libslic3r
+          path: /tmp/libslic3r-artifact
+
+      - name: Download APK artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: FlashForgeFarm-Debug-APK
+          path: /tmp/apk-artifact
+
+      - name: Package release assets + manifests
+        id: package
+        run: |
+          set -e
+          SHA="$(git rev-parse --short=10 HEAD)"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          OUT="$RUNNER_TEMP/release-assets"
+          mkdir -p "$OUT"
+
+          tar -czf "$OUT/native-deps.tar.gz" \
+            engine/src/main/jniImports engine/src/main/jniLibs engine/src/main/occt
+          DEPS_SHA="$(sha256sum "$OUT/native-deps.tar.gz" | cut -d' ' -f1)"
+          printf '{"commit":"%s","built_at":"%s","abi":"%s","files":{"native-deps.tar.gz":"%s"}}\n' \
+            "$SHA" "$DATE" "$ABI" "$DEPS_SHA" > "$OUT/deps-manifest.json"
+
+          SO="$(find /tmp/libslic3r-artifact -name 'libslic3r.so' | head -1)"
+          test -n "$SO" || { echo "ERROR: libslic3r.so artifact missing"; exit 1; }
+          cp "$SO" "$OUT/libslic3r.so"
+          SO_SHA="$(sha256sum "$OUT/libslic3r.so" | cut -d' ' -f1)"
+          printf '{"commit":"%s","built_at":"%s","abi":"%s","files":{"libslic3r.so":"%s"}}\n' \
+            "$SHA" "$DATE" "$ABI" "$SO_SHA" > "$OUT/engine-manifest.json"
+
+          APK="$(find /tmp/apk-artifact -name 'FlashForgeFarm_*.apk' | head -1)"
+          test -n "$APK" || { echo "ERROR: APK artifact missing"; exit 1; }
+          cp "$APK" "$OUT/"
+          APK_NAME="$(basename "$APK")"
+          APK_SHA="$(sha256sum "$OUT/$APK_NAME" | cut -d' ' -f1)"
+          printf '{"commit":"%s","built_at":"%s","abi":"%s","files":{"%s":"%s"}}\n' \
+            "$SHA" "$DATE" "$ABI" "$APK_NAME" "$APK_SHA" > "$OUT/apk-manifest.json"
+
+          echo "out=$OUT" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Publish rolling releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          OUT="${{ steps.package.outputs.out }}"
+          SHA="${{ steps.package.outputs.sha }}"
+          NOTES="Built from main @ $SHA by the Build Native Engine workflow (run ${{ github.run_id }}). Rolling release: re-published on every green main build."
+          for spec in "native-deps-latest:$OUT/native-deps.tar.gz $OUT/deps-manifest.json:Native deps (latest)" \
+                      "engine-latest:$OUT/libslic3r.so $OUT/engine-manifest.json:Engine libslic3r.so (latest)" \
+                      "farm-apk-latest:$OUT/${{ steps.package.outputs.apk_name }} $OUT/apk-manifest.json:FlashForge Farm APK (latest)"; do
+            TAG="${spec%%:*}"; REST="${spec#*:}"
+            FILES="${REST%%:*}"; TITLE="${REST#*:}"
+            # shellcheck disable=SC2086
+            gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+            # shellcheck disable=SC2086
+            gh release create "$TAG" $FILES \
+              --title "$TITLE" --notes "$NOTES"
+          done

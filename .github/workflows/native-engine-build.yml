@@ -95,38 +95,31 @@ jobs:
     name: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      pull-requests: read
     outputs:
       native: ${{ steps.filter.outputs.native }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
       - name: Detect native-affecting changes
         id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             echo "native=true (non-PR: always full build)" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # PR checkouts are shallow merge commits: prefer the merge parents
-          # (HEAD^1 = base tip, HEAD^2 = PR head), which always exist locally.
-          # Fall back to fetching the base when parents are unavailable.
-          if git rev-parse --verify --quiet HEAD^1 >/dev/null \
-             && git rev-parse --verify --quiet HEAD^2 >/dev/null; then
-            DIFFARGS="HEAD^1 HEAD"
-          else
-            BASE="origin/${{ github.base_ref }}"
-            git fetch origin "${{ github.base_ref }}" --depth=200 2>/dev/null || true
-            DIFFARGS="$BASE...HEAD"
-          fi
-          # shellcheck disable=SC2086
-          FILES="$(git diff --name-only $DIFFARGS)"
+          # File list via API: immune to shallow-checkout merge-base issues.
+          # No checkout needed at all.
+          FILES="$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --paginate --jq '.[].filename')"
           echo "changed files:"; echo "$FILES"
           NATIVE=0
           echo "$FILES" | grep -qE '^(engine/|app/src/main/jni/|app/CMakeLists.txt|scripts/build_|scripts/fetch-native-deps|scripts/ensure-apk|.github/workflows/native-engine-build.yml)' && NATIVE=1
           if echo "$FILES" | grep -qx 'app/build.gradle'; then
-            # shellcheck disable=SC2086
-            git diff $DIFFARGS -- app/build.gradle | grep -E '^\+' \
+            gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+              --paginate --jq '.[] | select(.filename=="app/build.gradle") | .patch' \
+              | grep -E '^\+' \
               | grep -qE 'externalNativeBuild|ndkVersion|cmake|jniLibs|abiFilters|ANDROID_STL|ANDROID_PLATFORM|ANDROID_ABI' && NATIVE=1
           fi
           if [ "$NATIVE" = "1" ]; then echo "native=true (native inputs changed)"; echo "native=true" >> "$GITHUB_OUTPUT"

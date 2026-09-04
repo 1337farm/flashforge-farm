@@ -161,7 +161,7 @@ static String getGitCommitHash(File dir) {
 
 dependencies {
     testImplementation "junit:junit:4.13.2"
-    implementation 'com.google.code.gson:gson:2.11.0'
+    implementation 'com.google.code.gson:gson:2.14.0'
     implementation 'com.github.instacart:truetime-android:4.0.0.alpha'
     implementation 'com.github.mrudultora:Colorpicker:1.2.0'
     implementation 'com.github.bumptech.glide:glide:4.16.0'

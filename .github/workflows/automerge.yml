@@ -22,8 +22,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           PR="${{ github.event.pull_request.number }}"
-          if gh pr view "$PR" --repo "${{ github.repository }}" \
-               --json autoMergeRequest --jq -e '.autoMergeRequest == null' >/dev/null; then
+          if [ "$(gh pr view "$PR" --repo "${{ github.repository }}" --json autoMergeRequest --jq '.autoMergeRequest')" = "null" ]; then
             gh pr merge "$PR" --repo "${{ github.repository }}" --auto --squash
           else
             echo "auto-merge already enabled on #$PR"

@@ -14,6 +14,12 @@ name: native
 #   0. test         -> fast suite, no SDK/NDK (~30s): CI guards (job names vs
 #                       ruleset), JNI Java<->C++ contract, python compile,
 #                       bash syntax. Fails the run early on repo hygiene.
+#   00. changes     -> detects native-affecting changes on PRs (engine/,
+#                       app JNI/CMake, native build scripts, native-relevant
+#                       app/build.gradle lines). Pushes to main always build
+#                       full. PRs without native changes skip the hours-long
+#                       dep/engine builds; package-apk assembles + tests
+#                       against the rolling releases instead.
 #   1. build-dep     -> Boost + oneTBB + OCCT each built on its OWN runner via
 #                       a matrix (no CPU contention; each dep cached
 #                       separately). The compiled deps live ONLY in the GitHub
@@ -85,10 +91,44 @@ jobs:
           for f in scripts/*.sh; do bash -n "$f"; done
           echo "fast tests OK"
 
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      native: ${{ steps.filter.outputs.native }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Detect native-affecting changes
+        id: filter
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "native=true (non-PR: always full build)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BASE="origin/${{ github.base_ref }}"
+          git fetch origin "${{ github.base_ref }}" --depth=100 2>/dev/null || true
+          FILES="$(git diff --name-only "$BASE"...HEAD)"
+          echo "changed files:"; echo "$FILES"
+          NATIVE=0
+          echo "$FILES" | grep -qE '^(engine/|app/src/main/jni/|app/CMakeLists.txt|scripts/build_|scripts/fetch-native-deps|scripts/ensure-apk|.github/workflows/native-engine-build.yml)' && NATIVE=1
+          if echo "$FILES" | grep -qx 'app/build.gradle'; then
+            git diff "$BASE"...HEAD -- app/build.gradle | grep -E '^\+' \
+              | grep -qE 'externalNativeBuild|ndkVersion|cmake|jniLibs|abiFilters|ANDROID_STL|ANDROID_PLATFORM|ANDROID_ABI' && NATIVE=1
+          fi
+          if [ "$NATIVE" = "1" ]; then echo "native=true (native inputs changed)"; echo "native=true" >> "$GITHUB_OUTPUT"
+          else echo "native=false (no native inputs changed; APK assembles against releases)"; echo "native=false" >> "$GITHUB_OUTPUT"; fi
+
   build-dep:
     name: dep-${{ matrix.dep }}
     runs-on: ubuntu-24.04
     timeout-minutes: 350
+    needs: [changes]
+    if: needs.changes.outputs.native == 'true'
     permissions:
       contents: write
       actions: write
@@ -335,7 +375,8 @@ jobs:
   build-engine:
     name: engine
     runs-on: ubuntu-24.04
-    needs: [build-dep]
+    needs: [build-dep, changes]
+    if: needs.changes.outputs.native == 'true'
     timeout-minutes: 350
     permissions:
       contents: write
@@ -580,7 +621,7 @@ jobs:
   package-apk:
     name: apk
     runs-on: ubuntu-24.04
-    needs: [build-dep, build-engine]
+    needs: [build-dep, build-engine, changes]
     timeout-minutes: 120
     permissions:
       contents: write
@@ -606,17 +647,47 @@ jobs:
           sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-35" "cmake;3.22.1"
 
       - name: Restore OCCT
+        if: needs.changes.outputs.native == 'true'
         uses: actions/cache/restore@v5
         with:
           path: engine/src/main/occt
           key: ${{ needs.build-dep.outputs.occt_dep_key }}
           fail-on-cache-miss: true
 
+      - name: Restore OCCT from release (non-native PRs)
+        if: needs.changes.outputs.native != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DL="$RUNNER_TEMP/rel-occt"; mkdir -p "$DL"
+          gh release download dep-occt-latest --pattern 'occt-deps.tar.gz' --pattern 'occt-manifest.json' \
+            --dir "$DL" --clobber || { echo "ERROR: no dep-occt-latest release (main must go green first)"; exit 1; }
+          WANT="$(python3 -c "import json;print(json.load(open('$DL/occt-manifest.json'))['files']['occt-deps.tar.gz'])")"
+          GOT="$(sha256sum "$DL/occt-deps.tar.gz" | cut -d' ' -f1)"
+          [ "$WANT" = "$GOT" ] || { echo "ERROR: occt release sha mismatch"; exit 1; }
+          tar -xzf "$DL/occt-deps.tar.gz"
+          echo "OCCT restored from release"
+
       - name: Download GMP trees artifact
+        if: needs.changes.outputs.native == 'true'
         uses: actions/download-artifact@v6
         with:
           name: gmp-trees
           path: /tmp/gmp-trees-artifact
+
+      - name: Restore GMP from release (non-native PRs)
+        if: needs.changes.outputs.native != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DL="$RUNNER_TEMP/rel-gmp"; mkdir -p "$DL"
+          gh release download dep-gmp-latest --pattern 'gmp-deps.tar.gz' --pattern 'gmp-manifest.json' \
+            --dir "$DL" --clobber || { echo "ERROR: no dep-gmp-latest release (main must go green first)"; exit 1; }
+          WANT="$(python3 -c "import json;print(json.load(open('$DL/gmp-manifest.json'))['files']['gmp-deps.tar.gz'])")"
+          GOT="$(sha256sum "$DL/gmp-deps.tar.gz" | cut -d' ' -f1)"
+          [ "$WANT" = "$GOT" ] || { echo "ERROR: gmp release sha mismatch"; exit 1; }
+          tar -xzf "$DL/gmp-deps.tar.gz"
+          echo "GMP restored from release"
 
       - name: Install GMP trees + validate
         run: |
@@ -634,12 +705,29 @@ jobs:
           test -n "$(ls -A engine/src/main/jniLibs 2>/dev/null)" || { echo "ERROR: missing GMP/MPFR jniLibs"; exit 1; }
 
       - name: Download libslic3r.so artifact
+        if: needs.changes.outputs.native == 'true'
         uses: actions/download-artifact@v6
         with:
           name: libslic3r
           path: /tmp/libslic3r-artifact
 
+      - name: Restore engine from release (non-native PRs)
+        if: needs.changes.outputs.native != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DL="$RUNNER_TEMP/rel-engine"; mkdir -p "$DL"
+          gh release download engine-latest --pattern 'libslic3r.so' --pattern 'engine-manifest.json' \
+            --dir "$DL" --clobber || { echo "ERROR: no engine-latest release (main must go green first)"; exit 1; }
+          WANT="$(python3 -c "import json;print(json.load(open('$DL/engine-manifest.json'))['files']['libslic3r.so'])")"
+          GOT="$(sha256sum "$DL/libslic3r.so" | cut -d' ' -f1)"
+          [ "$WANT" = "$GOT" ] || { echo "ERROR: engine release sha mismatch"; exit 1; }
+          mkdir -p engine/output/arm64-v8a
+          cp "$DL/libslic3r.so" engine/output/arm64-v8a/libslic3r.so
+          echo "engine restored from release"
+
       - name: Install source-built engine into engine/output/
+        if: needs.changes.outputs.native == 'true'
         run: |
           mkdir -p engine/output/arm64-v8a
           find /tmp/libslic3r-artifact -name 'libslic3r.so' -exec cp {} engine/output/arm64-v8a/libslic3r.so \;

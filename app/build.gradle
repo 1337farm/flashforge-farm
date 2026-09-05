@@ -1,6 +1,10 @@
 plugins {
     id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
+    // NOTE: no explicit Kotlin plugin. AGP 9 enables built-in Kotlin, which
+    // pre-registers the 'kotlin' extension; applying kotlin-android as well
+    // fails with "Cannot add extension with name 'kotlin'". The KGP version
+    // stays pinned via the root buildscript classpath (AGP auto-upgrades it
+    // to its required minimum). Kotlin sources live under src/main/kotlin.
 }
 
 def commit = getGitCommitHash(file('.'))

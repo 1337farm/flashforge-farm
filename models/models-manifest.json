@@ -1,0 +1,26 @@
+{
+ "schema": 1,
+ "files": {
+  "3dbenchy.stl": "a0afa505090b6f16cb6bdcfad3b843ec5b3b540b8357c306d447d0b324b051bc",
+  "OrcaCube_v2.stl": "254271df6c378a54f2c722f3c18295c7a6fb27729579295f320b2c47ea08841a",
+  "OrcaPlug_v2.stl": "39b38af659c33286c321aa5fdd5c1d554c422f623b139fa72ae768ebe84ca6c0",
+  "OrcaToleranceTest.stl": "19f3a8e33ec2c61643a69724773bb11aaaa2e4a487ccad23b36194e8900dea13",
+  "Orca_stringhell.stl": "d6a70b1e2085ca7e400b8d800fae9bbd078420b27a671d99ee1a0230f1e09d4c",
+  "Stanford_Bunny.stl": "f4626bbd72d2f7140bcc49ac7fa4c7e49c18b7cb25f6a4438e19482860eeb202",
+  "Voron_Design_Cube_v7.stl": "166c9c233cde4ec674cb37292b60e4ddca2141cc57e7fa47af91f999c63c4201",
+  "box.stl": "3c7506de71f96b8391a809da650a00a40fe14c1328905748ef24d199116d3dfc",
+  "bunny.stl": "4a222346223cf2c207c34d7a3d4e8ea297b004ff862b06b6e4c7c2eeac9f761a",
+  "calicat.stl": "d65709b6cd77f467b2a71e4298884e229d878540fd16cca70684cebf45698ee0",
+  "cone.stl": "55bce1fe223cb307d0de3f1cab10de22cebba12321618ac01e2a51b2ea9aff9a",
+  "cylinder.stl": "b57854b22b22c64366941beb4dfbf1d44710d1c9048aadad16d813514384f047",
+  "fox.stl": "fe77e04c78ff79040bd7005d0ca6076d4d926dd253e6da8ae3f45699982485ef",
+  "ksr_fdmtest_v4.stl": "10834f191b10cbeb757cdddf99e65cf9e5bb561e74930254e77007eaa0957325",
+  "pa_test.stl": "213557fa02d3f37adaa7b00a361929fdd5323e6f393908f34012f1d81d3a89da",
+  "pyramid.stl": "7ab867a9b76f246efdb9a09b6180415e5e5e7c54947c7fc5db01f07b60be64e6",
+  "sphere.stl": "77265a76b01ce41bac8fc3342cfb5db1e502c39c7884918e8e06983834818a4b",
+  "xyz_cube.stl": "d6850d1c5445547f03c36de9385bca44b2afd22b508b2fc29dc3fb2f8ce24db5"
+ },
+ "archive": {
+  "models.zip": "442d40d61a092820c37af8727d6dc7124eb80cde2843d16bff8480706d552702"
+ }
+}

@@ -79,7 +79,11 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --depth 100 origin "${{ github.sha }}"
+          git checkout "${{ github.sha }}"
 
       - name: Fast test suite (no SDK/NDK, ~30s)
         run: |
@@ -171,7 +175,7 @@ jobs:
           echo "value=$SHA" >> "$GITHUB_OUTPUT"
           SCRIPTS_SHA=$(gh api "repos/${{ github.repository }}/contents/scripts/build_all_deps_android.sh?ref=${{ github.sha }}" -q '.sha' 2>/dev/null || echo none)
           echo "scripts=$SCRIPTS_SHA" >> "$GITHUB_OUTPUT"
-          echo "${{ matrix.dep }}_dep_key=${{ matrix.dep }}-${{ runner.os }}-$SHA-$SCRIPTS_SHA" >> "$GITHUB_OUTPUT"
+          echo "${{ matrix.dep }}_dep_key=${{ matrix.dep }}-${{ runner.os }}-$SHA-$SCRIPTS_SHA-ndk${{ env.NDK_VERSION }}-$ABI" >> "$GITHUB_OUTPUT"
 
       - name: Restore from release (published build reuse)
         id: rel
@@ -253,9 +257,12 @@ jobs:
 
       - name: Checkout repository
         if: steps.validate.outputs.need == '1'
-        uses: actions/checkout@v5
-        with:
-          submodules: recursive
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --depth 100 origin "${{ github.sha }}"
+          git checkout "${{ github.sha }}"
+          git submodule update --init --recursive
 
       - name: Restore ccache
         if: steps.validate.outputs.need == '1'
@@ -274,8 +281,14 @@ jobs:
 
       - name: Set up Android SDK / NDK
         if: steps.validate.outputs.need == '1'
-        uses: android-actions/setup-android@v4
-
+        run: |
+          SDK=/usr/local/lib/android/sdk
+          test -d "$SDK/cmdline-tools" || { echo "ERROR: preinstalled SDK missing at $SDK"; exit 1; }
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "$SDK/cmdline-tools/latest/bin:$SDK/platform-tools" >> "$GITHUB_PATH"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --version
       - name: Install NDK ${{ env.NDK_VERSION }}
         if: steps.validate.outputs.need == '1'
         run: |
@@ -392,15 +405,18 @@ jobs:
       ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/23.1.7779620
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          submodules: recursive
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --depth 100 origin "${{ github.sha }}"
+          git checkout "${{ github.sha }}"
+          git submodule update --init --recursive
 
       - name: Compute engine cache key
         id: engine-key
         run: |
           DEPKEY="${{ needs.build-dep.outputs.tbb_dep_key }}|${{ needs.build-dep.outputs.boost_dep_key }}|${{ needs.build-dep.outputs.occt_dep_key }}"
-          echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','app/build.gradle','scripts/build_all_deps_android.sh') }}-$DEPKEY" >> "$GITHUB_OUTPUT"
+          echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','engine/src/main/jni/**','app/build.gradle','scripts/build_all_deps_android.sh') }}-ndk${{ env.NDK_VERSION }}-$ABI-$DEPKEY" >> "$GITHUB_OUTPUT"
 
       - name: Restore built libslic3r.so
         id: engine-cache
@@ -435,15 +451,25 @@ jobs:
 
       - name: Set up JDK 17
         if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
-        uses: actions/setup-java@v5
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: gradle
+        run: |
+          curl -fsSL -o /tmp/temurin17.tar.gz "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse"
+          rm -rf /tmp/jdk17 && mkdir -p /tmp/jdk17
+          tar -xzf /tmp/temurin17.tar.gz -C /tmp/jdk17 --strip-components=1
+          rm -f /tmp/temurin17.tar.gz
+          /tmp/jdk17/bin/java -version 2>&1 | head -1
+          echo "JAVA_HOME=/tmp/jdk17" >> "$GITHUB_ENV"
+          echo "/tmp/jdk17/bin" >> "$GITHUB_PATH"
 
       - name: Set up Android SDK / NDK
-        uses: android-actions/setup-android@v4
-
+        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        run: |
+          SDK=/usr/local/lib/android/sdk
+          test -d "$SDK/cmdline-tools" || { echo "ERROR: preinstalled SDK missing at $SDK"; exit 1; }
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "$SDK/cmdline-tools/latest/bin:$SDK/platform-tools" >> "$GITHUB_PATH"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --version
       - name: Install NDK ${{ env.NDK_VERSION }}
         run: |
           yes | sdkmanager --licenses || true
@@ -698,20 +724,32 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          submodules: recursive
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --depth 100 origin "${{ github.sha }}"
+          git checkout "${{ github.sha }}"
+          git submodule update --init --recursive
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: gradle
+        run: |
+          curl -fsSL -o /tmp/temurin17.tar.gz "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse"
+          rm -rf /tmp/jdk17 && mkdir -p /tmp/jdk17
+          tar -xzf /tmp/temurin17.tar.gz -C /tmp/jdk17 --strip-components=1
+          rm -f /tmp/temurin17.tar.gz
+          /tmp/jdk17/bin/java -version 2>&1 | head -1
+          echo "JAVA_HOME=/tmp/jdk17" >> "$GITHUB_ENV"
+          echo "/tmp/jdk17/bin" >> "$GITHUB_PATH"
 
       - name: Set up Android SDK / NDK
-        uses: android-actions/setup-android@v4
-
+        run: |
+          SDK=/usr/local/lib/android/sdk
+          test -d "$SDK/cmdline-tools" || { echo "ERROR: preinstalled SDK missing at $SDK"; exit 1; }
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "$SDK/cmdline-tools/latest/bin:$SDK/platform-tools" >> "$GITHUB_PATH"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --version
       - name: Install NDK ${{ env.NDK_VERSION }}
         run: |
           yes | sdkmanager --licenses || true

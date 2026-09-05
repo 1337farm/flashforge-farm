@@ -464,7 +464,6 @@ jobs:
           echo "/tmp/jdk17/bin" >> "$GITHUB_PATH"
 
       - name: Set up Android SDK / NDK
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         run: |
           SDK=/usr/local/lib/android/sdk
           test -d "$SDK/cmdline-tools" || { echo "ERROR: preinstalled SDK missing at $SDK"; exit 1; }

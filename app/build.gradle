@@ -157,8 +157,12 @@ def copyApkToDownloads = tasks.register('copyApkToDownloads') {
         }
     }
 }
-tasks.named('assembleDebug') { finalizedBy copyApkToDownloads }
-tasks.named('assembleRelease') { finalizedBy copyApkToDownloads }
+// Assemble tasks are registered lazily by AGP (after project evaluation),
+// so the wiring must live in afterEvaluate, not at configuration time.
+afterEvaluate {
+    tasks.named('assembleDebug') { finalizedBy copyApkToDownloads }
+    tasks.named('assembleRelease') { finalizedBy copyApkToDownloads }
+}
 
 static String getGitCommitHash(File dir) {
     try {

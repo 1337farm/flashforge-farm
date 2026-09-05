@@ -36,6 +36,7 @@ import java.util.regex.Pattern;
 import com.flashforge.farm.MainActivity;
 import com.flashforge.farm.R;
 import com.flashforge.farm.SetupActivity;
+import com.flashforge.farm.modelrepo.ModelLibrary;
 import com.flashforge.farm.FarmApp;
 
 import com.flashforge.farm.components.FarmAlertDialogBuilder;
@@ -281,22 +282,45 @@ public class FileMenu extends ListBedMenu {
             return (int) (portrait ? into.getHeight() * 0.35f : into.getWidth() * 0.6f);
         }
 
-        /** Synchronously load a bundled placeholder model from assets/models/<key>.stl onto the bed. */
+        /** Load a bundled placeholder model onto the bed, downloading it from the model library on first use. */
         private void ensurePlaceholderModel(String key) {
-            try {
-                File f = new File(FarmApp.getModelCacheDir(), "calibration_" + key + ".stl");
-                InputStream in = FarmApp.INSTANCE.getAssets().open("models/" + key + ".stl");
-                FileOutputStream fos = new FileOutputStream(f);
-                byte[] buffer = new byte[10240]; int c;
+            ModelLibrary.ensureModel(FarmApp.INSTANCE, key + ".stl", new ModelLibrary.Callback() {
+                @Override
+                public void onReady(File src) {
+                    try {
+                        File f = new File(FarmApp.getModelCacheDir(), "calibration_" + key + ".stl");
+                        copyFile(src, f);
+                        ViewUtils.postOnMainThread(() -> {
+                            try {
+                                FileMenu.this.fragment.loadModel(f);
+                                Bus.OBJECTS_LIST_CHANGED.postValue(new ObjectsListChangedEvent());
+                            } catch (Exception e) {
+                                Log.e("FileMenu", "Failed to load PA placeholder model", e);
+                            }
+                        });
+                    } catch (Exception e) {
+                        Log.e("FileMenu", "Failed to load PA placeholder model", e);
+                    }
+                }
+
+                @Override
+                public void onError(String msg) {
+                    Log.e("FileMenu", "Model download failed: " + msg);
+                    ViewUtils.postOnMainThread(() -> Toast.makeText(
+                            FarmApp.INSTANCE, "Model download failed: " + msg,
+                            Toast.LENGTH_LONG).show());
+                }
+            });
+        }
+
+        private static void copyFile(File src, File dst) throws IOException {
+            try (InputStream in = new java.io.FileInputStream(src);
+                 FileOutputStream fos = new FileOutputStream(dst)) {
+                byte[] buffer = new byte[10240];
+                int c;
                 while ((c = in.read(buffer)) != -1) {
                     fos.write(buffer, 0, c);
                 }
-                fos.close();
-                in.close();
-                FileMenu.this.fragment.loadModel(f);
-                Bus.OBJECTS_LIST_CHANGED.postValue(new ObjectsListChangedEvent());
-            } catch (Exception e) {
-                Log.e("FileMenu", "Failed to load PA placeholder model", e);
             }
         }
 
@@ -458,7 +482,8 @@ public class FileMenu extends ListBedMenu {
                 File f = new File(FarmApp.getModelCacheDir(), "handy_model_" + key);
                 new Thread(()->{
                     try {
-                        InputStream in = FarmApp.INSTANCE.getAssets().open("models/" + key);
+                        File src = ModelLibrary.getModelFileSync(FarmApp.INSTANCE, key);
+                        InputStream in = new java.io.FileInputStream(src);
                         FileOutputStream fos = new FileOutputStream(f);
                         byte[] buffer = new byte[10240]; int c;
                         while ((c = in.read(buffer)) != -1) {

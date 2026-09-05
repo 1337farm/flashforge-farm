@@ -12,7 +12,7 @@ import com.flashforge.farm.fragment.SettingsFragment;
 
 public abstract class DelegateSlotImpl extends NavigationDelegate {
     public int getSlotCount() {
-        return 6;
+        return 7;
     }
 
     @DrawableRes
@@ -31,6 +31,8 @@ public abstract class DelegateSlotImpl extends NavigationDelegate {
                 return R.drawable.view_in_ar_24; // Use an existing icon for now, could be R.drawable.printer_outline_28
             case 5:
                 return R.drawable.settings_outline_28;
+            case 6:
+                return R.drawable.globe_cross_outline_28;
         }
     }
 
@@ -54,6 +56,8 @@ public abstract class DelegateSlotImpl extends NavigationDelegate {
                 return R.string.SlotFleet;
             case 5:
                 return R.string.SlotAppSettings;
+            case 6:
+                return R.string.SlotModels;
         }
     }
 
@@ -72,6 +76,8 @@ public abstract class DelegateSlotImpl extends NavigationDelegate {
                 return R.string.SlotFleetTooltip;
             case 5:
                 return R.string.SlotAppSettingsTooltip;
+            case 6:
+                return R.string.SlotModelsTooltip;
         }
     }
 
@@ -91,6 +97,8 @@ public abstract class DelegateSlotImpl extends NavigationDelegate {
                 return new com.flashforge.farm.fragment.FleetFragment();
             case 5:
                 return new SettingsFragment();
+            case 6:
+                return new com.flashforge.farm.fragment.ModelRepoFragment();
         }
     }
 }

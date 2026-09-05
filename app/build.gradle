@@ -12,7 +12,7 @@ def skipNativeRebuild = project.findProperty('skipNativeRebuild') == 'true'
 
 android {
     namespace 'com.flashforge.farm'
-    compileSdk 35
+    compileSdk 37
 
     defaultConfig {
         applicationId "com.flashforge.farm"

@@ -115,7 +115,7 @@ jobs:
             --paginate --jq '.[].filename')"
           echo "changed files:"; echo "$FILES"
           NATIVE=0
-          echo "$FILES" | grep -qE '^(engine/|app/src/main/jni/|app/CMakeLists.txt|scripts/build_|scripts/fetch-native-deps|scripts/ensure-apk|.github/workflows/native-engine-build.yml)' && NATIVE=1
+          echo "$FILES" | grep -qE '^(engine/|app/src/main/jni/|app/CMakeLists.txt|build.gradle|scripts/build_|scripts/fetch-native-deps|scripts/ensure-apk|.github/workflows/native-engine-build.yml)' && NATIVE=1
           if echo "$FILES" | grep -qx 'app/build.gradle'; then
             gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
               --paginate --jq '.[] | select(.filename=="app/build.gradle") | .patch' \
@@ -280,7 +280,7 @@ jobs:
         if: steps.validate.outputs.need == '1'
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-35" "cmake;3.22.1"
+          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37" "cmake;3.22.1"
 
       - name: Initialize ccache
         if: steps.validate.outputs.need == '1'
@@ -422,7 +422,7 @@ jobs:
       - name: Install NDK ${{ env.NDK_VERSION }}
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-35" "cmake;3.22.1"
+          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37" "cmake;3.22.1"
           "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" --version \
             || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
 
@@ -646,7 +646,7 @@ jobs:
       - name: Install NDK ${{ env.NDK_VERSION }}
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-35" "cmake;3.22.1"
+          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37" "cmake;3.22.1"
 
       - name: Restore OCCT
         if: needs.changes.outputs.native == 'true'

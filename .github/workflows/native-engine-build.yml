@@ -442,7 +442,6 @@ jobs:
           cache: gradle
 
       - name: Set up Android SDK / NDK
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         uses: android-actions/setup-android@v4
 
       - name: Install NDK ${{ env.NDK_VERSION }}

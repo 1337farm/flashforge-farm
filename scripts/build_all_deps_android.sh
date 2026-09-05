@@ -244,7 +244,10 @@ build_gmp_mpfr() {
 
     # Fail fast on a broken toolchain (flaky CI runners have shipped dead NDK
     # installs); without this, autotools dies cryptically mid-configure.
-    "$CC" --version >/dev/null 2>&1 || { echo "--- [GMP/MPFR] ERROR: compiler $CC not working ---" >&2; return 1; }
+    # NOTE: $CC intentionally unquoted — it is "ccache <path>" (two words).
+    command -v ccache >/dev/null 2>&1 || { echo "--- [GMP/MPFR] ERROR: ccache not installed ---" >&2; return 1; }
+    # shellcheck disable=SC2086
+    $CC --version >/dev/null 2>&1 || { echo "--- [GMP/MPFR] ERROR: compiler $CC not working ---" >&2; return 1; }
 
     # --- GMP -----------------------------------------------------------------
     # Hermetic source: tarballs are vendored in engine/vendor/ (sha256-pinned

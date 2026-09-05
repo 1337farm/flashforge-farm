@@ -109,25 +109,29 @@ android {
     buildFeatures {
         buildConfig true
     }
-
-    applicationVariants.all { variant ->
-        variant.outputs.all {
-            outputFileName = "FlashForgeFarm_${variant.buildType.name}_" + commit + ".apk"
-        }
-        tasks.named("assemble${variant.name.capitalize()}") { finalizedBy copyApkToDownloads }
-    }
 }
+
+// NOTE: AGP 9 removed the applicationVariants DSL (MissingPropertyException).
+// APK naming + downloads copy now live in the plain copyApkToDownloads task
+// below (stable Gradle task names only), wired via finalizedBy.
 
 def copyApkToDownloads = tasks.register('copyApkToDownloads') {
     def downloadsRoot = file(System.getenv('HOME') + '/storage/downloads')
     def downloadsDir = file(downloadsRoot.path + '/FlashForgeFarm-Debug-APK')
     def requiredSo = ['libslic3r.so', 'libfarm.so', 'libc++_shared.so', 'libgmp.so', 'libgmpxx.so', 'libmpfr.so']
     doLast {
+        def outDir = file("$buildDir/outputs/apk/debug")
+        fileTree(outDir) { include 'app-*.apk' }.files.each { f ->
+            def target = new File(outDir, "FlashForgeFarm_debug_" + commit + ".apk")
+            if (!f.canonicalPath.equals(target.canonicalPath)) {
+                f.renameTo(target)
+            }
+        }
         if (!downloadsRoot.isDirectory()) {
             logger.warn("Downloads root not found at ${downloadsRoot}; skipping APK copy (run termux-setup-storage)")
             return
         }
-        def apks = fileTree("$buildDir/outputs/apk/debug") { include '*.apk' }.files
+        def apks = fileTree(outDir) { include 'FlashForgeFarm_*.apk' }.files
         if (apks.isEmpty()) {
             logger.warn("No APK found in ${buildDir}/outputs/apk/debug")
             return
@@ -153,6 +157,8 @@ def copyApkToDownloads = tasks.register('copyApkToDownloads') {
         }
     }
 }
+tasks.named('assembleDebug') { finalizedBy copyApkToDownloads }
+tasks.named('assembleRelease') { finalizedBy copyApkToDownloads }
 
 static String getGitCommitHash(File dir) {
     try {

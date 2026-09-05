@@ -47,12 +47,28 @@ android {
             // Native .so files live under the top-level engine/ folder,
             // cleanly separated from the Android app:
             //   engine/output/<ABI>/libslic3r.so      (engine build output)
-            //   engine/src/main/occt/jniLibs/<ABI>/    (OCCT shared libs)
+            //   engine/output/occt-libs/<ABI>/        (linked OCCT toolkits only;
+            //                                          see scripts/package-occt-runtime.sh)
             //   engine/src/main/jniLibs/<ABI>/         (GMP/MPFR shared libs)
             jniLibs.srcDirs += [
                 file('../engine/output'),
-                file('../engine/src/main/occt/jniLibs'),
+                file('../engine/output/occt-libs'),
                 file('../engine/src/main/jniLibs'),
+            ]
+        }
+    }
+
+    packaging {
+        resources {
+            // The iroh artifact bundles desktop natives for JVM use; they
+            // must never ship in the APK (31MB+ of dead weight).
+            excludes += [
+                'win32-*/**',
+                'darwin-*/**',
+                'linux-*/**',
+                '**/*.dll',
+                '**/*.dylib',
+                'DebugProbesKt.bin',
             ]
         }
     }

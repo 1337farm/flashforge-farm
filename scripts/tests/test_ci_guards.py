@@ -56,6 +56,23 @@ def main():
         if ctx not in names.values():
             failures.append(f"required check {ctx!r} matches no job name")
 
+    # OCCT runtime set drift guard: the APK-packaged toolkits (ensure-apk.sh
+    # assertion) must equal the engine's linked OCCT_LIBS — the packager
+    # stages exactly that closure (verified against libslic3r.so DT_NEEDED).
+    cmake = (REPO / "engine/CMakeLists.txt").read_text()
+    m = re.search(r"set\(OCCT_LIBS\s+([^\)]+)\)", cmake, re.S)
+    libs = set(m.group(1).split()) if m else set()
+    sh = (REPO / "scripts/ensure-apk.sh").read_text()
+    m2 = re.search(r'^OCCT_SO="([^"]+)"', sh, re.M)
+    asserted = set(m2.group(1).split()) if m2 else set()
+    print(f"occt libs: cmake={len(libs)} asserted={len(asserted)}")
+    if not libs:
+        failures.append("could not parse OCCT_LIBS from engine/CMakeLists.txt")
+    elif libs != asserted:
+        failures.append(
+            f"OCCT set drift: cmake-only={sorted(libs - asserted)} "
+            f"assert-only={sorted(asserted - libs)}")
+
     if failures:
         print("CI GUARD FAILURES:")
         for f in failures:

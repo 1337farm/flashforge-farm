@@ -91,6 +91,10 @@ if [ "$FORCE_SOURCE" -eq 0 ] && command -v gh >/dev/null 2>&1; then
   if { [ "$MODE" = "--deps-only" ] && [ "$DEPS_OK" = "1" ]; } \
      || { [ "$MODE" = "--engine" ] && [ "$ENGINE_OK" = "1" ]; } \
      || { [ "$MODE" = "all" ] && [ "$DEPS_OK" = "1" ] && [ "$ENGINE_OK" = "1" ]; }; then
+    if [ "$MODE" != "--engine" ] && [ -d engine/src/main/occt/jniLibs/"$ABI" ]; then
+      chmod +x scripts/package-occt-runtime.sh
+      scripts/package-occt-runtime.sh || echo "[fetch] WARNING: OCCT packaging failed" >&2
+    fi
     echo "[fetch] done (from releases)."
     exit 0
   fi
@@ -134,4 +138,7 @@ SO="$(find engine/build -name 'libslic3r.so' 2>/dev/null | head -1)"
 [ -n "$SO" ] || { echo "[fetch] ERROR: libslic3r.so not built" >&2; exit 1; }
 mkdir -p "engine/output/$ABI"
 cp "$SO" "engine/output/$ABI/libslic3r.so"
+chmod +x scripts/strip-so.sh scripts/package-occt-runtime.sh
+scripts/strip-so.sh "engine/output/$ABI/libslic3r.so" >/dev/null
+scripts/package-occt-runtime.sh
 echo "[fetch] done. libslic3r.so at engine/output/$ABI/libslic3r.so"

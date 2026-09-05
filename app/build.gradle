@@ -9,9 +9,11 @@ plugins {
 
 def commit = getGitCommitHash(file('.'))
 // The native libslic3r.so is ALWAYS built from source (see the CI workflow).
-// This switch only skips a redundant recompile when `package-apk` repackages a
-// .so already produced by the build-engine job. It must never point at a
-// vendored prebuilt binary.
+// skipNativeRebuild is for LOCAL incremental builds only: it skips
+// recompiling the thin libfarm.so JNI bridge when intermediates already exist
+// in app/build. It must never be used on a fresh checkout (e.g. CI runners),
+// where skipping produces an APK without libfarm.so / libc++_shared.so.
+// CI package-apk always runs a full assemble so the bridge is compiled.
 def skipNativeRebuild = project.findProperty('skipNativeRebuild') == 'true'
 
 android {

@@ -4,8 +4,14 @@ name: automerge
 # checks pass, the PR merges itself. Draft PRs are skipped (API rejects them).
 # The repo allows squash merges only, so the method is fixed regardless.
 # This job is auxiliary by design: it runs first and fast, and warnings never
-# fail the run — the native checks are the real signal. If enabling fails
-# (e.g. repo Actions policy), it logs a warning and succeeds.
+# fail the run — the native checks are the real signal.
+#
+# AUTH: the stock GITHUB_TOKEN is rejected by the enablePullRequestAutoMerge
+# mutation under this repo's Actions policy ("Resource not accessible by
+# integration"). Provide a user PAT as the MERGE_PAT secret (classic PAT with
+# repo scope, or fine-grained with contents:write + pull-requests:write on
+# this repo) and the job uses it; otherwise it falls back to GITHUB_TOKEN
+# and logs a warning on failure.
 
 on:
   pull_request_target:
@@ -23,13 +29,20 @@ jobs:
       - name: Enable squash auto-merge
         env:
           GH_TOKEN: ${{ github.token }}
+          MERGE_PAT: ${{ secrets.MERGE_PAT }}
         run: |
           PR="${{ github.event.pull_request.number }}"
+          # Prefer the user PAT (integration tokens are rejected by the
+          # enablePullRequestAutoMerge mutation under this repo's policy).
+          TOKEN="${MERGE_PAT:-$GH_TOKEN}"
+          if [ -z "$MERGE_PAT" ]; then
+            echo "NOTE: MERGE_PAT secret not set; trying GITHUB_TOKEN (may be rejected by repo policy)"
+          fi
           # NOTE: gh prints empty (not "null") when auto-merge is off, so test
           # for emptiness rather than the string "null".
-          if [ -z "$(gh pr view "$PR" --repo "${{ github.repository }}" --json autoMergeRequest --jq '.autoMergeRequest' 2>/dev/null)" ]; then
-            gh pr merge "$PR" --repo "${{ github.repository }}" --auto --squash 2>&1 \
-              || echo "WARNING: could not enable auto-merge on #$PR (check repo Actions policy); native checks still gate merging"
+          if [ -z "$(GH_TOKEN="$TOKEN" gh pr view "$PR" --repo "${{ github.repository }}" --json autoMergeRequest --jq '.autoMergeRequest' 2>/dev/null)" ]; then
+            GH_TOKEN="$TOKEN" gh pr merge "$PR" --repo "${{ github.repository }}" --auto --squash 2>&1 \
+              || echo "WARNING: could not enable auto-merge on #$PR (set MERGE_PAT secret or check repo Actions policy); native checks still gate merging"
           else
             echo "auto-merge already enabled on #$PR"
           fi

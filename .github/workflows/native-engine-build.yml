@@ -280,7 +280,9 @@ jobs:
         if: steps.validate.outputs.need == '1'
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37" "cmake;3.22.1"
+          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37.0" "cmake;3.22.1"
+          # API 37 ships as android-37.0 only; builds resolve android-37.
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
 
       - name: Initialize ccache
         if: steps.validate.outputs.need == '1'
@@ -422,7 +424,9 @@ jobs:
       - name: Install NDK ${{ env.NDK_VERSION }}
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37" "cmake;3.22.1"
+          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37.0" "cmake;3.22.1"
+          # API 37 ships as android-37.0 only; builds resolve android-37.
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
           "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" --version \
             || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
 
@@ -646,7 +650,9 @@ jobs:
       - name: Install NDK ${{ env.NDK_VERSION }}
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37" "cmake;3.22.1"
+          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37.0" "cmake;3.22.1"
+          # API 37 ships as android-37.0 only; builds resolve android-37.
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
 
       - name: Restore OCCT
         if: needs.changes.outputs.native == 'true'

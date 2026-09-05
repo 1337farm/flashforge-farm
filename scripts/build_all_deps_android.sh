@@ -75,6 +75,8 @@ build_tbb() {
       -DANDROID_STL=c++_shared \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=$(pwd)/dist \
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
       -DTBB_BUILD_TESTS=Off \
       -DTBB_BUILD_SHARED=Off \
       -DTBB_BUILD_STATIC=On \
@@ -143,6 +145,8 @@ build_occt() {
       -DANDROID_NATIVE_API_LEVEL=$API_LEVEL \
       -DANDROID_STL=c++_shared \
       -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
       -DBUILD_LIBRARY_TYPE=Shared \
       -DUSE_FREETYPE=OFF \
       -DBUILD_MODULE_Draw=OFF \
@@ -228,8 +232,8 @@ build_gmp_mpfr() {
     rm -rf "$STAGE"
     mkdir -p "$STAGE"
 
-    export CC="$TOOLBIN/$HOST_PREFIX-clang"
-    export CXX="$TOOLBIN/$HOST_PREFIX-clang++"
+    export CC="ccache $TOOLBIN/$HOST_PREFIX-clang"
+    export CXX="ccache $TOOLBIN/$HOST_PREFIX-clang++"
     export AR="$TOOLBIN/llvm-ar"
     export RANLIB="$TOOLBIN/llvm-ranlib"
     export NM="$TOOLBIN/llvm-nm"

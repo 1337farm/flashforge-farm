@@ -445,6 +445,13 @@ jobs:
           restore-keys: |
             engine-ccache-${{ runner.os }}-
 
+      - name: Initialize ccache
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        run: |
+          ccache -M 6G
+          ccache -z
+          ccache --version | head -1
+
       - name: Restore Boost
         if: steps.engine-cache.outputs.cache-hit != 'true'
         uses: actions/cache/restore@v5
@@ -560,6 +567,8 @@ jobs:
             -DANDROID_STL=c++_shared \
             -DANDROID_PLATFORM=android-21 \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             "-DSLIC3R_VERSION=\"0.4.6\"" \
             "-DSLIC3R_BUILD_ID=\"4\""
           cmake --build engine/build --target slic3r -j"$(nproc)"

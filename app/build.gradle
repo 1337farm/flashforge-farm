@@ -1,6 +1,10 @@
 plugins {
     id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
+    // NOTE: no explicit Kotlin plugin. AGP 9 enables built-in Kotlin, which
+    // pre-registers the 'kotlin' extension; applying kotlin-android as well
+    // fails with "Cannot add extension with name 'kotlin'". The KGP version
+    // stays pinned via the root buildscript classpath (AGP auto-upgrades it
+    // to its required minimum). Kotlin sources live under src/main/kotlin.
 }
 
 def commit = getGitCommitHash(file('.'))
@@ -12,11 +16,11 @@ def skipNativeRebuild = project.findProperty('skipNativeRebuild') == 'true'
 
 android {
     namespace 'com.flashforge.farm'
-    compileSdk 35
+    compileSdk 37
 
     defaultConfig {
         applicationId "com.flashforge.farm"
-        minSdk 21
+        minSdk 23
         targetSdk 35
         versionCode 4
         versionName "0.4.6"
@@ -30,7 +34,7 @@ android {
         if (!skipNativeRebuild) {
             externalNativeBuild {
                 cmake {
-                    arguments '-DANDROID_STL=c++_shared', '-DANDROID_PLATFORM=21',
+                    arguments '-DANDROID_STL=c++_shared', '-DANDROID_PLATFORM=23',
                             '-DCMAKE_BUILD_TYPE=Release', // Disabling this results in drastically degradation of slicing times on debug builds
                             "-DSLIC3R_VERSION=\"${defaultConfig.versionName}\"",
                             "-DSLIC3R_BUILD_ID=\"${defaultConfig.versionCode}\""
@@ -105,25 +109,29 @@ android {
     buildFeatures {
         buildConfig true
     }
-
-    applicationVariants.all { variant ->
-        variant.outputs.all {
-            outputFileName = "FlashForgeFarm_${variant.buildType.name}_" + commit + ".apk"
-        }
-        tasks.named("assemble${variant.name.capitalize()}") { finalizedBy copyApkToDownloads }
-    }
 }
+
+// NOTE: AGP 9 removed the applicationVariants DSL (MissingPropertyException).
+// APK naming + downloads copy now live in the plain copyApkToDownloads task
+// below (stable Gradle task names only), wired via finalizedBy.
 
 def copyApkToDownloads = tasks.register('copyApkToDownloads') {
     def downloadsRoot = file(System.getenv('HOME') + '/storage/downloads')
     def downloadsDir = file(downloadsRoot.path + '/FlashForgeFarm-Debug-APK')
     def requiredSo = ['libslic3r.so', 'libfarm.so', 'libc++_shared.so', 'libgmp.so', 'libgmpxx.so', 'libmpfr.so']
     doLast {
+        def outDir = file("$buildDir/outputs/apk/debug")
+        fileTree(outDir) { include 'app-*.apk' }.files.each { f ->
+            def target = new File(outDir, "FlashForgeFarm_debug_" + commit + ".apk")
+            if (!f.canonicalPath.equals(target.canonicalPath)) {
+                f.renameTo(target)
+            }
+        }
         if (!downloadsRoot.isDirectory()) {
             logger.warn("Downloads root not found at ${downloadsRoot}; skipping APK copy (run termux-setup-storage)")
             return
         }
-        def apks = fileTree("$buildDir/outputs/apk/debug") { include '*.apk' }.files
+        def apks = fileTree(outDir) { include 'FlashForgeFarm_*.apk' }.files
         if (apks.isEmpty()) {
             logger.warn("No APK found in ${buildDir}/outputs/apk/debug")
             return
@@ -148,6 +156,12 @@ def copyApkToDownloads = tasks.register('copyApkToDownloads') {
             println "Copied ${apk.name} -> ${downloadsDir}"
         }
     }
+}
+// Assemble tasks are registered lazily by AGP (after project evaluation),
+// so the wiring must live in afterEvaluate, not at configuration time.
+afterEvaluate {
+    tasks.named('assembleDebug') { finalizedBy copyApkToDownloads }
+    tasks.named('assembleRelease') { finalizedBy copyApkToDownloads }
 }
 
 static String getGitCommitHash(File dir) {

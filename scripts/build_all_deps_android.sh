@@ -14,7 +14,7 @@ export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/home/cody/android-sdk}"
 export ANDROID_NDK_ROOT="${ANDROID_NDK_ROOT:-$ANDROID_SDK_ROOT/ndk/23.1.7779620}"
 export CMAKE_BIN="${CMAKE_BIN:-cmake}"
 export ABI="${ABI:-arm64-v8a}"
-export API_LEVEL="${API_LEVEL:-21}"
+export API_LEVEL="${API_LEVEL:-23}"
 export N_CORES="${N_CORES:-$(nproc)}"
 
 JNI_IMPORTS_DIR="$(pwd)/engine/src/main/jniImports"
@@ -75,6 +75,8 @@ build_tbb() {
       -DANDROID_STL=c++_shared \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=$(pwd)/dist \
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
       -DTBB_BUILD_TESTS=Off \
       -DTBB_BUILD_SHARED=Off \
       -DTBB_BUILD_STATIC=On \
@@ -143,6 +145,8 @@ build_occt() {
       -DANDROID_NATIVE_API_LEVEL=$API_LEVEL \
       -DANDROID_STL=c++_shared \
       -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
       -DBUILD_LIBRARY_TYPE=Shared \
       -DUSE_FREETYPE=OFF \
       -DBUILD_MODULE_Draw=OFF \
@@ -228,8 +232,8 @@ build_gmp_mpfr() {
     rm -rf "$STAGE"
     mkdir -p "$STAGE"
 
-    export CC="$TOOLBIN/$HOST_PREFIX-clang"
-    export CXX="$TOOLBIN/$HOST_PREFIX-clang++"
+    export CC="ccache $TOOLBIN/$HOST_PREFIX-clang"
+    export CXX="ccache $TOOLBIN/$HOST_PREFIX-clang++"
     export AR="$TOOLBIN/llvm-ar"
     export RANLIB="$TOOLBIN/llvm-ranlib"
     export NM="$TOOLBIN/llvm-nm"
@@ -240,7 +244,10 @@ build_gmp_mpfr() {
 
     # Fail fast on a broken toolchain (flaky CI runners have shipped dead NDK
     # installs); without this, autotools dies cryptically mid-configure.
-    "$CC" --version >/dev/null 2>&1 || { echo "--- [GMP/MPFR] ERROR: compiler $CC not working ---" >&2; return 1; }
+    # NOTE: $CC intentionally unquoted — it is "ccache <path>" (two words).
+    command -v ccache >/dev/null 2>&1 || { echo "--- [GMP/MPFR] ERROR: ccache not installed ---" >&2; return 1; }
+    # shellcheck disable=SC2086
+    $CC --version >/dev/null 2>&1 || { echo "--- [GMP/MPFR] ERROR: compiler $CC not working ---" >&2; return 1; }
 
     # --- GMP -----------------------------------------------------------------
     # Hermetic source: tarballs are vendored in engine/vendor/ (sha256-pinned

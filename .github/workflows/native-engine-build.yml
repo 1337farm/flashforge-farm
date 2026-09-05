@@ -95,29 +95,31 @@ jobs:
     name: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      pull-requests: read
     outputs:
       native: ${{ steps.filter.outputs.native }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
       - name: Detect native-affecting changes
         id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             echo "native=true (non-PR: always full build)" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          BASE="origin/${{ github.base_ref }}"
-          git fetch origin "${{ github.base_ref }}" --depth=100 2>/dev/null || true
-          FILES="$(git diff --name-only "$BASE"...HEAD)"
+          # File list via API: immune to shallow-checkout merge-base issues.
+          # No checkout needed at all.
+          FILES="$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --paginate --jq '.[].filename')"
           echo "changed files:"; echo "$FILES"
           NATIVE=0
-          echo "$FILES" | grep -qE '^(engine/|app/src/main/jni/|app/CMakeLists.txt|scripts/build_|scripts/fetch-native-deps|scripts/ensure-apk|.github/workflows/native-engine-build.yml)' && NATIVE=1
+          echo "$FILES" | grep -qE '^(engine/|app/src/main/jni/|app/CMakeLists.txt|build.gradle|scripts/build_|scripts/fetch-native-deps|scripts/ensure-apk|.github/workflows/native-engine-build.yml)' && NATIVE=1
           if echo "$FILES" | grep -qx 'app/build.gradle'; then
-            git diff "$BASE"...HEAD -- app/build.gradle | grep -E '^\+' \
+            gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+              --paginate --jq '.[] | select(.filename=="app/build.gradle") | .patch' \
+              | grep -E '^\+' \
               | grep -qE 'externalNativeBuild|ndkVersion|cmake|jniLibs|abiFilters|ANDROID_STL|ANDROID_PLATFORM|ANDROID_ABI' && NATIVE=1
           fi
           if [ "$NATIVE" = "1" ]; then echo "native=true (native inputs changed)"; echo "native=true" >> "$GITHUB_OUTPUT"
@@ -148,7 +150,7 @@ jobs:
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/23.1.7779620
       ABI: arm64-v8a
-      API_LEVEL: "21"
+      API_LEVEL: "23"
     steps:
       - name: Resolve ${{ matrix.name }} version
         id: sha
@@ -278,7 +280,9 @@ jobs:
         if: steps.validate.outputs.need == '1'
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-35" "cmake;3.22.1"
+          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37.0" "cmake;3.22.1"
+          # API 37 ships as android-37.0 only; builds resolve android-37.
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
 
       - name: Initialize ccache
         if: steps.validate.outputs.need == '1'
@@ -420,8 +424,10 @@ jobs:
       - name: Install NDK ${{ env.NDK_VERSION }}
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-35" "cmake;3.22.1"
-          "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" --version \
+          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37.0" "cmake;3.22.1"
+          # API 37 ships as android-37.0 only; builds resolve android-37.
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+          "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android23-clang" --version \
             || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
 
       - name: Install ccache
@@ -438,6 +444,13 @@ jobs:
           key: engine-ccache-${{ runner.os }}-${{ steps.engine-key.outputs.key }}
           restore-keys: |
             engine-ccache-${{ runner.os }}-
+
+      - name: Initialize ccache
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        run: |
+          ccache -M 6G
+          ccache -z
+          ccache --version | head -1
 
       - name: Restore Boost
         if: steps.engine-cache.outputs.cache-hit != 'true'
@@ -552,8 +565,10 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_STL=c++_shared \
-            -DANDROID_PLATFORM=android-21 \
+            -DANDROID_PLATFORM=android-23 \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             "-DSLIC3R_VERSION=\"0.4.6\"" \
             "-DSLIC3R_BUILD_ID=\"4\""
           cmake --build engine/build --target slic3r -j"$(nproc)"
@@ -644,7 +659,9 @@ jobs:
       - name: Install NDK ${{ env.NDK_VERSION }}
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-35" "cmake;3.22.1"
+          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37.0" "cmake;3.22.1"
+          # API 37 ships as android-37.0 only; builds resolve android-37.
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
 
       - name: Restore OCCT
         if: needs.changes.outputs.native == 'true'

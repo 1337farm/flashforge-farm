@@ -834,3 +834,19 @@ jobs:
           gh release create farm-apk-latest "$OUT/$APK_NAME" "$OUT/apk-manifest.json" --repo "${{ github.repository }}" \
             --title "FlashForge Farm APK (latest)" \
             --notes "Rolling sideloadable debug APK built from source. Re-published on every green build."
+
+  automerge:
+    name: merge
+    runs-on: ubuntu-24.04
+    needs: [package-apk]
+    timeout-minutes: 10
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - name: Merge PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr merge "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --squash --delete-branch

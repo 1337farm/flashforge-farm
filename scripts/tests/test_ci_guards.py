@@ -57,11 +57,12 @@ def main():
             failures.append(f"required check {ctx!r} matches no job name")
 
     # OCCT runtime set drift guard: the APK-packaged toolkits (ensure-apk.sh
-    # assertion) must equal the engine's linked OCCT_LIBS — the packager
-    # stages exactly that closure (verified against libslic3r.so DT_NEEDED).
+    # assertion) must equal the engine's linked OCCT_LIBS plus the transitive
+    # closure (TKDE, TKVCAF — DT_NEEDED by linked toolkits, proven by a launch
+    # crash when omitted).
     cmake = (REPO / "engine/CMakeLists.txt").read_text()
     m = re.search(r"set\(OCCT_LIBS\s+([^\)]+)\)", cmake, re.S)
-    libs = set(m.group(1).split()) if m else set()
+    libs = set(m.group(1).split()) | {"TKDE", "TKVCAF"} if m else set()
     sh = (REPO / "scripts/ensure-apk.sh").read_text()
     m2 = re.search(r'^OCCT_SO="([^"]+)"', sh, re.M)
     asserted = set(m2.group(1).split()) if m2 else set()

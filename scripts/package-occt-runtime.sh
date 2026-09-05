@@ -2,9 +2,10 @@
 # scripts/package-occt-runtime.sh — stage ONLY the OCCT toolkits the engine
 # actually loads, stripped, into engine/output/occt-libs/<ABI>/ for APK
 # packaging. The full OCCT build produces ~50 shared libs (~64MB); the
-# engine's DT_NEEDED closure is exactly OCCT_LIBS in engine/CMakeLists.txt
-# (22 toolkits, verified against a built libslic3r.so). The rest never loads
-# and only bloats the APK. Idempotent.
+# runtime closure is OCCT_LIBS in engine/CMakeLists.txt (22, directly linked)
+# plus their transitive DT_NEEDED (TKDE, TKVCAF — 24 total, verified as the
+# fixpoint closure against staged libs). The rest never loads and only
+# bloats the APK. Idempotent.
 #
 # Usage: scripts/package-occt-runtime.sh
 # Env:   ABI (default arm64-v8a), ANDROID_NDK_ROOT (for strip)
@@ -24,8 +25,13 @@ LIBS="$(grep -oP 'set\(OCCT_LIBS \K[^)]*' engine/CMakeLists.txt | tr ' ' '\n' | 
 
 rm -rf "$DST"
 mkdir -p "$DST"
+# Transitive-only deps (not linked by the engine directly, but DT_NEEDED by
+# the toolkits above — proven by a launch crash on missing libTKDE.so):
+# TKDE (parent DataExchange package), TKVCAF (Caf visualization).
+# Verified as the full fixpoint closure via DT_NEEDED walk of staged libs.
+EXTRA="TKDE TKVCAF"
 missing=0
-for name in $LIBS; do
+for name in $LIBS $EXTRA; do
     if [ -f "$SRC/lib${name}.so" ]; then
         cp "$SRC/lib${name}.so" "$DST/"
     else

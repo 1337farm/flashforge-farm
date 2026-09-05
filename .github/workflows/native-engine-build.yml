@@ -623,6 +623,8 @@ jobs:
             || { echo "ERROR: libslic3r.so missing Arachne marker"; exit 1; }
           echo "libslic3r.so quality OK ($SZ bytes, gmp/mpfr linked, engine markers present)"
           cp "$SO" "$OUT/libslic3r.so"
+          chmod +x scripts/strip-so.sh
+          scripts/strip-so.sh "$OUT/libslic3r.so" >/dev/null
           SHA="$(git rev-parse --short=10 HEAD)"
           DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           SUM="$(sha256sum "$OUT/libslic3r.so" | cut -d' ' -f1)"
@@ -749,6 +751,13 @@ jobs:
           mkdir -p engine/output/arm64-v8a
           find /tmp/libslic3r-artifact -name 'libslic3r.so' -exec cp {} engine/output/arm64-v8a/libslic3r.so \;
           test -f engine/output/arm64-v8a/libslic3r.so
+          chmod +x scripts/strip-so.sh
+          scripts/strip-so.sh engine/output/arm64-v8a/libslic3r.so
+
+      - name: Package OCCT runtime (linked toolkits only, stripped)
+        run: |
+          chmod +x scripts/package-occt-runtime.sh
+          scripts/package-occt-runtime.sh
 
       - name: Grant execute permission
         run: chmod +x gradlew

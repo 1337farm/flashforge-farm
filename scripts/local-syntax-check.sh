@@ -46,7 +46,7 @@ if [ -n "${EXTRA_INC:-}" ]; then
   for i in "${E[@]}"; do INC+=(-I"$i"); done
 fi
 
-COMMON=(--target=aarch64-none-linux-android21 "--sysroot=$SYSROOT" -stdlib=libc++ -std=gnu++17 -fPIC -fsyntax-only "${INC[@]}")
+COMMON=(--target=aarch64-none-linux-android23 "--sysroot=$SYSROOT" -stdlib=libc++ -std=gnu++17 -fPIC -fsyntax-only "${INC[@]}")
 
 if [ "$#" -gt 0 ]; then
   SOURCES=("$@")

@@ -19,7 +19,7 @@
 #   ANDROID_NDK_ROOT  NDK root (required; falls back to $ANDROID_SDK_ROOT/ndk/23.1.7779620)
 #   ANDROID_SDK_ROOT  SDK root (default ~/android-sdk)
 #   ABI               target ABI (default arm64-v8a)
-#   API_LEVEL         Android target version (default 21)
+#   API_LEVEL         Android target version (default 23)
 #   N_CORES           parallelism (default nproc)
 #   BOOST_ALL_LIBS    1 (default) for full build, 0 to restrict to BOOST_LIBS
 #   BOOST_LIBS        comma-separated --with-libraries list (only used when BOOST_ALL_LIBS=0)
@@ -42,7 +42,7 @@ if [ ! -d "$NDK" ]; then
     exit 1
 fi
 ABI="${ABI:-arm64-v8a}"
-API_LEVEL="${API_LEVEL:-21}"
+API_LEVEL="${API_LEVEL:-23}"
 N_CORES="${N_CORES:-$(nproc)}"
 WRAP_HOST_TOOLS="${WRAP_HOST_TOOLS:-none}"
 WORK_DIR="${WORK_DIR:-/tmp/build_android_deps}"

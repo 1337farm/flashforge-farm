@@ -124,7 +124,7 @@ cmake -S engine -B engine/build \
   -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI="$ABI" \
   -DANDROID_STL=c++_shared \
-  -DANDROID_PLATFORM=android-21 \
+  -DANDROID_PLATFORM=android-23 \
   -DCMAKE_BUILD_TYPE=Release \
   "-DSLIC3R_VERSION=\"0.4.6\"" \
   "-DSLIC3R_BUILD_ID=\"4\""

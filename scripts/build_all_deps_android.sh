@@ -14,7 +14,7 @@ export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/home/cody/android-sdk}"
 export ANDROID_NDK_ROOT="${ANDROID_NDK_ROOT:-$ANDROID_SDK_ROOT/ndk/23.1.7779620}"
 export CMAKE_BIN="${CMAKE_BIN:-cmake}"
 export ABI="${ABI:-arm64-v8a}"
-export API_LEVEL="${API_LEVEL:-21}"
+export API_LEVEL="${API_LEVEL:-23}"
 export N_CORES="${N_CORES:-$(nproc)}"
 
 JNI_IMPORTS_DIR="$(pwd)/engine/src/main/jniImports"

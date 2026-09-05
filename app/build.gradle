@@ -20,7 +20,7 @@ android {
 
     defaultConfig {
         applicationId "com.flashforge.farm"
-        minSdk 21
+        minSdk 23
         targetSdk 35
         versionCode 4
         versionName "0.4.6"
@@ -34,7 +34,7 @@ android {
         if (!skipNativeRebuild) {
             externalNativeBuild {
                 cmake {
-                    arguments '-DANDROID_STL=c++_shared', '-DANDROID_PLATFORM=21',
+                    arguments '-DANDROID_STL=c++_shared', '-DANDROID_PLATFORM=23',
                             '-DCMAKE_BUILD_TYPE=Release', // Disabling this results in drastically degradation of slicing times on debug builds
                             "-DSLIC3R_VERSION=\"${defaultConfig.versionName}\"",
                             "-DSLIC3R_BUILD_ID=\"${defaultConfig.versionCode}\""

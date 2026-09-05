@@ -353,7 +353,7 @@ jobs:
           key: ${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}-${{ steps.sha.outputs.scripts }}
 
       - name: Publish ${{ matrix.name }} release
-        if: (steps.validate.outputs.reused == '1' && steps.rel.outputs.rel_hit != '1' || steps.verify-built.outputs.verified == '1') && (github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
+        if: (steps.validate.outputs.reused == '1' && steps.rel.outputs.rel_hit != '1' || steps.verify-built.outputs.verified == '1') && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -409,8 +409,32 @@ jobs:
           path: /tmp/engine-output
           key: ${{ runner.os }}-${{ steps.engine-key.outputs.key }}
 
+      - name: Restore engine from release (published build reuse)
+        id: engine-rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          HIT=0
+          DL="$RUNNER_TEMP/rel-engine"; mkdir -p "$DL"
+          if gh release download engine-latest --pattern 'libslic3r.so' --pattern 'engine-manifest.json' \
+               --dir "$DL" --clobber >/dev/null 2>&1; then
+            WANT="$(python3 -c "import json;print(json.load(open('$DL/engine-manifest.json'))['files']['libslic3r.so'])" 2>/dev/null || true)"
+            GOT="$(sha256sum "$DL/libslic3r.so" 2>/dev/null | cut -d' ' -f1)"
+            if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
+              mkdir -p /tmp/engine-output
+              cp "$DL/libslic3r.so" /tmp/engine-output/libslic3r.so
+              HIT=1
+              echo "engine release verified and staged (already published, no republish)"
+            else
+              echo "engine release sha mismatch; ignoring"
+            fi
+          else
+            echo "no usable engine-latest release; continuing"
+          fi
+          echo "hit=$HIT" >> "$GITHUB_OUTPUT"
+
       - name: Set up JDK 17
-        if: steps.engine-cache.outputs.cache-hit != 'true'
+        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         uses: actions/setup-java@v5
         with:
           java-version: '17'
@@ -418,7 +442,7 @@ jobs:
           cache: gradle
 
       - name: Set up Android SDK / NDK
-        if: steps.engine-cache.outputs.cache-hit != 'true'
+        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         uses: android-actions/setup-android@v4
 
       - name: Install NDK ${{ env.NDK_VERSION }}
@@ -431,13 +455,13 @@ jobs:
             || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
 
       - name: Install ccache
-        if: steps.engine-cache.outputs.cache-hit != 'true'
+        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         run: |
           sudo apt-get update
           sudo apt-get install -y ccache
 
       - name: Restore ccache
-        if: steps.engine-cache.outputs.cache-hit != 'true'
+        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         uses: actions/cache@v5
         with:
           path: ${{ env.CCACHE_DIR }}
@@ -446,14 +470,14 @@ jobs:
             engine-ccache-${{ runner.os }}-
 
       - name: Initialize ccache
-        if: steps.engine-cache.outputs.cache-hit != 'true'
+        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         run: |
           ccache -M 6G
           ccache -z
           ccache --version | head -1
 
       - name: Restore Boost
-        if: steps.engine-cache.outputs.cache-hit != 'true'
+        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         uses: actions/cache/restore@v5
         with:
           path: engine/src/main/jniImports/boost
@@ -461,7 +485,7 @@ jobs:
           fail-on-cache-miss: true
 
       - name: Restore oneTBB
-        if: steps.engine-cache.outputs.cache-hit != 'true'
+        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         uses: actions/cache/restore@v5
         with:
           path: engine/src/main/jniImports/oneTBB
@@ -469,7 +493,7 @@ jobs:
           fail-on-cache-miss: true
 
       - name: Restore OCCT
-        if: steps.engine-cache.outputs.cache-hit != 'true'
+        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         uses: actions/cache/restore@v5
         with:
           path: engine/src/main/occt
@@ -477,14 +501,14 @@ jobs:
           fail-on-cache-miss: true
 
       - name: Validate restored deps
-        if: steps.engine-cache.outputs.cache-hit != 'true'
+        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         run: |
           for d in engine/src/main/jniImports/boost engine/src/main/jniImports/oneTBB engine/src/main/occt; do
             test -n "$(ls -A "$d" 2>/dev/null)" || { echo "ERROR: missing restored deps at $d"; exit 1; }
           done
 
       - name: Test restored deps exactly (revoke poison on failure)
-        if: steps.engine-cache.outputs.cache-hit != 'true'
+        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -511,7 +535,31 @@ jobs:
           }
           echo "all restored deps pass exact-file checks"
 
+      - name: Restore GMP from release (published build reuse)
+        id: gmp-rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          HIT=0
+          DL="$RUNNER_TEMP/rel-gmp"; mkdir -p "$DL"
+          if gh release download dep-gmp-latest --pattern 'gmp-deps.tar.gz' --pattern 'gmp-manifest.json' \
+               --dir "$DL" --clobber >/dev/null 2>&1; then
+            WANT="$(python3 -c "import json;print(json.load(open('$DL/gmp-manifest.json'))['files']['gmp-deps.tar.gz'])" 2>/dev/null || true)"
+            GOT="$(sha256sum "$DL/gmp-deps.tar.gz" 2>/dev/null | cut -d' ' -f1)"
+            if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
+              tar -xzf "$DL/gmp-deps.tar.gz"
+              HIT=1
+              echo "gmp release verified and staged (already published, no republish)"
+            else
+              echo "gmp release sha mismatch; ignoring"
+            fi
+          else
+            echo "no usable dep-gmp-latest release; continuing"
+          fi
+          echo "hit=$HIT" >> "$GITHUB_OUTPUT"
+
       - name: Build GMP/MPFR fresh (uncached, ~4 min)
+        if: steps.gmp-rel.outputs.hit != '1'
         run: |
           sudo apt-get update && sudo apt-get install -y build-essential
           chmod +x scripts/build_all_deps_android.sh
@@ -526,6 +574,9 @@ jobs:
             test -f "$f" || { echo "ERROR: GMP build did not produce $f"; exit 1; }
           done
           echo "GMP/MPFR staged and verified"
+
+      - name: Package GMP trees
+        run: |
           tar -czf /tmp/gmp-deps.tar.gz engine/src/main/jniLibs engine/src/main/jniImports/gmp
           tar -tzf /tmp/gmp-deps.tar.gz | grep -q "libmpfr.so" || { echo "ERROR: tarball missing libmpfr.so"; exit 1; }
           tar -tzf /tmp/gmp-deps.tar.gz | grep -q "mpfr.h" || { echo "ERROR: tarball missing mpfr.h"; exit 1; }
@@ -539,7 +590,7 @@ jobs:
           retention-days: 7
 
       - name: Publish GMP release
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && steps.gmp-rel.outputs.hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -558,7 +609,7 @@ jobs:
             --notes "Rolling release of the GMP/MPFR native deps built from source. Re-published whenever the dep rebuilds."
 
       - name: Build native engine .so from source (standalone CMake)
-        if: steps.engine-cache.outputs.cache-hit != 'true'
+        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         run: |
           export PATH="/usr/lib/ccache:$PATH"
           cmake -S engine -B engine/build \
@@ -582,11 +633,11 @@ jobs:
           test -n "$SO" || { echo "FAILED: libslic3r.so not found"; exit 1; }
 
       - name: Show ccache stats
-        if: steps.engine-cache.outputs.cache-hit != 'true'
+        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         run: ccache -s
 
       - name: Save built libslic3r.so to cache
-        if: steps.engine-cache.outputs.cache-hit != 'true'
+        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         run: |
           mkdir -p /tmp/engine-output
           cp "${{ steps.find-so.outputs.so_artifact }}" /tmp/engine-output/libslic3r.so
@@ -599,7 +650,7 @@ jobs:
           retention-days: 7
 
       - name: Publish engine release
-        if: github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+        if: github.ref == 'refs/heads/main' && steps.engine-rel.outputs.hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -639,6 +690,10 @@ jobs:
     name: apk
     runs-on: ubuntu-24.04
     needs: [build-dep, build-engine, changes]
+    # Skipped upstream jobs (path-filtered native builds) must NOT skip this
+    # job: without this gate, GitHub skips the whole APK assembly+test stage
+    # whenever deps/engine legitimately skip. Failed upstream still blocks.
+    if: needs.changes.result == 'success' && (needs.build-dep.result == 'success' || needs.build-dep.result == 'skipped') && (needs.build-engine.result == 'success' || needs.build-engine.result == 'skipped')
     timeout-minutes: 120
     permissions:
       contents: write
@@ -814,7 +869,7 @@ jobs:
           retention-days: 7
 
       - name: Publish APK release
-        if: github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

@@ -687,6 +687,34 @@ jobs:
           tar -xzf "$DL/occt-deps.tar.gz"
           echo "OCCT restored from release"
 
+      - name: Restore Boost headers from release (bridge compile needs)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DL="$RUNNER_TEMP/rel-boost"; mkdir -p "$DL"
+          gh release download dep-boost-latest --pattern 'boost-deps.tar.gz' --pattern 'boost-manifest.json' \
+            --dir "$DL" --clobber || { echo "ERROR: no dep-boost-latest release (main must go green first)"; exit 1; }
+          WANT="$(python3 -c "import json;print(json.load(open('$DL/boost-manifest.json'))['files']['boost-deps.tar.gz'])")"
+          GOT="$(sha256sum "$DL/boost-deps.tar.gz" | cut -d' ' -f1)"
+          [ "$WANT" = "$GOT" ] || { echo "ERROR: boost release sha mismatch"; exit 1; }
+          tar -xzf "$DL/boost-deps.tar.gz"
+          test -d engine/src/main/jniImports/boost/include/boost || { echo "ERROR: boost headers missing after extract"; exit 1; }
+          echo "Boost headers restored from release"
+
+      - name: Restore oneTBB headers from release (bridge compile needs)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DL="$RUNNER_TEMP/rel-tbb"; mkdir -p "$DL"
+          gh release download dep-tbb-latest --pattern 'tbb-deps.tar.gz' --pattern 'tbb-manifest.json' \
+            --dir "$DL" --clobber || { echo "ERROR: no dep-tbb-latest release (main must go green first)"; exit 1; }
+          WANT="$(python3 -c "import json;print(json.load(open('$DL/tbb-manifest.json'))['files']['tbb-deps.tar.gz'])")"
+          GOT="$(sha256sum "$DL/tbb-deps.tar.gz" | cut -d' ' -f1)"
+          [ "$WANT" = "$GOT" ] || { echo "ERROR: tbb release sha mismatch"; exit 1; }
+          tar -xzf "$DL/tbb-deps.tar.gz"
+          test -d engine/src/main/jniImports/oneTBB/include/tbb || { echo "ERROR: tbb headers missing after extract"; exit 1; }
+          echo "oneTBB headers restored from release"
+
       - name: Download GMP trees artifact
         if: needs.changes.outputs.native == 'true'
         uses: actions/download-artifact@v6
@@ -709,6 +737,7 @@ jobs:
           echo "GMP restored from release"
 
       - name: Install GMP trees + validate
+        if: needs.changes.outputs.native == 'true'
         run: |
           tar -xzf /tmp/gmp-trees-artifact/gmp-deps.tar.gz
           for f in \

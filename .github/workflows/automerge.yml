@@ -3,6 +3,9 @@ name: automerge
 # Enables squash auto-merge on same-repo PRs (never forks): once all required
 # checks pass, the PR merges itself. Draft PRs are skipped (API rejects them).
 # The repo allows squash merges only, so the method is fixed regardless.
+# This job is auxiliary by design: it runs first and fast, and warnings never
+# fail the run — the native checks are the real signal. If enabling fails
+# (e.g. repo Actions policy), it logs a warning and succeeds.
 
 on:
   pull_request_target:
@@ -24,8 +27,10 @@ jobs:
           PR="${{ github.event.pull_request.number }}"
           # NOTE: gh prints empty (not "null") when auto-merge is off, so test
           # for emptiness rather than the string "null".
-          if [ -z "$(gh pr view "$PR" --repo "${{ github.repository }}" --json autoMergeRequest --jq '.autoMergeRequest')" ]; then
-            gh pr merge "$PR" --repo "${{ github.repository }}" --auto --squash
+          if [ -z "$(gh pr view "$PR" --repo "${{ github.repository }}" --json autoMergeRequest --jq '.autoMergeRequest' 2>/dev/null)" ]; then
+            gh pr merge "$PR" --repo "${{ github.repository }}" --auto --squash 2>&1 \
+              || echo "WARNING: could not enable auto-merge on #$PR (check repo Actions policy); native checks still gate merging"
           else
             echo "auto-merge already enabled on #$PR"
           fi
+          exit 0

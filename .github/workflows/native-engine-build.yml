@@ -774,7 +774,7 @@ jobs:
         run: ./gradlew :app:testDebugUnitTest --stacktrace
 
       - name: Assemble debug APK
-        run: ./gradlew assembleDebug -PskipNativeRebuild=true --stacktrace
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v6

@@ -626,7 +626,7 @@ jobs:
       - name: Locate built libslic3r.so
         id: find-so
         run: |
-          SO=$(find engine/build -name 'libslic3r.so' 2>/dev/null | head -1)
+          SO=$(find engine/build /tmp/engine-output -name 'libslic3r.so' 2>/dev/null | head -1)
           echo "SO_PATH=$SO"
           echo "so_artifact=$SO" >> "$GITHUB_OUTPUT"
           test -n "$SO" || { echo "FAILED: libslic3r.so not found"; exit 1; }

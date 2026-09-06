@@ -7,6 +7,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class DhtRecord {
+    // NOTE — transport gap (P3): this codec builds and verifies BEP44
+    // mutable items, but no DHT carrier exists yet. Options under evaluation:
+    // (a) minimal Mainline UDP client, (b) Iroh-internal DHT via Rust bridge.
+    // Salted per-keyword index records are additionally deferred pending
+    // interop verification of the salt-target construction against a
+    // reference client. Until then: unsalted publisher pointers only.
     private DhtRecord() {
     }
 

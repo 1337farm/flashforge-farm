@@ -76,6 +76,15 @@ android {
                 'DebugProbesKt.bin',
             ]
         }
+        jniLibs {
+            // Debug builds default to extractNativeLibs=true, which STORES
+            // native libs uncompressed: libslic3r.so sits at ~65MB and the
+            // APK at ~84MB. Compressing them (extractNativeLibs=false) lets
+            // the APK carry DEFLATE'd libs that load straight from the zip on
+            // API 23+ (minSdk 23): libslic3r.so drops ~3x (65MB -> ~22MB),
+            // taking the whole APK down to ~40MB.
+            useLegacyPackaging = false
+        }
     }
 
     signingConfigs {

@@ -1006,9 +1006,23 @@ jobs:
     permissions:
       pull-requests: write
       contents: write
+      actions: write
     steps:
       - name: Merge PR
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh pr merge "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --squash --delete-branch
+
+      - name: Dispatch main pipeline to refresh rolling releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A merge made with the default GITHUB_TOKEN does NOT trigger the
+          # push workflow on main (GitHub suppresses event re-triggering from
+          # that token), so without this dispatch the rolling releases
+          # (engine-latest / farm-apk-latest / dep-*-latest) would silently
+          # go stale on every auto-merge. Dispatch refresh deliberately:
+          # farm-apk-latest is only published when github.ref is main.
+          gh workflow run native-engine-build.yml --repo "${{ github.repository }}" --ref main
+          echo "dispatched main pipeline; rolling releases will refresh with the merged changes"

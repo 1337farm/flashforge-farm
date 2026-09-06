@@ -421,13 +421,6 @@ jobs:
           DEPKEY="${{ needs.build-dep.outputs.tbb_dep_key }}|${{ needs.build-dep.outputs.boost_dep_key }}|${{ needs.build-dep.outputs.occt_dep_key }}"
           echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','engine/src/main/jni/**','app/build.gradle','scripts/build_all_deps_android.sh') }}-ndk${{ env.NDK_VERSION }}-$ABI-$DEPKEY" >> "$GITHUB_OUTPUT"
 
-      - name: Restore built libslic3r.so
-        id: engine-cache
-        uses: actions/cache@v5
-        with:
-          path: /tmp/engine-output
-          key: ${{ runner.os }}-${{ steps.engine-key.outputs.key }}
-
       - name: Restore engine from release (published build reuse)
         id: engine-rel
         env:
@@ -469,7 +462,7 @@ jobs:
           echo "hit=$HIT" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 17
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         run: |
           curl -fsSL -o /tmp/temurin17.tar.gz "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse"
           rm -rf /tmp/jdk17 && mkdir -p /tmp/jdk17
@@ -500,13 +493,13 @@ jobs:
             || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
 
       - name: Install ccache
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         run: |
           sudo apt-get update
           sudo apt-get install -y ccache
 
       - name: Restore ccache
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         uses: actions/cache@v5
         with:
           path: ${{ env.CCACHE_DIR }}
@@ -515,14 +508,14 @@ jobs:
             engine-ccache-${{ runner.os }}-
 
       - name: Initialize ccache
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         run: |
           ccache -M 6G
           ccache -z
           ccache --version | head -1
 
       - name: Restore Boost from release (build needs)
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -536,7 +529,7 @@ jobs:
           echo "Boost restored from release"
 
       - name: Restore oneTBB from release (build needs)
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -550,7 +543,7 @@ jobs:
           echo "oneTBB restored from release"
 
       - name: Restore OCCT from release (build needs)
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -564,14 +557,14 @@ jobs:
           echo "OCCT restored from release"
 
       - name: Validate restored deps
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         run: |
           for d in engine/src/main/jniImports/boost engine/src/main/jniImports/oneTBB engine/src/main/occt; do
             test -n "$(ls -A "$d" 2>/dev/null)" || { echo "ERROR: missing restored deps at $d"; exit 1; }
           done
 
       - name: Test restored deps exactly (revoke poison on failure)
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -672,7 +665,7 @@ jobs:
             --notes "Rolling release of the GMP/MPFR native deps built from source. Re-published whenever the dep rebuilds."
 
       - name: Build native engine .so from source (standalone CMake)
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         run: |
           export PATH="/usr/lib/ccache:$PATH"
           cmake -S engine -B engine/build \
@@ -696,14 +689,8 @@ jobs:
           test -n "$SO" || { echo "FAILED: libslic3r.so not found"; exit 1; }
 
       - name: Show ccache stats
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         run: ccache -s
-
-      - name: Save built libslic3r.so to cache
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
-        run: |
-          mkdir -p /tmp/engine-output
-          cp "${{ steps.find-so.outputs.so_artifact }}" /tmp/engine-output/libslic3r.so
 
       - name: Upload libslic3r.so artifact
         uses: actions/upload-artifact@v6

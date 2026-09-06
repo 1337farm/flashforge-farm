@@ -59,7 +59,7 @@ set(OCCT_JNI_LIBS ${CMAKE_SOURCE_DIR}/src/main/occt/jniLibs)
 # Message_* -> TKService, Interface_Static -> TKXSBase). We pin OCCT to V7_9_0
 # where the DataExchange STEP toolkits were consolidated: TKSTEP/TKXDE* were
 # merged into TKDESTEP, so TKSTEP must NOT be listed here (it no longer exists).
-set(OCCT_LIBS TKDESTEP TKXCAF TKCAF TKLCAF TKCDF TKV3d TKMesh TKXMesh TKXSBase TKService TKBO TKPrim TKHLR TKShHealing TKTopAlgo TKGeomAlgo TKGeomBase TKBRep TKG3d TKG2d TKMath TKernel)
+set(OCCT_LIBS TKDESTEP TKXCAF TKVCAF TKCAF TKLCAF TKCDF TKV3d TKMesh TKXMesh TKXSBase TKService TKBO TKPrim TKHLR TKShHealing TKTopAlgo TKGeomAlgo TKGeomBase TKBRep TKG3d TKG2d TKMath TKernel)
 
 # STATIC OCCT toolkits, resolved lazily at link end (see comment above):
 # OCCT is built with -ffunction-sections/-fdata-sections (see

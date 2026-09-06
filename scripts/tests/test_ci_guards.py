@@ -68,6 +68,11 @@ def main():
     print(f"occt static link set: {len(libs)} toolkits")
     if not libs:
         failures.append("could not parse OCCT_LIBS from engine/CMakeLists.txt")
+    elif "TKVCAF" not in libs:
+        # TKVCAF provides the TPrsStd_DriverTable the XCAF/STEP OCAF stack
+        # pulls in at link time. Omitting it links a libslic3r.so with
+        # undefined TPrsStd_* symbols (static link era regression).
+        failures.append("OCCT_LIBS missing TKVCAF (TPrsStd_DriverTable undefined at static link)")
     if re.search(r"occt_\$\{NAME\} SHARED IMPORTED", cmake):
         failures.append("engine/CMakeLists.txt still imports shared libTK*.so (must be static .a)")
 

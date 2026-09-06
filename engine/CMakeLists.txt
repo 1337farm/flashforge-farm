@@ -1313,3 +1313,20 @@ target_link_libraries(slic3r PRIVATE
 # OCCT through the exported symbols of this .so). Static OCCT + gc-sections is
 # the reason the APK no longer ships 42MB of libTK*.so runtime.
 target_link_options(slic3r PRIVATE -Wl,--gc-sections)
+
+# Two-phase export shrink (see scripts/shrink-engine.sh). By default the .so
+# exports every defined symbol (~10k), so --gc-sections treats nearly the whole
+# engine + all statically-merged OCCT/Boost/TBB as reachable roots and almost
+# nothing is dropped. libfarm.so is the ONLY consumer of libslic3r.so's exports
+# (libslic3r has no JNI of its own), so the shrink re-links the SAME object
+# files with a version script that exports exactly libfarm's undefined symbol
+# set and forces everything else local. With --gc-sections, every unexported,
+# unreferenced section (OCCT/Boost/TBB/engine code the app never calls) becomes
+# dead code and is dropped at link time.
+# This is a LINK-ONLY option: the compile flags are untouched, so the re-link
+# reuses all cached objects (no full recompile).
+set(SLIC3R_EXPORT_MAP "" CACHE FILEPATH
+        "Absolute path to a linker version script for the export-shrink re-link (see scripts/shrink-engine.sh)")
+if(SLIC3R_EXPORT_MAP)
+    target_link_options(slic3r PRIVATE "-Wl,--version-script=${SLIC3R_EXPORT_MAP}")
+endif()

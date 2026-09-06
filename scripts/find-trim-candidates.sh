@@ -40,43 +40,20 @@ echo ""
 echo "--- DT_NEEDED (runtime shared libs) ---"
 readelf -d "$LIB_SO" | grep 'NEEDED' | sed 's/.*\[\(.*\)\].*/\1/'
 
-# --- 2. OCCT toolkits (shared .so in jniLibs) --------------------------------
-# A toolkit is needed if it is reachable from libslic3r.so via the DT_NEEDED
-# closure (direct *or* transitive through other OCCT toolkits).
+# --- 2. OCCT toolkits (static .a archives in jniLibs) --------------------------
+# OCCT is now statically linked into libslic3r.so with --gc-sections
+# (see engine/CMakeLists.txt), so there are no runtime libTK*.so dependencies
+# to analyze. Keeping this section enumerates the staged static archives for
+# reference; the interesting trim signal is now gc-sections, not the DT_NEEDED
+# closure.
 echo ""
-echo "--- OCCT toolkits in $JNI_LIBS ---"
-OCCT_SO=("$JNI_LIBS"/libTK*.so)
+echo "--- OCCT toolkits (static archives in $JNI_LIBS) ---"
+OCCT_SO=("$JNI_LIBS"/libTK*.a)
 if [ ${#OCCT_SO[@]} -gt 0 ] && [ -f "${OCCT_SO[0]}" ]; then
-  # Seed reachability from libslic3r.so's direct DT_NEEDED.
-  declare -A NEEDED=()
-  for n in $(readelf -d "$LIB_SO" | sed -n 's/.*NEEDED.*\[\(.*\)\].*/\1/p'); do
-    NEEDED["$n"]=1
-  done
-  # Iteratively expand through OCCT toolkits only (build the full closure).
-  changed=1
-  while [ "$changed" -eq 1 ]; do
-    changed=0
-    for so in "${OCCT_SO[@]}"; do
-      base="$(basename "$so")"
-      [ "${NEEDED[$base]:-0}" -eq 1 ] || continue
-      for dep in $(readelf -d "$so" | sed -n 's/.*NEEDED.*\[\(.*\)\].*/\1/p'); do
-        if [ "${NEEDED[$dep]:-0}" -ne 1 ]; then
-          NEEDED["$dep"]=1
-          changed=1
-        fi
-      done
-    done
-  done
-  for so in "${OCCT_SO[@]}"; do
-    base="$(basename "$so" .so)"
-    if [ "${NEEDED["$base.so"]:-0}" -eq 1 ]; then
-      echo "  NEEDED (reachable): $base"
-    else
-      echo "  NOT in DT_NEEDED closure: $base  <-- TRIM CANDIDATE"
-    fi
-  done
+  echo "  static archives present: ${#OCCT_SO[@]} (linked via --start-group/--gc-sections)"
+  du -ch "${OCCT_SO[@]}" | tail -1
 else
-  echo "  No OCCT .so files found in $JNI_LIBS"
+  echo "  No OCCT .a files found in $JNI_LIBS (run scripts/fetch-native-deps.sh first)"
 fi
 
 # --- 3. GMP/MPFR/gmpxx (shared .so in jniLibs) -------------------------------

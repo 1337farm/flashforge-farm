@@ -33,8 +33,13 @@ name: native
 #                       via artifact (not cache).
 #   3. package-apk   -> runs Android unit tests, then assembles the final
 #                       debug APK with the source-built .so
-#                       (needs only the OCCT + GMP/MPFR runtime bits: OCCT from
-#                       cache, GMP from the engine job's artifact)
+#                       (OCCT headers from cache for the app bridge compile;
+#                       GMP from the engine job's artifact). OCCT itself is
+#                       statically linked into libslic3r.so — no libTK*.so is
+#                       ever packaged or loaded.
+#   4. publish-models -> cheap job that (re)builds models.zip deterministically
+#                       and republishes the models-latest release the app
+#                       downloads on demand.
 #
 # Publishing is per-step, not gated on the full build: each dep leg publishes
 # its own rolling release (dep-<name>-latest) when it builds, build-engine
@@ -416,7 +421,10 @@ jobs:
         id: engine-key
         run: |
           DEPKEY="${{ needs.build-dep.outputs.tbb_dep_key }}|${{ needs.build-dep.outputs.boost_dep_key }}|${{ needs.build-dep.outputs.occt_dep_key }}"
-          echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','engine/src/main/jni/**','app/build.gradle','scripts/build_all_deps_android.sh') }}-ndk${{ env.NDK_VERSION }}-$ABI-$DEPKEY" >> "$GITHUB_OUTPUT"
+          # The shrunk .so's export surface = libfarm's undefined set, so the
+          # key must track the app bridge sources + the shrink script: a new
+          # JNI function invalidates a cached export set.
+          echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','engine/src/main/jni/**','app/CMakeLists.txt','app/src/main/jni/**','app/build.gradle','scripts/build_all_deps_android.sh','scripts/shrink-engine.sh') }}-ndk${{ env.NDK_VERSION }}-$ABI-$DEPKEY" >> "$GITHUB_OUTPUT"
 
       - name: Restore built libslic3r.so
         id: engine-cache
@@ -649,6 +657,20 @@ jobs:
             "-DSLIC3R_BUILD_ID=\"4\""
           cmake --build engine/build --target slic3r -j"$(nproc)"
 
+      - name: Shrink engine exports to app bridge need-set (two-phase)
+        # libslic3r.so has no JNI of its own; libfarm.so (the app bridge) is the
+        # only consumer of its ~10k exports. With --gc-sections every exported
+        # symbol is a root, so bloat the app never calls (most of the
+        # statically-merged OCCT/Boost/TBB) survives. scripts/shrink-engine.sh
+        # compiles libfarm against this default-export .so, captures its exact
+        # undefined symbol set, re-links the SAME objects with a version script
+        # exporting only that set (local:* forces the rest hidden -> gc-able),
+        # and verifies the shrunk .so in place. Link-only: no recompile.
+        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        run: |
+          chmod +x scripts/shrink-engine.sh
+          scripts/shrink-engine.sh engine/build app/build/export-capture "$ABI"
+
       - name: Locate built libslic3r.so
         id: find-so
         run: |
@@ -684,8 +706,10 @@ jobs:
           mkdir -p "$OUT"
           SO="${{ steps.find-so.outputs.so_artifact }}"
           test -f "$SO" || { echo "ERROR: no libslic3r.so to publish"; exit 1; }
-          # Quality gate: real engine .so is tens of MB, links gmp/mpfr, and
-          # carries engine markers. NOTE: farm JNI strings (SliceListener)
+          # Quality gate: real engine .so is tens of MB, links gmp/mpfr, keeps
+          # its engine marker, and is a genuine export-shrunk engine (a handful
+          # to a few thousand exports, and far fewer than the ~10k that would
+          # mean the shrink never ran). NOTE: farm JNI strings (SliceListener)
           # live in libfarm.so (app bridge), never in libslic3r.so — do not
           # assert them here. Publishes (including backfill of cache-hit
           # builds) only pass here.
@@ -695,9 +719,10 @@ jobs:
           readelf -d "$SO" | grep -q "libmpfr" || { echo "ERROR: libslic3r.so missing libmpfr NEEDED"; exit 1; }
           strings "$SO" | grep -q -F 'Orca Slicer' \
             || { echo "ERROR: libslic3r.so missing engine marker"; exit 1; }
-          strings "$SO" | grep -q -F 'Arachne' \
-            || { echo "ERROR: libslic3r.so missing Arachne marker"; exit 1; }
-          echo "libslic3r.so quality OK ($SZ bytes, gmp/mpfr linked, engine markers present)"
+          EXPORTS="$(nm -D --defined-only "$SO" | wc -l | tr -d ' ')"
+          test "$EXPORTS" -ge 50 || { echo "ERROR: libslic3r.so exports look like a stub ($EXPORTS)"; exit 1; }
+          test "$EXPORTS" -le 4000 || { echo "ERROR: libslic3r.so not export-shrunk ($EXPORTS exports)"; exit 1; }
+          echo "libslic3r.so quality OK ($SZ bytes, $EXPORTS exports, gmp/mpfr linked, engine marker present)"
           cp "$SO" "$OUT/libslic3r.so"
           chmod +x scripts/strip-so.sh
           scripts/strip-so.sh "$OUT/libslic3r.so" >/dev/null
@@ -895,9 +920,11 @@ jobs:
         run: |
           SO=engine/output/arm64-v8a/libslic3r.so
           strings "$SO" | grep -q -F 'Orca Slicer' \
-            && strings "$SO" | grep -q -F 'Arachne' \
-            && echo "OK: staged engine .so carries engine markers" \
-            || { echo "ERROR: staged engine .so failed marker check"; exit 1; }
+            && EXPORTS="$(nm -D --defined-only "$SO" | wc -l | tr -d ' ')" \
+            && test "$EXPORTS" -ge 50 \
+            && test "$EXPORTS" -le 4000 \
+            && echo "OK: staged engine .so genuine, export-shrunk ($EXPORTS exports)" \
+            || { echo "ERROR: staged engine .so failed marker/export check"; exit 1; }
 
       - name: Run Android unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace

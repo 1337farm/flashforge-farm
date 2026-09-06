@@ -92,7 +92,12 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled false
+            // R8 minify + resource shrink: the only generation shipped is
+            // arm64-v8a debug; both variants shrink so the APK is lean (no
+            // dead methods/dex, no unused resources). Keep rules in
+            // proguard-rules.pro preserve the reflection-heavy surface.
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
             buildConfigField "boolean", "IS_GOOGLE_PLAY", "false"
@@ -103,6 +108,10 @@ android {
             }
         }
         debug {
+            // The CI-published APK is a debug build: R8 keeps it small too.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             buildConfigField "boolean", "IS_GOOGLE_PLAY", "false"
             buildConfigField "String", "COMMIT", "\"" + commit + "\""
             ndk {

@@ -48,13 +48,16 @@ android {
         main {
             // Native .so files live under the top-level engine/ folder,
             // cleanly separated from the Android app:
-            //   engine/output/<ABI>/libslic3r.so      (engine build output)
-            //   engine/output/occt-libs/<ABI>/        (linked OCCT toolkits only;
-            //                                          see scripts/package-occt-runtime.sh)
+            //   engine/output/<ABI>/libslic3r.so      (engine build output; OCCT
+            //                                          is statically linked INTO
+            //                                          this .so — see the static
+            //                                          OCCT + --gc-sections work)
             //   engine/src/main/jniLibs/<ABI>/         (GMP/MPFR shared libs)
+            // There are NO libTK*.so runtime libs anymore: the OCCT toolkits
+            // (previously engine/output/occt-libs, ~42MB) are archive inputs to
+            // the engine link and never ship in the APK.
             jniLibs.srcDirs += [
                 file('../engine/output'),
-                file('../engine/output/occt-libs'),
                 file('../engine/src/main/jniLibs'),
             ]
         }

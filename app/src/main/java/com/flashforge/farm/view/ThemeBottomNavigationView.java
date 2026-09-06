@@ -42,6 +42,9 @@ public class ThemeBottomNavigationView extends BottomNavigationView implements I
 
     @Override
     public int getMaxItemCount() {
-        return 6;
+        // DelegateSlotImpl declares 7 slots (Models/ModelRepo added for p2p).
+        // Material's default cap is 5 and its hard ceiling is 6; the earlier
+        // 6 cap here caused an instant launch crash once the 7th slot landed.
+        return 7;
     }
 }

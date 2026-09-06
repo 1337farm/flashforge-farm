@@ -67,11 +67,64 @@ public class ModelSafetyTest {
     @Test
     public void testExtensionMatchesSniff() {
         assertTrue(ModelSafety.extensionMatchesSniff("stl", "stl-ascii"));
-        assertTrue(ModelSafety.extensionMatchesSniff("stl", "stl-binary?"));
+        assertTrue(ModelSafety.extensionMatchesSniff("stl", "stl-binary"));
         assertTrue(ModelSafety.extensionMatchesSniff("3mf", "zip"));
         assertTrue(ModelSafety.extensionMatchesSniff("obj", "obj"));
         assertFalse(ModelSafety.extensionMatchesSniff("stl", "zip"));
         assertFalse(ModelSafety.extensionMatchesSniff("exe", "unknown"));
+    }
+
+    @Test
+    public void testSniffBinaryStl() throws Exception {
+        java.io.File f = java.io.File.createTempFile("model", ".stl");
+        try {
+            byte[] header = new byte[84];
+            java.util.Arrays.fill(header, (byte) 0);
+            System.arraycopy("Binary STL - no solid lead".getBytes("UTF-8"), 0, header, 0, 26);
+            header[80] = 2;
+            byte[] facets = new byte[100];
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(f)) {
+                fos.write(header);
+                fos.write(facets);
+            }
+            assertEquals("stl-binary", ModelSafety.sniffKind(f));
+            assertTrue(ModelSafety.extensionMatchesSniff("stl", ModelSafety.sniffKind(f)));
+        } finally {
+            f.delete();
+        }
+    }
+
+    @Test
+    public void testSniffSolidLeadBinaryStl() throws Exception {
+        java.io.File f = java.io.File.createTempFile("model", ".stl");
+        try {
+            byte[] header = new byte[84];
+            java.util.Arrays.fill(header, (byte) 0);
+            System.arraycopy("solid sneaky-binary".getBytes("UTF-8"), 0, header, 0, 18);
+            header[80] = 5;
+            byte[] facets = new byte[50];
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(f)) {
+                fos.write(header);
+                fos.write(facets);
+            }
+            assertEquals("stl-binary", ModelSafety.sniffKind(f));
+        } finally {
+            f.delete();
+        }
+    }
+
+    @Test
+    public void testSniffAsciiStl() throws Exception {
+        java.io.File f = java.io.File.createTempFile("model", ".stl");
+        try {
+            byte[] body = "solid ascii\nendsolid\n".getBytes("UTF-8");
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(f)) {
+                fos.write(body);
+            }
+            assertEquals("stl-ascii", ModelSafety.sniffKind(f));
+        } finally {
+            f.delete();
+        }
     }
 
     @Test

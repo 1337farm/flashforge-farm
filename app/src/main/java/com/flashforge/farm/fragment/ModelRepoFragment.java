@@ -31,6 +31,8 @@ public class ModelRepoFragment extends Fragment {
     private ArrayAdapter<String> listAdapter;
     private final List<String> downloadedNames = new ArrayList<>();
     private final List<File> downloadedFiles = new ArrayList<>();
+    private String pendingTicket;
+    private String pendingPubkey;
 
     public void setTransport(ModelTransport transport) {
         this.transport = transport;
@@ -81,6 +83,12 @@ public class ModelRepoFragment extends Fragment {
 
     private void downloadTicket(final Context ctx, final String ticket) {
         setStatus(ctx.getString(R.string.ModelRepoResolving));
+        // TOFU second tap: the user confirmed this publisher after the warning.
+        if (ticket.equals(pendingTicket) && pendingPubkey != null) {
+            trust.setTrusted(pendingPubkey, true);
+            pendingTicket = null;
+            pendingPubkey = null;
+        }
         final File dir = new File(ctx.getFilesDir(), "p2p/" + sanitizeTicket(ticket));
         dir.mkdirs();
         try {
@@ -110,6 +118,12 @@ public class ModelRepoFragment extends Fragment {
                     }
                     trust.markSeen(meta.designer.pubkey);
                     if (trust.needsConfirm(level)) {
+                        try {
+                            transport.stop(t);
+                        } catch (Exception ignored) {
+                        }
+                        pendingTicket = ticket;
+                        pendingPubkey = meta.designer.pubkey;
                         setStatus(ctx.getString(R.string.ModelRepoConfirm, meta.title, meta.designer.name));
                         return;
                     }
@@ -124,6 +138,8 @@ public class ModelRepoFragment extends Fragment {
 
                 @Override
                 public void onComplete(String t, File d) {
+                    pendingTicket = null;
+                    pendingPubkey = null;
                     setStatus(ctx.getString(R.string.ModelRepoDone));
                     refreshList();
                 }
@@ -138,6 +154,8 @@ public class ModelRepoFragment extends Fragment {
                         transport.stop(t);
                     } catch (Exception ignored) {
                     }
+                    pendingTicket = null;
+                    pendingPubkey = null;
                     setStatus(ctx.getString(R.string.ModelRepoFailed, msg));
                 }
             });
@@ -207,11 +225,13 @@ public class ModelRepoFragment extends Fragment {
         }
         MainActivity act = (MainActivity) ctx;
         act.getNavigationDelegate().switchSlot(0, () -> {
-            com.flashforge.farm.fragment.BedFragment bed =
-                    (com.flashforge.farm.fragment.BedFragment) act.getNavigationDelegate().getCurrentFragment();
-            if (bed == null) {
+            com.flashforge.farm.navigation.Fragment cur =
+                    act.getNavigationDelegate().getCurrentFragment();
+            if (!(cur instanceof com.flashforge.farm.fragment.BedFragment)) {
                 return;
             }
+            com.flashforge.farm.fragment.BedFragment bed =
+                    (com.flashforge.farm.fragment.BedFragment) cur;
             try {
                 bed.loadModel(f);
             } catch (Slic3rRuntimeError e) {

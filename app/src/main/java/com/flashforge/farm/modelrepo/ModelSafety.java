@@ -57,7 +57,7 @@ public class ModelSafety {
 
     public static String sniffKind(File f) {
         try (InputStream in = new FileInputStream(f)) {
-            byte[] head = new byte[64];
+            byte[] head = new byte[84];
             int n = 0, r;
             while (n < head.length && (r = in.read(head, n, head.length - n)) != -1) {
                 n += r;
@@ -72,14 +72,32 @@ public class ModelSafety {
                 return "jpeg";
             }
             String text = new String(head, 0, Math.min(n, 32), "UTF-8").trim();
-            if (text.startsWith("solid")) {
-                return "stl-ascii";
-            }
-            if (text.startsWith("#") || text.startsWith("v ") || text.startsWith("o ") || text.startsWith("mtllib")) {
+            boolean solidLead = text.startsWith("solid");
+            boolean objLead = text.startsWith("#") || text.startsWith("v ")
+                    || text.startsWith("o ") || text.startsWith("mtllib");
+            if (objLead) {
                 return "obj";
             }
-            if (n >= 80) {
-                return "stl-binary?";
+            // STL: binary files may ALSO start with "solid", so disambiguate
+            // by the facet-count/size rule (84-byte header + 50 bytes/facet).
+            // Files too short for even the header cannot be valid binary STL.
+            long len = f.length();
+            if (len >= 84) {
+                if (!solidLead) {
+                    return "stl-binary";
+                }
+                if (n >= 84) {
+                    long facets = ((head[83] & 0xFFL) << 24) | ((head[82] & 0xFFL) << 16)
+                            | ((head[81] & 0xFFL) << 8) | (head[80] & 0xFFL);
+                    if (len == 84 + facets * 50L) {
+                        return "stl-ascii";
+                    }
+                    return "stl-binary";
+                }
+                return "stl-binary";
+            }
+            if (solidLead) {
+                return "stl-ascii";
             }
             return "unknown";
         } catch (Exception e) {
@@ -90,7 +108,7 @@ public class ModelSafety {
     public static boolean extensionMatchesSniff(String ext, String sniffed) {
         switch (ext) {
             case "stl":
-                return sniffed.equals("stl-ascii") || sniffed.equals("stl-binary?");
+                return sniffed.equals("stl-ascii") || sniffed.equals("stl-binary");
             case "3mf":
                 return sniffed.equals("zip");
             case "obj":

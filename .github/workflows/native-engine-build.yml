@@ -233,7 +233,9 @@ jobs:
           echo "value=$SHA" >> "$GITHUB_OUTPUT"
           SCRIPTS_SHA=$(gh api "repos/${{ github.repository }}/contents/scripts/build_all_deps_android.sh?ref=${{ github.sha }}" -q '.sha' 2>/dev/null || echo none)
           echo "scripts=$SCRIPTS_SHA" >> "$GITHUB_OUTPUT"
-          echo "${{ matrix.dep }}_dep_key=${{ matrix.dep }}-${{ runner.os }}-$SHA-$SCRIPTS_SHA-ndk${{ env.NDK_VERSION }}-$ABI" >> "$GITHUB_OUTPUT"
+          FULL_KEY="${{ matrix.dep }}-${{ runner.os }}-$SHA-$SCRIPTS_SHA-ndk$NDK_VERSION-$ABI"
+          echo "full_key=$FULL_KEY" >> "$GITHUB_OUTPUT"
+          echo "${{ matrix.dep }}_dep_key=$FULL_KEY" >> "$GITHUB_OUTPUT"
 
       - name: Checkout repository
         # Unconditional: exact revalidation (check-native-prebuilts) needs the
@@ -278,7 +280,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: ${{ matrix.path }}
-          key: ${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}-${{ steps.sha.outputs.scripts }}
+          key: ${{ steps.sha.outputs.full_key }}
 
       - name: Validate restored ${{ matrix.name }}
         id: validate
@@ -311,7 +313,7 @@ jobs:
               NEED=0
               REUSED=1
             else
-              KEY="${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}-${{ steps.sha.outputs.scripts }}"
+              KEY="${{ steps.sha.outputs.full_key }}"
               echo "revoking poisoned cache $KEY and forcing rebuild"
               rm -rf '${{ matrix.path }}'
               gh cache delete "$KEY" --repo "${{ github.repository }}" 2>&1 \
@@ -422,7 +424,7 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: ${{ matrix.path }}
-          key: ${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}-${{ steps.sha.outputs.scripts }}
+          key: ${{ steps.sha.outputs.full_key }}
 
       - name: Publish ${{ matrix.name }} release
         # Intermediate deps republish whenever a rebuild actually verifies,
@@ -444,7 +446,7 @@ jobs:
           SUM="$(sha256sum "$OUT/$TARBALL" | cut -d' ' -f1)"
           printf '{"commit":"%s","built_at":"%s","abi":"%s","dep":"%s","cache_key":"%s","files":{"%s":"%s"}}\n' \
             "$SHA" "$DATE" "$ABI" "${{ matrix.dep }}" \
-            "${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}-${{ steps.sha.outputs.scripts }}" \
+            "${{ steps.sha.outputs.full_key }}" \
             "$TARBALL" "$SUM" > "$OUT/${{ matrix.dep }}-manifest.json"
           TAG="dep-${{ matrix.dep }}-latest"
           gh release delete "$TAG" --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true

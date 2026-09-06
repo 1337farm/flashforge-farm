@@ -55,7 +55,14 @@ public class TrustStore {
 
     public TrustStore(Storage storage, Set<String> trustedRoots) {
         this.storage = storage;
-        this.trustedRoots = trustedRoots;
+        this.trustedRoots = new HashSet<String>();
+        if (trustedRoots != null) {
+            for (String r : trustedRoots) {
+                if (r != null) {
+                    this.trustedRoots.add(key(r));
+                }
+            }
+        }
     }
 
     private static String key(String pubkey) {

@@ -156,6 +156,48 @@ def main():
             "rolling releases for later consumers"
         )
 
+    # Skip-exclusion guard: jobs that must run even when an upstream `needs`
+    # job was SKIPPED (native=false path-filter skips dep/engine) need
+    # !cancelled() in their job-level if: — a plain conditional like
+    # needs.X.result != 'failure' is NOT evaluated when a needs job skipped,
+    # so GitHub silently drops the job. (2026-09-06: PR #26 p2p publish kit,
+    # native=false -> apk AND merge both skipped, PR never auto-merged.)
+    for jid in ("package-apk", "automerge"):
+        job = jobs.get(jid, {})
+        job_if = str(job.get("if", ""))
+        if "cancelled()" not in job_if:
+            failures.append(
+                f"job {jid!r} ({job.get('name')!r}) must gate its if: with "
+                "!cancelled() (skip-exclusion): without it GitHub skips the "
+                "job whenever an upstream needs job was skipped, silently "
+                "breaking the native=false PR path / automerge"
+            )
+
+    # Post-merge release-refresh guard: a squash merge performed with the
+    # default GITHUB_TOKEN does NOT trigger the push workflow on main (GitHub
+    # suppresses workflow re-triggering from that token), so farm-apk-latest /
+    # engine-latest would silently go stale on every auto-merge. The automerge
+    # job must therefore dispatch the main pipeline itself after merging —
+    # which additionally requires actions: write on that job. (2026-09-06:
+    # PR #26 auto-merged but farm-apk-latest stayed at the pre-merge build.)
+    auto = jobs.get("automerge", {})
+    if auto.get("permissions", {}).get("actions") != "write":
+        failures.append(
+            "automerge job must grant actions: write (needed to dispatch the "
+            "main pipeline to refresh rolling releases after a GITHUB_TOKEN merge)"
+        )
+    auto_names = [
+        (i, str(s.get("name", ""))) for i, s in enumerate(auto.get("steps", []))
+        if isinstance(s, dict)
+    ]
+    if not any("Dispatch main pipeline" in n for _, n in auto_names):
+        failures.append(
+            "automerge job must include a 'Dispatch main pipeline' step that "
+            "runs `gh workflow run native-engine-build.yml --ref main`: "
+            "GITHUB_TOKEN merges never trigger the push workflow on main, so "
+            "without it the rolling releases go stale on every auto-merge"
+        )
+
     # Same-step PATH guard: GITHUB_PATH only applies to SUBSEQUENT steps, so a
     # step that echoes the SDK bin dir to GITHUB_PATH AND then runs bare
     # `sdkmanager` in the same run block MUST first export PATH inline —

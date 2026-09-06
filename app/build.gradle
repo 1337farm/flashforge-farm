@@ -207,6 +207,10 @@ dependencies {
     }
     implementation 'net.java.dev.jna:jna:5.17.0@aar'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1'
+    // P2P identity: pure-Java Ed25519 (minSdk-safe; JDK/Android lack it).
+    // Bloxbean fork (0.3.1): maintained patch line of eddsa-java with
+    // verification fixes over the dormant 0.3.0.
+    implementation 'com.bloxbean.cardano:net-i2p-crypto-eddsa:0.3.1'
     implementation 'com.github.instacart:truetime-android:4.0.0.alpha'
     implementation 'com.github.mrudultora:Colorpicker:1.2.0'
     implementation 'com.github.bumptech.glide:glide:5.0.9'

@@ -110,7 +110,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "native=true (non-PR: always full build)" >> "$GITHUB_OUTPUT"
+            echo "native=true (non-PR: always full build)"
+            echo "native=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # File list via API: immune to shallow-checkout merge-base issues.

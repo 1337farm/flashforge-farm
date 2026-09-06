@@ -84,6 +84,31 @@ def main():
     if "'../engine/output/occt-libs'" in gradle:
         failures.append("app/build.gradle still stages engine/output/occt-libs (OCCT must be static-only)")
 
+    # Deterministic-signing guard: rolling releases must be signed with ONE
+    # committed key. The SDK's auto-generated ~/.android/debug.keystore is
+    # regenerated with a NEW random cert on every fresh CI runner, so each
+    # published APK has a different signature and installing the next rolling
+    # APK over the previous one fails with INSTALL_FAILED_UPDATE_INCOMPATIBLE
+    # ("package conflicts with an existing package"). (2026-09-06.)
+    if not (REPO / "keystore/farm-debug.keystore").is_file():
+        failures.append("committed keystore/farm-debug.keystore missing (rolling APKs must use one fixed cert)")
+    if not (REPO / "keystore.properties").is_file():
+        failures.append("keystore.properties missing (signingConfig reads it)")
+    if re.search(r"storeFile.*debug\.keystore", gradle):
+        failures.append(
+            "app/build.gradle must not sign with the per-machine auto-generated "
+            "debug.keystore (fresh CI runners regenerate it with a random cert "
+            "every build -> rolling installs fail with package conflicts); use "
+            "the committed keystore/farm-debug.keystore + sign BOTH debug and "
+            "release with signingConfigs.farm"
+        )
+    if gradle.count("signingConfig signingConfigs.farm") < 2:
+        failures.append(
+            "both debug and release buildTypes must set signingConfig "
+            "signingConfigs.farm (committed, deterministic) so CI and local "
+            "builds share one cert and rolling APKs update in place"
+        )
+
     loader = (REPO / "app/src/main/java/com/flashforge/farm/slic3r/OCCTLoader.java").read_text()
     if re.search(r"loadLibrary\(\s*\"TK", loader):
         failures.append("OCCTLoader.java still System.loadLibrary's OCCT toolkits (must be static-only)")

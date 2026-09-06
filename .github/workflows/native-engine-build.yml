@@ -178,6 +178,18 @@ jobs:
           echo "scripts=$SCRIPTS_SHA" >> "$GITHUB_OUTPUT"
           echo "${{ matrix.dep }}_dep_key=${{ matrix.dep }}-${{ runner.os }}-$SHA-$SCRIPTS_SHA-ndk${{ env.NDK_VERSION }}-$ABI" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout repository
+        # Unconditional: exact revalidation (check-native-prebuilts) needs the
+        # checked-in engine/CMakeLists.txt, which defines the OCCT/Boost/TBB
+        # prebuilt sets a reusable release must satisfy — it can't come from
+        # a tarball. Cheap shallow checkout; submodules only matter if we build.
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --depth 100 origin "${{ github.sha }}"
+          git checkout "${{ github.sha }}"
+          git submodule update --init --recursive
+
       - name: Restore from release (published build reuse)
         id: rel
         env:
@@ -218,17 +230,13 @@ jobs:
         run: |
           NEED=1
           REUSED=0
+          # Exact revalidation against the CURRENT checked-in
+          # engine/CMakeLists.txt prebuilt sets (OCCT_LIBS/BOOST_LIBS/tbb),
+          # not a loose file count — a release built from an older OCCT_LIBS
+          # set (e.g. missing TKernel/TKMath/TKG2d) must be rebuilt, never
+          # reused and never cached as good.
           have_trees() {
-            case '${{ matrix.dep }}' in
-              tbb)
-                test -f "engine/src/main/jniImports/oneTBB/lib/$ABI/libtbb.a" \
-                && test -f "engine/src/main/jniImports/oneTBB/lib/$ABI/libtbbmalloc.a" ;;
-              boost)
-                [ "$(ls engine/src/main/jniImports/boost/lib/$ABI/lib/libboost_*.a 2>/dev/null | wc -l)" -ge 30 ] ;;
-              occt)
-                [ "$(ls engine/src/main/occt/jniLibs/$ABI/libTK*.a 2>/dev/null | wc -l)" -ge 20 ] \
-                && [ -n "$(ls -A engine/src/main/occt/include/$ABI 2>/dev/null)" ] ;;
-            esac
+            python3 scripts/check-native-prebuilts.py --dep '${{ matrix.dep }}' "$ABI" >/dev/null 2>&1
           }
           if [ "${{ steps.rel.outputs.rel_hit }}" = "1" ]; then
             if have_trees; then
@@ -255,15 +263,6 @@ jobs:
           fi
           echo "need=$NEED" >> "$GITHUB_OUTPUT"
           echo "reused=$REUSED" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout repository
-        if: steps.validate.outputs.need == '1'
-        run: |
-          git init -q .
-          git remote add origin "https://github.com/${{ github.repository }}.git"
-          git fetch --depth 100 origin "${{ github.sha }}"
-          git checkout "${{ github.sha }}"
-          git submodule update --init --recursive
 
       - name: Restore ccache
         if: steps.validate.outputs.need == '1'
@@ -369,7 +368,11 @@ jobs:
           key: ${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}-${{ steps.sha.outputs.scripts }}
 
       - name: Publish ${{ matrix.name }} release
-        if: (steps.validate.outputs.reused == '1' && steps.rel.outputs.rel_hit != '1' || steps.verify-built.outputs.verified == '1') && github.ref == 'refs/heads/main'
+        # Intermediate deps republish whenever a rebuild actually verifies,
+        # on ANY branch: a PR that detects a stale release (older CMakeLists)
+        # rebuilds it and re-publishes, self-healing consumers. Only verified
+        # builds publish, so the rolling tag never carries poison.
+        if: steps.validate.outputs.reused == '1' && steps.rel.outputs.rel_hit != '1' || steps.verify-built.outputs.verified == '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

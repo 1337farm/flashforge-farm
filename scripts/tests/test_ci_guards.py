@@ -118,6 +118,39 @@ def main():
             "so a stale .so falls through to a fresh build"
         )
 
+    # build-dep must revalidate release/cache trees EXACTLY against the
+    # checked-in CMakeLists prebuilt sets. (2026-09-06: a loose "-ge 20
+    # libTK*.a" sentinel reused a stale occt release that lacked
+    # TKernel/TKMath/TKG2d, then the engine's exact check hard-failed.)
+    dep_job = jobs.get("build-dep", {})
+    dep_steps = [s for s in dep_job.get("steps", []) if isinstance(s, dict)]
+    vstep = next((s for s in dep_steps if s.get("name", "").startswith("Validate restored")), {})
+    vrun = str(vstep.get("run", ""))
+    if "check-native-prebuilts.py" not in vrun or "--dep" not in vrun:
+        failures.append(
+            "build-dep revalidation must use check-native-prebuilts.py --dep "
+            "(exact CMakeLists OCCT_LIBS/BOOST_LIBS truth), never a loose "
+            "file count, so a release built from an older set is rebuilt"
+        )
+    names_idx = {s.get("name", ""): i for i, s in enumerate(dep_steps)}
+    co = names_idx.get("Checkout repository")
+    rr = names_idx.get("Restore from release (published build reuse)")
+    if (
+        co is None or rr is None or co > rr
+        or dep_steps[co].get("if")
+    ):
+        failures.append(
+            "build-dep must check out the repo before release-restore and "
+            "unconditionally (exact revalidation reads checked-in CMakeLists)"
+        )
+    pstep = next((s for s in dep_steps if s.get("name", "").startswith("Publish")), {})
+    if "refs/heads/main" in str(pstep.get("if", "")):
+        failures.append(
+            "build-dep publish must not require refs/heads/main: a PR that "
+            "rebuilds a verified dep must republish it to self-heal stale "
+            "rolling releases for later consumers"
+        )
+
     # Same-step PATH guard: GITHUB_PATH only applies to SUBSEQUENT steps, so a
     # step that echoes the SDK bin dir to GITHUB_PATH AND then runs bare
     # `sdkmanager` in the same run block MUST first export PATH inline —

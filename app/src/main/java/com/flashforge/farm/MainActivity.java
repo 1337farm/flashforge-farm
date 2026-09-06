@@ -98,10 +98,6 @@ public class MainActivity extends AppCompatActivity {
     private boolean landscape;
     private UnfoldMenu unfoldMenu;
 
-    public NavigationDelegate getNavigationDelegate() {
-        return delegate;
-    }
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         startService(new android.content.Intent(this, com.flashforge.farm.api.AutoDispatchService.class));

@@ -110,7 +110,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "native=true (non-PR: always full build)" >> "$GITHUB_OUTPUT"
+            echo "native=true (non-PR: always full build)"
+            echo "native=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # File list via API: immune to shallow-checkout merge-base issues.
@@ -177,6 +178,18 @@ jobs:
           echo "scripts=$SCRIPTS_SHA" >> "$GITHUB_OUTPUT"
           echo "${{ matrix.dep }}_dep_key=${{ matrix.dep }}-${{ runner.os }}-$SHA-$SCRIPTS_SHA-ndk${{ env.NDK_VERSION }}-$ABI" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout repository
+        # Unconditional: exact revalidation (check-native-prebuilts) needs the
+        # checked-in engine/CMakeLists.txt, which defines the OCCT/Boost/TBB
+        # prebuilt sets a reusable release must satisfy — it can't come from
+        # a tarball. Cheap shallow checkout; submodules only matter if we build.
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --depth 100 origin "${{ github.sha }}"
+          git checkout "${{ github.sha }}"
+          git submodule update --init --recursive
+
       - name: Restore from release (published build reuse)
         id: rel
         env:
@@ -217,17 +230,13 @@ jobs:
         run: |
           NEED=1
           REUSED=0
+          # Exact revalidation against the CURRENT checked-in
+          # engine/CMakeLists.txt prebuilt sets (OCCT_LIBS/BOOST_LIBS/tbb),
+          # not a loose file count — a release built from an older OCCT_LIBS
+          # set (e.g. missing TKernel/TKMath/TKG2d) must be rebuilt, never
+          # reused and never cached as good.
           have_trees() {
-            case '${{ matrix.dep }}' in
-              tbb)
-                test -f "engine/src/main/jniImports/oneTBB/lib/$ABI/libtbb.a" \
-                && test -f "engine/src/main/jniImports/oneTBB/lib/$ABI/libtbbmalloc.a" ;;
-              boost)
-                [ "$(ls engine/src/main/jniImports/boost/lib/$ABI/lib/libboost_*.a 2>/dev/null | wc -l)" -ge 30 ] ;;
-              occt)
-                [ "$(ls engine/src/main/occt/jniLibs/$ABI/libTK*.a 2>/dev/null | wc -l)" -ge 20 ] \
-                && [ -n "$(ls -A engine/src/main/occt/include/$ABI 2>/dev/null)" ] ;;
-            esac
+            python3 scripts/check-native-prebuilts.py --dep '${{ matrix.dep }}' "$ABI" >/dev/null 2>&1
           }
           if [ "${{ steps.rel.outputs.rel_hit }}" = "1" ]; then
             if have_trees; then
@@ -255,15 +264,6 @@ jobs:
           echo "need=$NEED" >> "$GITHUB_OUTPUT"
           echo "reused=$REUSED" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout repository
-        if: steps.validate.outputs.need == '1'
-        run: |
-          git init -q .
-          git remote add origin "https://github.com/${{ github.repository }}.git"
-          git fetch --depth 100 origin "${{ github.sha }}"
-          git checkout "${{ github.sha }}"
-          git submodule update --init --recursive
-
       - name: Restore ccache
         if: steps.validate.outputs.need == '1'
         uses: actions/cache@v5
@@ -287,6 +287,8 @@ jobs:
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "$SDK/cmdline-tools/latest/bin:$SDK/platform-tools" >> "$GITHUB_PATH"
+          # GITHUB_PATH applies to later steps only; export locally for this step.
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager --version
       - name: Install NDK ${{ env.NDK_VERSION }}
@@ -366,7 +368,11 @@ jobs:
           key: ${{ matrix.dep }}-${{ runner.os }}-${{ steps.sha.outputs.value }}-${{ steps.sha.outputs.scripts }}
 
       - name: Publish ${{ matrix.name }} release
-        if: (steps.validate.outputs.reused == '1' && steps.rel.outputs.rel_hit != '1' || steps.verify-built.outputs.verified == '1') && github.ref == 'refs/heads/main'
+        # Intermediate deps republish whenever a rebuild actually verifies,
+        # on ANY branch: a PR that detects a stale release (older CMakeLists)
+        # rebuilds it and re-publishes, self-healing consumers. Only verified
+        # builds publish, so the rolling tag never carries poison.
+        if: steps.validate.outputs.reused == '1' && steps.rel.outputs.rel_hit != '1' || steps.verify-built.outputs.verified == '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -418,13 +424,6 @@ jobs:
           DEPKEY="${{ needs.build-dep.outputs.tbb_dep_key }}|${{ needs.build-dep.outputs.boost_dep_key }}|${{ needs.build-dep.outputs.occt_dep_key }}"
           echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','engine/src/main/jni/**','app/build.gradle','scripts/build_all_deps_android.sh') }}-ndk${{ env.NDK_VERSION }}-$ABI-$DEPKEY" >> "$GITHUB_OUTPUT"
 
-      - name: Restore built libslic3r.so
-        id: engine-cache
-        uses: actions/cache@v5
-        with:
-          path: /tmp/engine-output
-          key: ${{ runner.os }}-${{ steps.engine-key.outputs.key }}
-
       - name: Restore engine from release (published build reuse)
         id: engine-rel
         env:
@@ -437,10 +436,26 @@ jobs:
             WANT="$(python3 -c "import json;print(json.load(open('$DL/engine-manifest.json'))['files']['libslic3r.so'])" 2>/dev/null || true)"
             GOT="$(sha256sum "$DL/libslic3r.so" 2>/dev/null | cut -d' ' -f1)"
             if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
-              mkdir -p /tmp/engine-output
-              cp "$DL/libslic3r.so" /tmp/engine-output/libslic3r.so
-              HIT=1
-              echo "engine release verified and staged (already published, no republish)"
+              # Quality gate mirrors the publish step + the APK static-OCCT
+              # check, so a STALE release .so can never be reused: if it is
+              # too small, still links OCCT at runtime (libTK DT_NEEDED), or
+              # lacks the engine/gmp/mpfr markers, ignore the release and
+              # rebuild from source (and republish once on main).
+              SZ="$(stat -c%s "$DL/libslic3r.so" 2>/dev/null || echo 0)"
+              if [ "$SZ" -le 10000000 ] \
+                 || readelf -d "$DL/libslic3r.so" | grep -q 'libTK' \
+                 || ! strings "$DL/libslic3r.so" | grep -q -F 'Orca Slicer' \
+                 || ! strings "$DL/libslic3r.so" | grep -q -F 'Arachne' \
+                 || ! readelf -d "$DL/libslic3r.so" | grep -q "libgmp" \
+                 || ! readelf -d "$DL/libslic3r.so" | grep -q "libmpfr"; then
+                echo "engine release .so failed quality gate (size/libTK/markers); ignoring and rebuilding"
+                HIT=0
+              else
+                mkdir -p /tmp/engine-output
+                cp "$DL/libslic3r.so" /tmp/engine-output/libslic3r.so
+                HIT=1
+                echo "engine release verified and staged (quality gate passed, no republish)"
+              fi
             else
               echo "engine release sha mismatch; ignoring"
             fi
@@ -450,7 +465,7 @@ jobs:
           echo "hit=$HIT" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 17
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         run: |
           curl -fsSL -o /tmp/temurin17.tar.gz "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse"
           rm -rf /tmp/jdk17 && mkdir -p /tmp/jdk17
@@ -461,13 +476,14 @@ jobs:
           echo "/tmp/jdk17/bin" >> "$GITHUB_PATH"
 
       - name: Set up Android SDK / NDK
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
         run: |
           SDK=/usr/local/lib/android/sdk
           test -d "$SDK/cmdline-tools" || { echo "ERROR: preinstalled SDK missing at $SDK"; exit 1; }
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "$SDK/cmdline-tools/latest/bin:$SDK/platform-tools" >> "$GITHUB_PATH"
+          # GITHUB_PATH applies to later steps only; export locally for this step.
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager --version
       - name: Install NDK ${{ env.NDK_VERSION }}
@@ -480,13 +496,13 @@ jobs:
             || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
 
       - name: Install ccache
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         run: |
           sudo apt-get update
           sudo apt-get install -y ccache
 
       - name: Restore ccache
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         uses: actions/cache@v5
         with:
           path: ${{ env.CCACHE_DIR }}
@@ -495,45 +511,63 @@ jobs:
             engine-ccache-${{ runner.os }}-
 
       - name: Initialize ccache
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         run: |
           ccache -M 6G
           ccache -z
           ccache --version | head -1
 
-      - name: Restore Boost
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
-        uses: actions/cache/restore@v5
-        with:
-          path: engine/src/main/jniImports/boost
-          key: ${{ needs.build-dep.outputs.boost_dep_key }}
-          fail-on-cache-miss: true
+      - name: Restore Boost from release (build needs)
+        if: steps.engine-rel.outputs.hit != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DL="$RUNNER_TEMP/rel-boost"; mkdir -p "$DL"
+          gh release download dep-boost-latest --pattern 'boost-deps.tar.gz' --pattern 'boost-manifest.json' \
+            --dir "$DL" --clobber || { echo "ERROR: no dep-boost-latest release (main must go green first)"; exit 1; }
+          WANT="$(python3 -c "import json;print(json.load(open('$DL/boost-manifest.json'))['files']['boost-deps.tar.gz'])")"
+          GOT="$(sha256sum "$DL/boost-deps.tar.gz" | cut -d' ' -f1)"
+          [ "$WANT" = "$GOT" ] || { echo "ERROR: boost release sha mismatch"; exit 1; }
+          tar -xzf "$DL/boost-deps.tar.gz"
+          echo "Boost restored from release"
 
-      - name: Restore oneTBB
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
-        uses: actions/cache/restore@v5
-        with:
-          path: engine/src/main/jniImports/oneTBB
-          key: ${{ needs.build-dep.outputs.tbb_dep_key }}
-          fail-on-cache-miss: true
+      - name: Restore oneTBB from release (build needs)
+        if: steps.engine-rel.outputs.hit != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DL="$RUNNER_TEMP/rel-tbb"; mkdir -p "$DL"
+          gh release download dep-tbb-latest --pattern 'tbb-deps.tar.gz' --pattern 'tbb-manifest.json' \
+            --dir "$DL" --clobber || { echo "ERROR: no dep-tbb-latest release (main must go green first)"; exit 1; }
+          WANT="$(python3 -c "import json;print(json.load(open('$DL/tbb-manifest.json'))['files']['tbb-deps.tar.gz'])")"
+          GOT="$(sha256sum "$DL/tbb-deps.tar.gz" | cut -d' ' -f1)"
+          [ "$WANT" = "$GOT" ] || { echo "ERROR: tbb release sha mismatch"; exit 1; }
+          tar -xzf "$DL/tbb-deps.tar.gz"
+          echo "oneTBB restored from release"
 
-      - name: Restore OCCT
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
-        uses: actions/cache/restore@v5
-        with:
-          path: engine/src/main/occt
-          key: ${{ needs.build-dep.outputs.occt_dep_key }}
-          fail-on-cache-miss: true
+      - name: Restore OCCT from release (build needs)
+        if: steps.engine-rel.outputs.hit != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DL="$RUNNER_TEMP/rel-occt"; mkdir -p "$DL"
+          gh release download dep-occt-latest --pattern 'occt-deps.tar.gz' --pattern 'occt-manifest.json' \
+            --dir "$DL" --clobber || { echo "ERROR: no dep-occt-latest release (main must go green first)"; exit 1; }
+          WANT="$(python3 -c "import json;print(json.load(open('$DL/occt-manifest.json'))['files']['occt-deps.tar.gz'])")"
+          GOT="$(sha256sum "$DL/occt-deps.tar.gz" | cut -d' ' -f1)"
+          [ "$WANT" = "$GOT" ] || { echo "ERROR: occt release sha mismatch"; exit 1; }
+          tar -xzf "$DL/occt-deps.tar.gz"
+          echo "OCCT restored from release"
 
       - name: Validate restored deps
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         run: |
           for d in engine/src/main/jniImports/boost engine/src/main/jniImports/oneTBB engine/src/main/occt; do
             test -n "$(ls -A "$d" 2>/dev/null)" || { echo "ERROR: missing restored deps at $d"; exit 1; }
           done
 
       - name: Test restored deps exactly (revoke poison on failure)
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -634,7 +668,7 @@ jobs:
             --notes "Rolling release of the GMP/MPFR native deps built from source. Re-published whenever the dep rebuilds."
 
       - name: Build native engine .so from source (standalone CMake)
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         run: |
           export PATH="/usr/lib/ccache:$PATH"
           cmake -S engine -B engine/build \
@@ -658,14 +692,8 @@ jobs:
           test -n "$SO" || { echo "FAILED: libslic3r.so not found"; exit 1; }
 
       - name: Show ccache stats
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1'
         run: ccache -s
-
-      - name: Save built libslic3r.so to cache
-        if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
-        run: |
-          mkdir -p /tmp/engine-output
-          cp "${{ steps.find-so.outputs.so_artifact }}" /tmp/engine-output/libslic3r.so
 
       - name: Upload libslic3r.so artifact
         uses: actions/upload-artifact@v6
@@ -750,6 +778,8 @@ jobs:
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "$SDK/cmdline-tools/latest/bin:$SDK/platform-tools" >> "$GITHUB_PATH"
+          # GITHUB_PATH applies to later steps only; export locally for this step.
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager --version
       - name: Install NDK ${{ env.NDK_VERSION }}
@@ -759,16 +789,11 @@ jobs:
           # API 37 ships as android-37.0 only; builds resolve android-37.
           ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
 
-      - name: Restore OCCT
-        if: needs.changes.outputs.native == 'true'
-        uses: actions/cache/restore@v5
-        with:
-          path: engine/src/main/occt
-          key: ${{ needs.build-dep.outputs.occt_dep_key }}
-          fail-on-cache-miss: true
-
-      - name: Restore OCCT from release (non-native PRs)
-        if: needs.changes.outputs.native != 'true'
+      - name: Restore OCCT headers from release (bridge compile needs)
+        # compiled trees come from the dep-occt-latest release, exactly like
+        # Boost/oneTBB below — never from actions/cache, whose entry only
+        # exists if build-dep rebuilt from source (release-reuse skips saving
+        # it, so a native PR would otherwise hard-fail on cache-miss).
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -779,6 +804,7 @@ jobs:
           GOT="$(sha256sum "$DL/occt-deps.tar.gz" | cut -d' ' -f1)"
           [ "$WANT" = "$GOT" ] || { echo "ERROR: occt release sha mismatch"; exit 1; }
           tar -xzf "$DL/occt-deps.tar.gz"
+          test -d engine/src/main/occt || { echo "ERROR: OCCT trees missing after extract"; exit 1; }
           echo "OCCT restored from release"
 
       - name: Restore Boost headers from release (bridge compile needs)

@@ -1,0 +1,21 @@
+[package]
+name = "farm-iroh"
+version = "0.1.0"
+edition = "2021"
+description = "Custom UniFFI binding: iroh endpoint for FlashForge Farm (Android arm64). Built from source in-repo; no prebuilt FFI."
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "farm_iroh"
+
+[dependencies]
+iroh = "1.1"
+iroh-base = "1.1"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
+uniffi = "0.32"
+anyhow = "1"
+thiserror = "2"
+
+[build-dependencies]
+uniffi = { version = "0.32", features = ["build"] }

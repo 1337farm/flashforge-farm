@@ -76,6 +76,16 @@ android {
                 'DebugProbesKt.bin',
             ]
         }
+        jniLibs {
+            // Native libs ship UNCOMPRESSED by default (fast mmap loads, big
+            // APK: libslic3r.so alone is ~65MB stored). useLegacyPackaging
+            // has INVERTED naming: true = COMPRESSED (DEFLATE) libs, which is
+            // what shrinks a sideloaded debug APK (~3x on libslic3r.so).
+            // Trade-offs per official docs: slower loads, larger on-device
+            // install size. Correct for direct-download distribution (no Play
+            // patch-size benefit to protect).
+            useLegacyPackaging = true
+        }
     }
 
     signingConfigs {

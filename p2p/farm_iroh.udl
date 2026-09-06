@@ -1,0 +1,30 @@
+namespace farm_iroh {
+    // Bind (or re-bind with a persisted secret) an endpoint on the farm ALPN.
+    // Returns an opaque endpoint handle. All calls block on an internal
+    // tokio runtime; nothing async crosses the FFI boundary.
+    [Throws=FarmError]
+    FarmEndpoint connect(optional bytes secret_key);
+
+    // Parse/print helpers for endpoint ids (hex transport form).
+    [Throws=FarmError]
+    bytes endpoint_id_from_hex(string hex);
+    string endpoint_id_to_hex(bytes endpoint_id);
+};
+
+[Error]
+enum FarmError {
+    "Internal",
+    "InvalidInput",
+};
+
+interface FarmEndpoint {
+    // Stable endpoint id bytes (32-byte ed25519 public key).
+    bytes endpoint_id();
+
+    // Persistable secret (32 bytes). Store in EncryptedSharedPreferences;
+    // pass back to connect() to keep the same id across restarts.
+    bytes secret_key_bytes();
+
+    // Close cleanly, release sockets. Call on Android backgrounding.
+    void shutdown();
+};

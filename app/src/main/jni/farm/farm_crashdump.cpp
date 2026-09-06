@@ -231,23 +231,31 @@ static void crash_handler(int sig, siginfo_t* info, void* ctx) {
         _exit(128 + sig);
     }
 
+    // One well-known file per app, not per-pid: every crash record in a run
+    // (process restarts included) appends into farm_crash.log, which the app
+    // consolidates into a single Downloads document on next start. Per-pid /
+    // per-timestamp names are what left 10-20 farm_crash_*.log files lying
+    // around in Downloads after a crash loop.
     char path[4608];
     int path_len;
     if (g_crash_dir_ready && g_crash_dir[0] != '\0') {
-        path_len = snprintf(path, sizeof(path), "%s/farm_crash_%d.log", g_crash_dir, (int) getpid());
+        path_len = snprintf(path, sizeof(path), "%s/farm_crash.log", g_crash_dir);
     } else {
-        path_len = snprintf(path, sizeof(path), "/data/data/com.flashforge.farm/files/farm_crash_%d.log", (int) getpid());
+        path_len = snprintf(path, sizeof(path), "/data/data/com.flashforge.farm/files/farm_crash.log");
     }
     if (path_len < 0 || (size_t) path_len >= sizeof(path)) {
         path_len = (int) sizeof(path) - 1;
     }
 
-    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    // O_APPEND (not O_TRUNC): a "set" of crashes from one app start lands in a
+    // single file; each record is delimited by its own header/separator below.
+    int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (fd < 0) {
         signal(sig, SIG_DFL);
         raise(sig);
         _exit(128 + sig);
     }
+    write_all(fd, "====================================\n", sizeof("====================================\n") - 1);
 
     // Capture the faulting thread's registers from the ucontext delivered to
     // the handler (pc/lr/sp/fp are the crash site). Fall back to 0 on non-arm.
@@ -269,10 +277,17 @@ static void crash_handler(int sig, siginfo_t* info, void* ctx) {
     char lib_map[8192];
     collect_libs(lib_map, sizeof(lib_map));
 
-    char header[1400];
+    char header[1024];
     write_timestamp(fd);
     write_uptime(fd);
     write_thread_name(fd, (long) syscall(SYS_gettid));
+    // The signal/build/register block is the most important part of the dump
+    // (fault address + sp distinguish a stack overflow from a null deref). It
+    // must NOT be gated on the loaded-library map: lib_map grows with the
+    // device's .so count, so formatting it inside the same snprintf made `hl`
+    // (the would-be full length) exceed the buffer and silently dropped the
+    // whole header on real devices — every crash dump came back with no
+    // signal/build/registers for exactly this reason. (2026-09-06.)
     int hl = snprintf(header, sizeof(header),
         "signal  : %s (%d)  %s\n"
         "fault   : 0x%lx\n"
@@ -280,11 +295,7 @@ static void crash_handler(int sig, siginfo_t* info, void* ctx) {
         "build   : %s\n"
         "abi     : %s\n"
         "====================================\n"
-        "registers: pc=0x%012lx lr=0x%012lx sp=0x%012lx fp=0x%012lx\n"
-        "====================================\n"
-        "loaded libraries (name @ load-base):\n%s"
-        "====================================\n"
-        "backtrace (module+offset; addr2line against matching unstripped build):\n",
+        "registers: pc=0x%012lx lr=0x%012lx sp=0x%012lx fp=0x%012lx\n",
         signal_name(sig), sig, info ? signal_code_desc(sig, info->si_code) : "?",
         (unsigned long) (info ? (uintptr_t) info->si_addr : 0),
         (int) getpid(), (long) syscall(SYS_gettid),
@@ -296,15 +307,20 @@ static void crash_handler(int sig, siginfo_t* info, void* ctx) {
 #else
         "unknown",
 #endif
-        (unsigned long) pc, (unsigned long) lr, (unsigned long) sp, (unsigned long) fp,
-        lib_map);
-    if (hl > 0 && (size_t) hl <= sizeof(header)) write_all(fd, header, (size_t) hl);
+        (unsigned long) pc, (unsigned long) lr, (unsigned long) sp, (unsigned long) fp);
+    if (hl > 0 && (size_t) hl < sizeof(header)) write_all(fd, header, (size_t) hl);
+    write_all(fd, "====================================\n", sizeof("====================================\n") - 1);
+    write_all(fd, "loaded libraries (name @ load-base):\n", sizeof("loaded libraries (name @ load-base):\n") - 1);
+    if (lib_map[0]) write_all(fd, lib_map, strlen(lib_map));
+    write_all(fd, "====================================\n", sizeof("====================================\n") - 1);
+    write_all(fd, "backtrace (module+offset; addr2line against matching unstripped build):\n",
+              sizeof("backtrace (module+offset; addr2line against matching unstripped build):\n") - 1);
 
     TraceState st;
     st.fd = fd; st.written = 0; st.emitted = 0;
     _Unwind_Backtrace(trace_fn, &st);
 
-    write_all(fd, "====================================\n", 38);
+    write_all(fd, "====================================\n", sizeof("====================================\n") - 1);
     close(fd);
 
     __android_log_print(ANDROID_LOG_FATAL, CD_TAG,

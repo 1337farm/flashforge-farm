@@ -84,7 +84,11 @@ jobs:
     # required checks (apk/engine) are never evaluated from main's copy, the
     # skip-chain re-broken, and the PR can never auto-merge (seen on #28/#21
     # after the #29/#30 fix). This job pulls the current main into the head so
-    # the NEXT run evaluates main's (working) workflow against the merged head.
+    # a subsequent run evaluates main's (working) workflow against the merged
+    # head. (A push made with GITHUB_TOKEN does not itself re-trigger the
+    # workflow GitHub suppresses it — so the corrected head is picked up on
+    # the next real push/run; sync-head at least guarantees the head FILE
+    # content is current once that happens.)
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.draft == false
     steps:
       - name: Checkout head
@@ -108,14 +112,14 @@ jobs:
           BEFORE="$(git rev-parse --short=12 HEAD)"
           git merge --no-edit origin/main
           AFTER="$(git rev-parse --short=12 HEAD)"
-          # Push to the head ref using the actor's token; this re-triggers the
-          # workflow on the now-cleanly-merged head (main's workflow runs).
+          # Push the merged head back to the PR head ref so the next run uses
+          # main's current workflow. GITHUB_TOKEN pushes are suppressed from
+          # re-triggering the workflow, but the head file content is now
+          # correct, so any subsequent run evaluates the RIGHT workflow.
           git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
             "HEAD:${{ github.event.pull_request.head.ref }}"
-          echo "synced PR head $BEFORE -> $AFTER; pushed to re-run with the current workflow"
-          # Fail this run softly: packages/checks here are meaningless (they ran
-          # the stale workflow). Next run (head now == current) is authoritative.
-          exit 1
+          echo "synced PR head $BEFORE -> $AFTER; pushed corrected head for the next run"
+          exit 0
 
   test:
     name: test
@@ -145,10 +149,13 @@ jobs:
     name: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [sync-head]
-    # Skip the rest of the stale-workflow pipeline when sync-head self-healed
-    # (it exits 1 to re-trigger on the merged head); the next run is clean.
-    if: needs.sync-head.result == 'success' || needs.sync-head.result == 'skipped'
+    # NOTE: this job intentionally does NOT depend on sync-head. GitHub
+    # silently skips a job whose `needs` job was SKIPPED (not just when it
+    # fails), and sync-head is skipped on every non-PR run (push/dispatch on
+    # main). Depending on it here would skip 'changes' on main, stalling the
+    # whole dep/engine/APK build and starving the rolling releases — exactly
+    # the regression we must avoid. sync-head is independent; a stale head
+    # self-heal re-pushes and a subsequent run evaluates the corrected head.
     permissions:
       pull-requests: read
     outputs:

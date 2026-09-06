@@ -71,6 +71,52 @@ env:
   NDK_VERSION: "23.1.7779620"
 
 jobs:
+  sync-head:
+    name: sync
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: read
+    # Run FIRST on every same-repo PR. GitHub evaluates the workflow file in
+    # the PR HEAD — not main — so a PR opened before the latest workflow fix
+    # (or whose head fell behind main) keeps running a STALE workflow forever:
+    # required checks (apk/engine) are never evaluated from main's copy, the
+    # skip-chain re-broken, and the PR can never auto-merge (seen on #28/#21
+    # after the #29/#30 fix). This job pulls the current main into the head so
+    # the NEXT run evaluates main's (working) workflow against the merged head.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.draft == false
+    steps:
+      - name: Checkout head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Merge main into head to pick up current workflow (self-heal)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          # Already current? Nothing to do (and no need to trigger churn).
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "head already contains main; nothing to sync"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BEFORE="$(git rev-parse --short=12 HEAD)"
+          git merge --no-edit origin/main
+          AFTER="$(git rev-parse --short=12 HEAD)"
+          # Push to the head ref using the actor's token; this re-triggers the
+          # workflow on the now-cleanly-merged head (main's workflow runs).
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
+            "HEAD:${{ github.event.pull_request.head.ref }}"
+          echo "synced PR head $BEFORE -> $AFTER; pushed to re-run with the current workflow"
+          # Fail this run softly: packages/checks here are meaningless (they ran
+          # the stale workflow). Next run (head now == current) is authoritative.
+          exit 1
+
   test:
     name: test
     runs-on: ubuntu-24.04
@@ -99,6 +145,10 @@ jobs:
     name: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    needs: [sync-head]
+    # Skip the rest of the stale-workflow pipeline when sync-head self-healed
+    # (it exits 1 to re-trigger on the merged head); the next run is clean.
+    if: needs.sync-head.result == 'success' || needs.sync-head.result == 'skipped'
     permissions:
       pull-requests: read
     outputs:

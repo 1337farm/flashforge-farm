@@ -83,6 +83,25 @@ def main():
     if re.search(r"loadLibrary\(\s*\"TK", loader):
         failures.append("OCCTLoader.java still System.loadLibrary's OCCT toolkits (must be static-only)")
 
+    # Same-step PATH guard: GITHUB_PATH only applies to SUBSEQUENT steps, so a
+    # step that echoes the SDK bin dir to GITHUB_PATH AND then runs bare
+    # `sdkmanager` in the same run block MUST first export PATH inline —
+    # otherwise sdkmanager is not found (exit 127). This bit build-dep's
+    # "Set up Android SDK / NDK" on 2026-09-06.
+    for jid, job in jobs.items():
+        for step in job.get("steps", []):
+            run = step.get("run") or ""
+            if "GITHUB_PATH" not in run or "sdkmanager" not in run:
+                continue
+            first = run.find("sdkmanager")
+            prefix = run[:first]
+            if "export PATH" not in prefix or "cmdline-tools/latest/bin" not in prefix:
+                failures.append(
+                    f"job {jid!r} step {step.get('name', '?')!r} runs sdkmanager in the same "
+                    "step that sets GITHUB_PATH without an inline export PATH "
+                    "(cmdline-tools/latest/bin); GITHUB_PATH only affects later steps"
+                )
+
     if failures:
         print("CI GUARD FAILURES:")
         for f in failures:

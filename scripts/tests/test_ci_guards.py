@@ -198,6 +198,40 @@ def main():
             "without it the rolling releases go stale on every auto-merge"
         )
 
+    # Stale-head self-heal guard: GitHub runs the workflow found in the PR
+    # HEAD, not main. A PR opened before the latest workflow fix (or whose
+    # head fell behind main) keeps running a STALE workflow forever, so
+    # required checks (apk/engine) never re-evaluate and the PR can never
+    # auto-merge (seen on #28/#21 after the #29/#30 fix). A sync-head job must
+    # merge current main into the head and push, so the next run uses the
+    # working workflow. (2026-09-06.)
+    sync = jobs.get("sync-head", {})
+    if not sync:
+        failures.append(
+            "workflow must define a sync-head job that merges current main "
+            "into the PR head and pushes it, so stale-workflow PRs are "
+            "re-tested with the current workflow instead of being stuck forever"
+        )
+    else:
+        if sync.get("permissions", {}).get("contents") != "write":
+            failures.append("sync-head job must grant contents: write (to push the merged head)")
+        sync_withs = " ".join(
+            str(s.get("with", {})) for s in sync.get("steps", []) if isinstance(s, dict)
+        )
+        sync_runs = " ".join(
+            str(s.get("run", "")) for s in sync.get("steps", []) if isinstance(s, dict)
+        )
+        if "fetch-depth" not in sync_withs or "git merge" not in sync_runs:
+            failures.append(
+                "sync-head job must fetch full history and git merge origin/main "
+                "into the head (to pick up the current workflow)"
+            )
+        if "git push" not in sync_runs:
+            failures.append(
+                "sync-head job must git push the merged head back to the "
+                "pull_request head ref (to re-trigger with the current workflow)"
+            )
+
     # Same-step PATH guard: GITHUB_PATH only applies to SUBSEQUENT steps, so a
     # step that echoes the SDK bin dir to GITHUB_PATH AND then runs bare
     # `sdkmanager` in the same run block MUST first export PATH inline —

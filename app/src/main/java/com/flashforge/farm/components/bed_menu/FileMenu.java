@@ -287,20 +287,22 @@ public class FileMenu extends ListBedMenu {
             ModelLibrary.ensureModel(FarmApp.INSTANCE, key + ".stl", new ModelLibrary.Callback() {
                 @Override
                 public void onReady(File src) {
-                    try {
-                        File f = new File(FarmApp.getModelCacheDir(), "calibration_" + key + ".stl");
-                        copyFile(src, f);
-                        ViewUtils.postOnMainThread(() -> {
-                            try {
-                                FileMenu.this.fragment.loadModel(f);
-                                Bus.OBJECTS_LIST_CHANGED.postValue(new ObjectsListChangedEvent());
-                            } catch (Exception e) {
-                                Log.e("FileMenu", "Failed to load PA placeholder model", e);
-                            }
-                        });
-                    } catch (Exception e) {
-                        Log.e("FileMenu", "Failed to load PA placeholder model", e);
-                    }
+                    new Thread(() -> {
+                        try {
+                            File f = new File(FarmApp.getModelCacheDir(), "calibration_" + key + ".stl");
+                            copyFile(src, f);
+                            ViewUtils.postOnMainThread(() -> {
+                                try {
+                                    FileMenu.this.fragment.loadModel(f);
+                                    Bus.OBJECTS_LIST_CHANGED.postValue(new ObjectsListChangedEvent());
+                                } catch (Exception e) {
+                                    Log.e("FileMenu", "Failed to load PA placeholder model", e);
+                                }
+                            });
+                        } catch (Exception e) {
+                            Log.e("FileMenu", "Failed to load PA placeholder model", e);
+                        }
+                    }, "model-copy").start();
                 }
 
                 @Override

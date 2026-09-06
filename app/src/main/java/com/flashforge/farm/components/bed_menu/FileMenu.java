@@ -313,7 +313,7 @@ public class FileMenu extends ListBedMenu {
             });
         }
 
-        private static void copyFile(File src, File dst) throws IOException {
+        private void copyFile(File src, File dst) throws IOException {
             try (InputStream in = new java.io.FileInputStream(src);
                  FileOutputStream fos = new FileOutputStream(dst)) {
                 byte[] buffer = new byte[10240];

@@ -103,12 +103,6 @@ public class FarmApp extends Application {
             String trace = sw.toString();
             writeCrashDump("java", trace);
 
-            // Always push the report straight to Downloads at crash exit so the
-            // user never has to dig through the app (and there is no on-load screen).
-            String fname = "FlashForgeFarm_crash_" + new java.text.SimpleDateFormat(
-                    "yyyyMMdd_HHmmss", java.util.Locale.US).format(new java.util.Date()) + ".log";
-            saveToDownloads(this, fname, trace);
-
             Runtime.getRuntime().exit(0);
         });
     }
@@ -146,17 +140,22 @@ public class FarmApp extends Application {
     }
 
     /**
-     * Append a crash/error dump to a timestamped file under getCrashDir() so it
-     * survives the process and can be pulled/shared. Used by both the Java
-     * uncaught-exception handler and the native crash handler.
+     * Append a crash/error dump to the SINGLE session log under getCrashDir()
+     * (farm_crash.log, append mode). Used by both the Java uncaught-exception
+     * handler and the native crash handler, so every crash record from one app
+     * start lives in one file — not one file per pid/timestamp (2026-09-06: a
+     * crash loop was producing 10-20 farm_crash_*.log files in Downloads).
      */
     public static void writeCrashDump(String kind, String trace) {
         try {
             File dir = getCrashDir();
-            String stamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
-                    .format(new java.util.Date());
-            File f = new File(dir, "farm_" + kind + "_" + stamp + "_" + android.os.Process.myPid() + ".log");
-            try (FileOutputStream fos = new FileOutputStream(f)) {
+            File f = new File(dir, "farm_crash.log");
+            String banner = "\n==== " + kind + " crash ====\n"
+                    + "time: " + new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+                            .format(new java.util.Date())
+                    + " pid: " + android.os.Process.myPid() + "\n";
+            try (FileOutputStream fos = new FileOutputStream(f, true)) {
+                fos.write(banner.getBytes(StandardCharsets.UTF_8));
                 fos.write(trace.getBytes(StandardCharsets.UTF_8));
             }
         } catch (Exception ignored) {
@@ -237,13 +236,22 @@ public class FarmApp extends Application {
     /**
      * Silently export any pending crash dumps (native crashes write straight to
      * getCrashDir() at signal time and never get a chance to run the Java
-     * uncaught handler) into Downloads, then clear them. Called on app start so a
-     * crash is never lost and there is no on-load error screen.
+     * uncaught handler) into ONE canonical Downloads document (farm_crash.log),
+     * then clear them. Called on app start so a crash is never lost and there
+     * is no on-load error screen. Every internal file is concatenated into the
+     * same document, and older farm_crash_* docs from earlier crashes are
+     * pruned, so Downloads never accumulates 10-20 crash files from a crash
+     * loop — there is exactly one, always holding the latest crash set.
      */
     public static void exportPendingCrashesToDownloads() {
         try {
-            int saved = 0;
-            for (File f : listCrashReports()) {
+            java.util.List<File> reports = listCrashReports();
+            // Always sweep stale pre-consolidation docs so an already-polluted
+            // Downloads folder converges to the single farm_crash.log even when
+            // no new crash has occurred this session.
+            pruneStaleCrashFiles();
+            StringBuilder all = new StringBuilder();
+            for (File f : reports) {
                 StringBuilder sb = new StringBuilder();
                 try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
                     byte[] buf = new byte[8192];
@@ -252,11 +260,103 @@ public class FarmApp extends Application {
                 } catch (Exception ignored) {
                     continue; // skip unreadable files
                 }
-                if (saveToDownloads(INSTANCE, f.getName(), sb.toString())) saved++;
-                f.delete();
+                if (sb.length() > 0) {
+                    if (all.length() > 0) all.append('\n');
+                    all.append("==== ").append(f.getName()).append(" ====\n");
+                    all.append(sb);
+                }
             }
-            if (saved > 0) {
-                Log.i("FarmCrash", "Exported " + saved + " pending crash log(s) to Downloads");
+            boolean ok = all.length() > 0 && updateOrCreateDownloads(INSTANCE, "farm_crash.log", all.toString());
+            if (ok) {
+                for (File f : reports) f.delete();
+                Log.i("FarmCrash", "Exported " + reports.size() + " pending crash log(s) to Downloads (single farm_crash.log)");
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Write crash content into a SINGLE canonical Downloads document, updating
+     * the existing one in place instead of inserting another file. Publishing a
+     * new MediaStore row per crash is what filled Downloads with 10-20
+     * farm_crash_*.log files during a crash loop.
+     */
+    public static boolean updateOrCreateDownloads(android.content.Context ctx, String displayName, String content) {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return false;
+        android.net.Uri base = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+        android.net.Uri existing = null;
+        android.database.Cursor c = null;
+        try {
+            c = ctx.getContentResolver().query(base,
+                    new String[]{android.provider.MediaStore.MediaColumns._ID},
+                    android.provider.MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " + android.provider.MediaStore.MediaColumns.RELATIVE_PATH + "=?",
+                    new String[]{displayName, android.os.Environment.DIRECTORY_DOWNLOADS + "/"}, null);
+            if (c != null && c.moveToFirst()) {
+                existing = android.content.ContentUris.withAppendedId(base, c.getLong(0));
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
+        }
+        try {
+            byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
+            if (existing != null) {
+                // The app owns the MediaStore.Downloads row it created, so it can
+                // re-open it "rwt" (truncate) and overwrite in place — no new file.
+                try (java.io.OutputStream os = ctx.getContentResolver().openOutputStream(existing, "rwt")) {
+                    if (os == null) return false;
+                    os.write(bytes);
+                }
+                return true;
+            }
+            android.content.ContentValues values = new android.content.ContentValues();
+            values.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, displayName);
+            values.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/plain");
+            values.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH,
+                    android.os.Environment.DIRECTORY_DOWNLOADS);
+            android.net.Uri uri = ctx.getContentResolver().insert(base, values);
+            if (uri == null) return false;
+            try (java.io.OutputStream os = ctx.getContentResolver().openOutputStream(uri)) {
+                if (os == null) return false;
+                os.write(bytes);
+            }
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    /**
+     * Delete older crash documents the app previously published to Downloads
+     * (per-pid / per-timestamp farm_crash_* files from before the consolidation,
+     * plus this version's own leftovers if an export was interrupted), keeping
+     * only the canonical farm_crash.log. Best-effort; rows the app does not own
+     * are simply left alone.
+     */
+    public static void pruneStaleCrashFiles() {
+        try {
+            android.net.Uri base = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+            android.database.Cursor c = null;
+            java.util.ArrayList<android.net.Uri> stale = new java.util.ArrayList<>();
+            try {
+                c = INSTANCE.getContentResolver().query(base,
+                        new String[]{android.provider.MediaStore.MediaColumns._ID},
+                        "(" + android.provider.MediaStore.MediaColumns.DISPLAY_NAME + " LIKE 'farm_crash_%' OR "
+                                + android.provider.MediaStore.MediaColumns.DISPLAY_NAME + " LIKE 'FlashForgeFarm_crash_%') AND "
+                                + android.provider.MediaStore.MediaColumns.DISPLAY_NAME + " <> 'farm_crash.log'",
+                        null, null);
+                if (c != null) {
+                    while (c.moveToNext()) stale.add(android.content.ContentUris.withAppendedId(base, c.getLong(0)));
+                }
+            } catch (Exception ignored) {
+            } finally {
+                if (c != null) c.close();
+            }
+            for (android.net.Uri u : stale) {
+                try {
+                    INSTANCE.getContentResolver().delete(u, null, null);
+                } catch (Exception ignored) {
+                }
             }
         } catch (Exception ignored) {
         }

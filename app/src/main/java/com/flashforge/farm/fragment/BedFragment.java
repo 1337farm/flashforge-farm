@@ -668,7 +668,15 @@ public class BedFragment extends Fragment {
                     if (!DEBUG_VIEWER) {
                         new SliceProgressBottomSheet(ctx).show();
                     }
-                    new Thread(()->{
+                    // Slicing runs deep native code (Print::apply -> config
+                    // apply -> OpenMP) that needs far more than ART's ~1MB
+                    // default stack for a new Thread. Give it a 32MB stack:
+                    // on the default size the engine died with a stack
+                    // overflow inside the vDSO time call the first time a
+                    // thread walked the config apply chain (2026-09-06 crash
+                    // farm_crash_9290.log at Print::apply). Named thread so
+                    // future crash dumps identify the slicer thread.
+                    new Thread(null, () -> {
                         try {
                             Process.setThreadPriority(-20);
 
@@ -721,7 +729,7 @@ public class BedFragment extends Fragment {
                                         .show();
                             });
                         }
-                    }).start();
+                    }, "farm-slice", 32 * 1024 * 1024).start();
                 }
                 return false;
             } else {

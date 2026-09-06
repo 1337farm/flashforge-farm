@@ -276,6 +276,75 @@ def main():
                     "(cmdline-tools/latest/bin); GITHUB_PATH only affects later steps"
                 )
 
+    # Slice-thread stack guard: the native slicer (Print::apply -> config
+    # apply -> OpenMP) must run on a big-stack thread. ART's ~1MB default for
+    # `new Thread()` overflows inside Slic3r::Print::apply, faulting in the
+    # vDSO on the first gettimeofday (2026-09-06 farm_crash_9290.log).
+    bed = (REPO / "app/src/main/java/com/flashforge/farm/fragment/BedFragment.java").read_text()
+    if not re.search(r"new Thread\(\s*null,\s*\(\) ->", bed) or "32 * 1024 * 1024" not in bed:
+        failures.append(
+            "BedFragment must run the native slice on a big-stack thread "
+            "(Thread(null, runnable, \"farm-slice\", 32 * 1024 * 1024)); the "
+            "default ~1MB new Thread() stack overflows in Slic3r::Print::apply"
+        )
+
+    # Crash-log consolidation guards: (1) the native handler must write ONE
+    # session-stable farm_crash.log with O_APPEND — per-pid/per-timestamp names
+    # leave a new Downloads file per crash restart; (2) the header must not
+    # format the loaded-library map inside the signal/build/register snprintf,
+    # because its would-be length exceeds the buffer on real devices and
+    # silently drops the whole header (dumps had no signal/fault/registers);
+    # (3) FarmApp must consolidate/update a single Downloads document and prune
+    # stale ones instead of inserting a new MediaStore row per crash.
+    # (All 2026-09-06: a slice crash-loop piled 10-20 farm_crash_*/logs into
+    # Downloads and every report lacked signal info.)
+    cd = (REPO / "app/src/main/jni/farm/farm_crashdump.cpp").read_text()
+    if "farm_crash_%d" in cd:
+        failures.append(
+            "farm_crashdump.cpp must write the session-stable farm_crash.log "
+            "(no per-pid %d in the name); per-pid names leave one Downloads "
+            "file per crash restart"
+        )
+    if "O_APPEND" not in cd or "O_WRONLY | O_CREAT | O_APPEND" not in cd:
+        failures.append(
+            "farm_crashdump.cpp must open farm_crash.log O_WRONLY | O_CREAT | "
+            "O_APPEND so a crash set from one app start accumulates in one "
+            "file; O_TRUNC/per-pid naming leaves one Downloads file per crash"
+        )
+    if "loaded libraries (name @ load-base):\\n%s" in cd:
+        failures.append(
+            "farm_crashdump.cpp must not format the loaded-library map inside "
+            "the signal/build/register snprintf (would-be length > buffer on "
+            "real devices silently drops the whole header, losing signal, fault "
+            "address and registers from every dump)"
+        )
+
+    farm = (REPO / "app/src/main/java/com/flashforge/farm/FarmApp.java").read_text()
+    if re.search(r'"FlashForgeFarm_crash_', farm):
+        failures.append(
+            "FarmApp's uncaught handler must not save timestamped "
+            "FlashForgeFarm_crash_* files (double-quoted string) to Downloads "
+            "at crash exit (one more file per crash); the start-time exporter "
+            "consolidates into farm_crash.log"
+        )
+    if '"farm_crash.log"' not in farm:
+        failures.append(
+            "FarmApp must use the single canonical Downloads document name "
+            "farm_crash.log for crash exports, never per-crash insertions"
+        )
+    if "updateOrCreateDownloads" not in farm:
+        failures.append(
+            "FarmApp must update the existing farm_crash.log Downloads document "
+            "in place (openOutputStream \"rwt\") instead of inserting a new "
+            "MediaStore row per crash (that accumulated 10-20 files in Downloads)"
+        )
+    if "pruneStaleCrashFiles" not in farm:
+        failures.append(
+            "FarmApp must prune older per-pid/per-timestamp farm_crash_* and "
+            "FlashForgeFarm_crash_* Downloads docs owned by the app on start, "
+            "to clean up pre-consolidation pile-ups"
+        )
+
     if failures:
         print("CI GUARD FAILURES:")
         for f in failures:

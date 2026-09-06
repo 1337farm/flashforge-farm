@@ -77,13 +77,15 @@ android {
             ]
         }
         jniLibs {
-            // Debug builds default to extractNativeLibs=true, which STORES
-            // native libs uncompressed: libslic3r.so sits at ~65MB and the
-            // APK at ~84MB. Compressing them (extractNativeLibs=false) lets
-            // the APK carry DEFLATE'd libs that load straight from the zip on
-            // API 23+ (minSdk 23): libslic3r.so drops ~3x (65MB -> ~22MB),
-            // taking the whole APK down to ~40MB.
-            useLegacyPackaging = false
+            // The .so files used to ship STORED (uncompressed), leaving the
+            // debug APK at ~84MB (libslic3r.so alone is ~65MB). Semantics are
+            // inverted from the name: useLegacyPackaging = true enables the
+            // LEGACY convention of COMPRESSING .so files inside the APK
+            // (libs extracted at install); null/false keeps them uncompressed
+            // + page-aligned (modern default on minSdk 23+). Compress,
+            // shrinking libslic3r.so ~3x (65MB -> ~22MB) and the whole APK
+            // down to ~40MB.
+            useLegacyPackaging = true
         }
     }
 

@@ -156,6 +156,23 @@ def main():
             "rolling releases for later consumers"
         )
 
+    # Skip-exclusion guard: jobs that must run even when an upstream `needs`
+    # job was SKIPPED (native=false path-filter skips dep/engine) need
+    # !cancelled() in their job-level if: — a plain conditional like
+    # needs.X.result != 'failure' is NOT evaluated when a needs job skipped,
+    # so GitHub silently drops the job. (2026-09-06: PR #26 p2p publish kit,
+    # native=false -> apk AND merge both skipped, PR never auto-merged.)
+    for jid in ("package-apk", "automerge"):
+        job = jobs.get(jid, {})
+        job_if = str(job.get("if", ""))
+        if "cancelled()" not in job_if:
+            failures.append(
+                f"job {jid!r} ({job.get('name')!r}) must gate its if: with "
+                "!cancelled() (skip-exclusion): without it GitHub skips the "
+                "job whenever an upstream needs job was skipped, silently "
+                "breaking the native=false PR path / automerge"
+            )
+
     # Same-step PATH guard: GITHUB_PATH only applies to SUBSEQUENT steps, so a
     # step that echoes the SDK bin dir to GITHUB_PATH AND then runs bare
     # `sdkmanager` in the same run block MUST first export PATH inline —

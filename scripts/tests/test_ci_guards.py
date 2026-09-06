@@ -83,6 +83,21 @@ def main():
     if re.search(r"loadLibrary\(\s*\"TK", loader):
         failures.append("OCCTLoader.java still System.loadLibrary's OCCT toolkits (must be static-only)")
 
+    # Dep trees for the APK must come from the dep-*-latest RELEASES, never
+    # from actions/cache: build-dep only saves a cache entry when it rebuilds
+    # from source, and release-reuse skips saving -> a native PR would
+    # otherwise fail on cache-miss. (2026-09-06: Restore OCCT did exactly
+    # that with fail-on-cache-miss: true and halted package-apk.)
+    apk = jobs.get("package-apk", {})
+    if any(
+        isinstance(step, dict) and "actions/cache" in str(step.get("uses", ""))
+        for step in apk.get("steps", [])
+    ):
+        failures.append(
+            "package-apk uses actions/cache; APK dep trees must be restored from "
+            "the dep-*-latest releases (build-dep skips saving the cache on reuse)"
+        )
+
     # Same-step PATH guard: GITHUB_PATH only applies to SUBSEQUENT steps, so a
     # step that echoes the SDK bin dir to GITHUB_PATH AND then runs bare
     # `sdkmanager` in the same run block MUST first export PATH inline —

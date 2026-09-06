@@ -765,16 +765,11 @@ jobs:
           # API 37 ships as android-37.0 only; builds resolve android-37.
           ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
 
-      - name: Restore OCCT
-        if: needs.changes.outputs.native == 'true'
-        uses: actions/cache/restore@v5
-        with:
-          path: engine/src/main/occt
-          key: ${{ needs.build-dep.outputs.occt_dep_key }}
-          fail-on-cache-miss: true
-
-      - name: Restore OCCT from release (non-native PRs)
-        if: needs.changes.outputs.native != 'true'
+      - name: Restore OCCT headers from release (bridge compile needs)
+        # compiled trees come from the dep-occt-latest release, exactly like
+        # Boost/oneTBB below — never from actions/cache, whose entry only
+        # exists if build-dep rebuilt from source (release-reuse skips saving
+        # it, so a native PR would otherwise hard-fail on cache-miss).
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -785,6 +780,7 @@ jobs:
           GOT="$(sha256sum "$DL/occt-deps.tar.gz" | cut -d' ' -f1)"
           [ "$WANT" = "$GOT" ] || { echo "ERROR: occt release sha mismatch"; exit 1; }
           tar -xzf "$DL/occt-deps.tar.gz"
+          test -d engine/src/main/occt || { echo "ERROR: OCCT trees missing after extract"; exit 1; }
           echo "OCCT restored from release"
 
       - name: Restore Boost headers from release (bridge compile needs)

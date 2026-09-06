@@ -14,7 +14,7 @@ project(libslic3r-engine C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-old-style-cast -Wno-reserved-id-macro -Wno-c++98-compat-pedantic -funwind-tables -fopenmp -static-openmp -Wl,--no-merge-exidx-entries")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-old-style-cast -Wno-reserved-id-macro -Wno-c++98-compat-pedantic -funwind-tables -fopenmp -static-openmp -ffunction-sections -fdata-sections -Wl,--no-merge-exidx-entries")
 add_compile_options(-fsigned-char)
 
 # Suppress all warnings
@@ -61,13 +61,24 @@ set(OCCT_JNI_LIBS ${CMAKE_SOURCE_DIR}/src/main/occt/jniLibs)
 # merged into TKDESTEP, so TKSTEP must NOT be listed here (it no longer exists).
 set(OCCT_LIBS TKDESTEP TKXCAF TKCAF TKLCAF TKCDF TKV3d TKMesh TKXMesh TKXSBase TKService TKBO TKPrim TKHLR TKShHealing TKTopAlgo TKGeomAlgo TKGeomBase TKBRep TKG3d TKG2d TKMath TKernel)
 
+# STATIC OCCT toolkits, resolved lazily at link end (see comment above):
+# OCCT is built with -ffunction-sections/-fdata-sections (see
+# scripts/build_all_deps_android.sh), so linking against those archives with
+# --gc-sections dead-code-eliminates every toolkit bit the engine never calls.
+# The .a are link-time-only inputs: all reachable OCCT code becomes part of
+# libslic3r.so — NO libTK*.so is packaged or loaded by the app anymore.
 foreach (NAME IN LISTS OCCT_LIBS)
-    add_library(occt_${NAME} SHARED IMPORTED)
+    add_library(occt_${NAME} STATIC IMPORTED)
     set_target_properties(occt_${NAME} PROPERTIES IMPORTED_LOCATION
-            ${OCCT_JNI_LIBS}/${ANDROID_ABI}/lib${NAME}.so)
+            ${OCCT_JNI_LIBS}/${ANDROID_ABI}/lib${NAME}.a)
 endforeach()
 
 list(TRANSFORM OCCT_LIBS PREPEND "occt_")
+# All OCCT toolkits are mutual PRIVATE/interface deps (TKTopAlgo -> TKGeomAlgo
+# -> TKGeomBase etc.). Declare no direct PRIVATE link ordering (the archives are
+# resolved lazily at the final link of libslic3r.so by the --start-group flag
+# added to target_link_options), so multi-symbol dependency chains between
+# toolkits can never be missed by libslic3r's own link line.
 
 
 add_library(tbb STATIC IMPORTED)
@@ -1292,5 +1303,13 @@ target_link_libraries(slic3r PRIVATE
         boost_url
         boost_wave
         boost_wserialization
+        -Wl,--start-group
         ${OCCT_LIBS}
+        -Wl,--end-group
 )
+
+# Dead-code-eliminate every function/data section that is not reachable from
+# libslic3r.so's roots (the engine sources and libfarm's JNI/render glue resolve
+# OCCT through the exported symbols of this .so). Static OCCT + gc-sections is
+# the reason the APK no longer ships 42MB of libTK*.so runtime.
+target_link_options(slic3r PRIVATE -Wl,--gc-sections)

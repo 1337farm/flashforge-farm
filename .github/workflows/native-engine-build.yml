@@ -225,7 +225,7 @@ jobs:
               boost)
                 [ "$(ls engine/src/main/jniImports/boost/lib/$ABI/lib/libboost_*.a 2>/dev/null | wc -l)" -ge 30 ] ;;
               occt)
-                [ "$(ls engine/src/main/occt/jniLibs/$ABI/libTK*.so 2>/dev/null | wc -l)" -ge 20 ] \
+                [ "$(ls engine/src/main/occt/jniLibs/$ABI/libTK*.a 2>/dev/null | wc -l)" -ge 20 ] \
                 && [ -n "$(ls -A engine/src/main/occt/include/$ABI 2>/dev/null)" ] ;;
             esac
           }
@@ -717,8 +717,10 @@ jobs:
     needs: [build-dep, build-engine, changes]
     # Skipped upstream jobs (path-filtered native builds) must NOT skip this
     # job: without this gate, GitHub skips the whole APK assembly+test stage
-    # whenever deps/engine legitimately skip. Failed upstream still blocks.
-    if: needs.changes.result == 'success' && (needs.build-dep.result == 'success' || needs.build-dep.result == 'skipped') && (needs.build-engine.result == 'success' || needs.build-engine.result == 'skipped')
+    # whenever deps/engine legitimately skip. Only genuine failure or
+    # cancellation upstream blocks. (Failure-exclusion, not success-inclusion:
+    # skipped matrix results confuse the success-inclusion form.)
+    if: needs.changes.result == 'success' && needs.build-dep.result != 'failure' && needs.build-dep.result != 'cancelled' && needs.build-engine.result != 'failure' && needs.build-engine.result != 'cancelled'
     timeout-minutes: 120
     permissions:
       contents: write
@@ -875,10 +877,16 @@ jobs:
           chmod +x scripts/strip-so.sh
           scripts/strip-so.sh engine/output/arm64-v8a/libslic3r.so
 
-      - name: Package OCCT runtime (linked toolkits only, stripped)
+      - name: Verify OCCT is statically linked (no runtime libTK in APK)
         run: |
-          chmod +x scripts/package-occt-runtime.sh
-          scripts/package-occt-runtime.sh
+          SO=engine/output/arm64-v8a/libslic3r.so
+          if readelf -d "$SO" | grep -q 'libTK'; then
+            echo "ERROR: libslic3r.so still has OCCT runtime DT_NEEDED (expected static link)"; exit 1
+          fi
+          if find engine/output engine/src/main/jniLibs -name 'libTK*.so' 2>/dev/null | grep -q .; then
+            echo "ERROR: stale libTK*.so staged for APK (OCCT must be static-only)"; find engine/output engine/src/main/jniLibs -name 'libTK*.so'; exit 1
+          fi
+          echo "OK: OCCT statically linked into libslic3r.so; no libTK runtime staged"
 
       - name: Grant execute permission
         run: chmod +x gradlew
@@ -926,6 +934,30 @@ jobs:
           gh release create farm-apk-latest "$OUT/$APK_NAME" "$OUT/apk-manifest.json" --repo "${{ github.repository }}" \
             --title "FlashForge Farm APK (latest)" \
             --notes "Rolling sideloadable debug APK built from source. Re-published on every green build."
+
+  publish-models:
+    name: models
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --depth 100 origin "${{ github.sha }}"
+          git checkout "${{ github.sha }}"
+
+      - name: Publish sample-models release (deterministic, sha-pinned)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          chmod +x scripts/publish-models.sh
+          scripts/publish-models.sh --publish
+          echo "models-latest verified (models.zip sha pinned in models/manifest.json)"
 
   automerge:
     name: merge

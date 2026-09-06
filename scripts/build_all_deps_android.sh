@@ -124,7 +124,7 @@ build_boost() {
 }
 
 build_occt() {
-    echo "--- [OCCT] Building OCCT (FULL build, all toolkits, exports on) ---"
+    echo "--- [OCCT] Building OCCT (FULL build, all toolkits, STATIC, gc-sections) ---"
     if [ ! -d "OCCT" ]; then
         git clone https://github.com/Open-Cascade-SAS/OCCT.git
     fi
@@ -139,6 +139,10 @@ build_occt() {
     git -C OCCT checkout -f V7_9_0
     cd OCCT
     mkdir -p build-android && cd build-android
+    # STATIC toolkit + function/data-sections so the engine link can apply
+    # --gc-sections and dead-code-eliminate every OCCT bit the slicer never
+    # touches (the old dynamic libTK*.so runtime cost 42MB in the APK; static
+    # linkage embeds only the reachable code in libslic3r.so).
     $CMAKE_BIN \
       -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
       -DANDROID_ABI=$ABI \
@@ -147,7 +151,9 @@ build_occt() {
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_C_COMPILER_LAUNCHER=ccache \
       -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-      -DBUILD_LIBRARY_TYPE=Shared \
+      -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" \
+      -DCMAKE_CXX_FLAGS="-ffunction-sections -fdata-sections" \
+      -DBUILD_LIBRARY_TYPE=Static \
       -DUSE_FREETYPE=OFF \
       -DBUILD_MODULE_Draw=OFF \
       -DBUILD_DOC_Overview=OFF \
@@ -160,17 +166,19 @@ build_occt() {
     # time. A full build guarantees no header/lib is left out.
     make -j$N_CORES
     mkdir -p "$OCCT_DIR/jniLibs/$ABI"
-    # OCCT's CMake exports shared libs into a host-dir subtree of the build dir
-    # (e.g. lin64/clang/lib or lib/ depending on the generator), and the public
-    # headers are generated into the build dir's inc/opencascade tree. Locate
-    # them explicitly instead of guessing the exact layout.
-    LIB_SRC="$(find . -path '*/lib/libTK*.so' -printf '%h\n' | sort -u | head -1)"
+    # OCCT's CMake exports static archives into a host-dir subtree of the build
+    # dir (e.g. lin64/clang/lib or lib/ depending on the generator), and the
+    # public headers are generated into the build dir's inc/opencascade tree.
+    # Locate them explicitly instead of guessing the exact layout. These .a are
+    # link-time-only inputs for libslic3r.so — they are NOT packaged into the
+    # APK (OCCT code is static inside the engine).
+    LIB_SRC="$(find . -path '*/lib/libTK*.a' -printf '%h\n' | sort -u | head -1)"
     if [ -n "$LIB_SRC" ]; then
-        cp "$LIB_SRC"/libTK*.so "$OCCT_DIR/jniLibs/$ABI/"
-        echo "--- [OCCT] copied $(ls "$OCCT_DIR/jniLibs/$ABI"/*.so | wc -l) shared libs from $LIB_SRC ---"
-        ls -la "$OCCT_DIR/jniLibs/$ABI"/libTK*.so | head -20
+        cp "$LIB_SRC"/libTK*.a "$OCCT_DIR/jniLibs/$ABI/"
+        echo "--- [OCCT] copied $(ls "$OCCT_DIR/jniLibs/$ABI"/*.a | wc -l) static archives from $LIB_SRC ---"
+        ls -la "$OCCT_DIR/jniLibs/$ABI"/libTK*.a | head -20
     else
-        echo "ERROR: no libTK*.so found under OCCT build dir" >&2
+        echo "ERROR: no libTK*.a found under OCCT build dir" >&2
         exit 1
     fi
 # Public headers are generated + gathered into the build dir's inc/ tree.

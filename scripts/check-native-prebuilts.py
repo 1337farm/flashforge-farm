@@ -35,7 +35,7 @@ for name in ["gmp", "gmpxx", "mpfr"]:
 occt = re.search(r"set\(OCCT_LIBS\s+([^\)]+)\)", cmake, re.S)
 if occt:
     for name in occt.group(1).split():
-        checks.append(("occt", f"occt_{name}", engine / f"src/main/occt/jniLibs/{abi}/lib{name}.so"))
+        checks.append(("occt", f"occt_{name}", engine / f"src/main/occt/jniLibs/{abi}/lib{name}.a"))
 
 boost = re.search(r"set\(BOOST_LIBS\s+([^\)]+)\)", cmake, re.S)
 boost_arch = {

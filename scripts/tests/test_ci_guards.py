@@ -56,22 +56,30 @@ def main():
         if ctx not in names.values():
             failures.append(f"required check {ctx!r} matches no job name")
 
-    # OCCT runtime set drift guard: the APK-packaged toolkits (ensure-apk.sh
-    # assertion) must equal the engine's linked OCCT_LIBS — the packager
-    # stages exactly that closure (verified against libslic3r.so DT_NEEDED).
+    # OCCT static-link guard: OCCT must be statically linked into libslic3r.so
+    # (engine imports .a archives, gc-sections'd) — it must NOT be packaged or
+    # loaded as libTK*.so runtime libs anymore. Any place asserting/aspecting
+    # libTK*.so in the APK is a regression to the 42MB runtime payload.
     cmake = (REPO / "engine/CMakeLists.txt").read_text()
     m = re.search(r"set\(OCCT_LIBS\s+([^\)]+)\)", cmake, re.S)
     libs = set(m.group(1).split()) if m else set()
-    sh = (REPO / "scripts/ensure-apk.sh").read_text()
-    m2 = re.search(r'^OCCT_SO="([^"]+)"', sh, re.M)
-    asserted = set(m2.group(1).split()) if m2 else set()
-    print(f"occt libs: cmake={len(libs)} asserted={len(asserted)}")
+    print(f"occt static link set: {len(libs)} toolkits")
     if not libs:
         failures.append("could not parse OCCT_LIBS from engine/CMakeLists.txt")
-    elif libs != asserted:
-        failures.append(
-            f"OCCT set drift: cmake-only={sorted(libs - asserted)} "
-            f"assert-only={sorted(asserted - libs)}")
+    if re.search(r"libTK\*\.so", cmake):
+        failures.append("engine/CMakeLists.txt still imports shared libTK*.so (must be static .a)")
+
+    sh = (REPO / "scripts/ensure-apk.sh").read_text()
+    if re.search(r"OCCT_SO|libTK", sh):
+        failures.append("ensure-apk.sh still requires OCCT runtime libTK*.so in the APK (must be static-only)")
+
+    gradle = (REPO / "app/build.gradle").read_text()
+    if "occt-libs" in gradle:
+        failures.append("app/build.gradle still stages engine/output/occt-libs (OCCT must be static-only)")
+
+    loader = (REPO / "app/src/main/java/com/flashforge/farm/slic3r/OCCTLoader.java").read_text()
+    if re.search(r"loadLibrary\(\s*\"TK", loader):
+        failures.append("OCCTLoader.java still System.loadLibrary's OCCT toolkits (must be static-only)")
 
     if failures:
         print("CI GUARD FAILURES:")

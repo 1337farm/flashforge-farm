@@ -15,7 +15,6 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.security.MessageDigest;
-import java.util.Iterator;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -24,7 +23,7 @@ public class ModelLibrary {
     private static final String RELEASE_BASE =
             "https://github.com/1337farm/flashforge-farm/releases/download/models-latest";
     private static final String MANIFEST_SHA =
-            "9df6a2972b69bbf143bc3a702efc512a681ffefb6d7f1cce557540d225ced7d7";
+            "dfd40c1f07d9e7a6689a55f340b6ac566637a64ffd734896fa2081744416adc1";
     private static final String DIR_NAME = "models";
     private static final Object LOCK = new Object();
 

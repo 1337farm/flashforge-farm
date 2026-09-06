@@ -1,46 +1,17 @@
 package com.flashforge.farm.slic3r;
 
-import android.util.Log;
-
-import java.util.Arrays;
-import java.util.List;
-
+/**
+ * OCCT is statically linked into libslic3r.so (the engine links the OCCT
+ * archives with --gc-sections; see engine/CMakeLists.txt and
+ * scripts/build_all_deps_android.sh). There are no libTK*.so runtime libraries
+ * to load anymore — this class exists only as a compatibility point for
+ * Native's static-initializer sequence.
+ */
 class OCCTLoader {
-    private static final String TAG = "slic3r.OCCTLoader";
-
-    private final static List<String> LIBS = Arrays.asList(
-            "TKDESTEP",
-            "TKXCAF",
-            "TKLCAF",
-            "TKCAF",
-            "TKCDF",
-            "TKV3d",
-            "TKMesh",
-            "TKXMesh",
-            "TKBO",
-            "TKPrim",
-            "TKHLR",
-            "TKShHealing",
-            "TKTopAlgo",
-            "TKGeomAlgo",
-            "TKGeomBase",
-            "TKBRep",
-            "TKG3d",
-            "TKG2d",
-            "TKMath",
-            "TKernel",
-            "TKDE"
-    );
-
     static void load() {
-        for (String lib : LIBS) {
-            try {
-                System.loadLibrary(lib);
-                Log.d(TAG, "Loaded lib" + lib + ".so");
-            } catch (Throwable t) {
-                Log.e(TAG, "Failed to load lib" + lib + ".so", t);
-                throw t;
-            }
-        }
+        // No per-toolkit System.loadLibrary: all OCCT code lives inside
+        // libslic3r.so (loaded by Native). A stale libTK*.so load here would
+        // fail to crash-free apps and warned silently before, but now simply
+        // must not happen.
     }
 }

@@ -56,3 +56,6 @@ compile_mocks.txt
 /benchy.gcode
 /benchy_new.gcode
 app/screen.png
+
+# Generated sample-model archive (rebuilt deterministically by publish-models.sh)
+/models/models.zip

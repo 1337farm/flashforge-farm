@@ -53,9 +53,10 @@ DL_CACHE="$ROOT/.apk-cache/$LOCAL_SHA"
 # Native libs the app requires at runtime. Keep in sync with
 # Native.java / OCCTLoader.java. libslic3r.so is the engine and MUST be present
 # (black screen / boot crash otherwise); libfarm.so is this app's JNI bridge.
+# OCCT toolkits are NOT required: they are statically linked into libslic3r.so
+# (see engine/CMakeLists.txt — static OCCT + --gc-sections), so libTK*.so is
+# never packaged or loaded anymore.
 REQUIRED_SO="libslic3r.so libfarm.so libc++_shared.so libgmp.so libgmpxx.so libmpfr.so"
-OCCT_SO="TKDESTEP TKXCAF TKCAF TKLCAF TKCDF TKV3d TKMesh TKXMesh TKXSBase TKService TKBO TKPrim TKHLR TKShHealing TKTopAlgo TKGeomAlgo TKGeomBase TKBRep TKG3d TKG2d TKMath TKernel"
-REQUIRED_SO="$REQUIRED_SO $(echo "$OCCT_SO" | xargs -n1 printf 'lib%s.so ')"
 
 ABI="arm64-v8a"
 

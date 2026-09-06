@@ -98,6 +98,26 @@ def main():
             "the dep-*-latest releases (build-dep skips saving the cache on reuse)"
         )
 
+    # Engine release-reuse must not stage a stale .so: mirror the publish
+    # quality gate AND the APK static-OCCT invariant (no libTK DT_NEEDED),
+    # otherwise a pre-static release .so silently reaches package-apk and
+    # hard-fails its static-link gate. (2026-09-06: apk failed exactly there.)
+    engine = jobs.get("build-engine", {})
+    rel = next(
+        (
+            s for s in engine.get("steps", [])
+            if isinstance(s, dict) and s.get("name") == "Restore engine from release (published build reuse)"
+        ),
+        {},
+    )
+    rel_run = str(rel.get("run", ""))
+    if "readelf -d" not in rel_run or "libTK" not in rel_run or "'Orca Slicer'" not in rel_run:
+        failures.append(
+            "engine release-reuse step must run the full quality gate (size, "
+            "no libTK runtime DT_NEEDED, Orca Slicer/Arachne/gmp/mpfr markers) "
+            "so a stale .so falls through to a fresh build"
+        )
+
     # Same-step PATH guard: GITHUB_PATH only applies to SUBSEQUENT steps, so a
     # step that echoes the SDK bin dir to GITHUB_PATH AND then runs bare
     # `sdkmanager` in the same run block MUST first export PATH inline —

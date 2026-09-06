@@ -440,10 +440,26 @@ jobs:
             WANT="$(python3 -c "import json;print(json.load(open('$DL/engine-manifest.json'))['files']['libslic3r.so'])" 2>/dev/null || true)"
             GOT="$(sha256sum "$DL/libslic3r.so" 2>/dev/null | cut -d' ' -f1)"
             if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
-              mkdir -p /tmp/engine-output
-              cp "$DL/libslic3r.so" /tmp/engine-output/libslic3r.so
-              HIT=1
-              echo "engine release verified and staged (already published, no republish)"
+              # Quality gate mirrors the publish step + the APK static-OCCT
+              # check, so a STALE release .so can never be reused: if it is
+              # too small, still links OCCT at runtime (libTK DT_NEEDED), or
+              # lacks the engine/gmp/mpfr markers, ignore the release and
+              # rebuild from source (and republish once on main).
+              SZ="$(stat -c%s "$DL/libslic3r.so" 2>/dev/null || echo 0)"
+              if [ "$SZ" -le 10000000 ] \
+                 || readelf -d "$DL/libslic3r.so" | grep -q 'libTK' \
+                 || ! strings "$DL/libslic3r.so" | grep -q -F 'Orca Slicer' \
+                 || ! strings "$DL/libslic3r.so" | grep -q -F 'Arachne' \
+                 || ! readelf -d "$DL/libslic3r.so" | grep -q "libgmp" \
+                 || ! readelf -d "$DL/libslic3r.so" | grep -q "libmpfr"; then
+                echo "engine release .so failed quality gate (size/libTK/markers); ignoring and rebuilding"
+                HIT=0
+              else
+                mkdir -p /tmp/engine-output
+                cp "$DL/libslic3r.so" /tmp/engine-output/libslic3r.so
+                HIT=1
+                echo "engine release verified and staged (quality gate passed, no republish)"
+              fi
             else
               echo "engine release sha mismatch; ignoring"
             fi
@@ -505,29 +521,47 @@ jobs:
           ccache -z
           ccache --version | head -1
 
-      - name: Restore Boost
+      - name: Restore Boost from release (build needs)
         if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
-        uses: actions/cache/restore@v5
-        with:
-          path: engine/src/main/jniImports/boost
-          key: ${{ needs.build-dep.outputs.boost_dep_key }}
-          fail-on-cache-miss: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DL="$RUNNER_TEMP/rel-boost"; mkdir -p "$DL"
+          gh release download dep-boost-latest --pattern 'boost-deps.tar.gz' --pattern 'boost-manifest.json' \
+            --dir "$DL" --clobber || { echo "ERROR: no dep-boost-latest release (main must go green first)"; exit 1; }
+          WANT="$(python3 -c "import json;print(json.load(open('$DL/boost-manifest.json'))['files']['boost-deps.tar.gz'])")"
+          GOT="$(sha256sum "$DL/boost-deps.tar.gz" | cut -d' ' -f1)"
+          [ "$WANT" = "$GOT" ] || { echo "ERROR: boost release sha mismatch"; exit 1; }
+          tar -xzf "$DL/boost-deps.tar.gz"
+          echo "Boost restored from release"
 
-      - name: Restore oneTBB
+      - name: Restore oneTBB from release (build needs)
         if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
-        uses: actions/cache/restore@v5
-        with:
-          path: engine/src/main/jniImports/oneTBB
-          key: ${{ needs.build-dep.outputs.tbb_dep_key }}
-          fail-on-cache-miss: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DL="$RUNNER_TEMP/rel-tbb"; mkdir -p "$DL"
+          gh release download dep-tbb-latest --pattern 'tbb-deps.tar.gz' --pattern 'tbb-manifest.json' \
+            --dir "$DL" --clobber || { echo "ERROR: no dep-tbb-latest release (main must go green first)"; exit 1; }
+          WANT="$(python3 -c "import json;print(json.load(open('$DL/tbb-manifest.json'))['files']['tbb-deps.tar.gz'])")"
+          GOT="$(sha256sum "$DL/tbb-deps.tar.gz" | cut -d' ' -f1)"
+          [ "$WANT" = "$GOT" ] || { echo "ERROR: tbb release sha mismatch"; exit 1; }
+          tar -xzf "$DL/tbb-deps.tar.gz"
+          echo "oneTBB restored from release"
 
-      - name: Restore OCCT
+      - name: Restore OCCT from release (build needs)
         if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'
-        uses: actions/cache/restore@v5
-        with:
-          path: engine/src/main/occt
-          key: ${{ needs.build-dep.outputs.occt_dep_key }}
-          fail-on-cache-miss: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DL="$RUNNER_TEMP/rel-occt"; mkdir -p "$DL"
+          gh release download dep-occt-latest --pattern 'occt-deps.tar.gz' --pattern 'occt-manifest.json' \
+            --dir "$DL" --clobber || { echo "ERROR: no dep-occt-latest release (main must go green first)"; exit 1; }
+          WANT="$(python3 -c "import json;print(json.load(open('$DL/occt-manifest.json'))['files']['occt-deps.tar.gz'])")"
+          GOT="$(sha256sum "$DL/occt-deps.tar.gz" | cut -d' ' -f1)"
+          [ "$WANT" = "$GOT" ] || { echo "ERROR: occt release sha mismatch"; exit 1; }
+          tar -xzf "$DL/occt-deps.tar.gz"
+          echo "OCCT restored from release"
 
       - name: Validate restored deps
         if: steps.engine-cache.outputs.cache-hit != 'true' && steps.engine-rel.outputs.hit != '1'

@@ -746,9 +746,17 @@ jobs:
     # Skipped upstream jobs (path-filtered native builds) must NOT skip this
     # job: without this gate, GitHub skips the whole APK assembly+test stage
     # whenever deps/engine legitimately skip. Only genuine failure or
-    # cancellation upstream blocks. (Failure-exclusion, not success-inclusion:
-    # skipped matrix results confuse the success-inclusion form.)
-    if: needs.changes.result == 'success' && needs.build-dep.result != 'failure' && needs.build-dep.result != 'cancelled' && needs.build-engine.result != 'failure' && needs.build-engine.result != 'cancelled'
+    # cancellation upstream blocks.
+    #
+    # !cancelled() is REQUIRED, not optional: a plain conditional like
+    # needs.X.result != 'failure' is NOT evaluated when an upstream `needs`
+    # job was SKIPPED (not failed) — github silently skips downstream jobs.
+    # That silently skipped the whole APK+merge chain on native=false PRs
+    # (e.g. p2p publish kit, no engine/ changes): dep+engine skipped by
+    # path-filter, apk clicked through on the naive form below, and merge
+    # never fired. With !cancelled() the state machine actually evaluates
+    # the result guards instead of dropping the job.
+    if: '!cancelled() && needs.changes.result == ''success'' && needs.build-dep.result != ''failure'' && needs.build-dep.result != ''cancelled'' && needs.build-engine.result != ''failure'' && needs.build-engine.result != ''cancelled'''
     timeout-minutes: 120
     permissions:
       contents: write
@@ -990,7 +998,11 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [package-apk]
     timeout-minutes: 10
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+    # !cancelled() is REQUIRED: on native=false PRs package-apk still MUST
+    # have run (its own if: guard), but the naive success() default would
+    # still drop this job here whenever anything upstream skipped. Merge only
+    # when apk actually dispatched AND the run itself isn't cancelled.
+    if: '!cancelled() && needs.package-apk.result == ''success'' && github.event_name == ''pull_request'' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository'
     permissions:
       pull-requests: write
       contents: write

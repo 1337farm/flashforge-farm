@@ -70,7 +70,7 @@ public class AutoDispatchService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
                 startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
-            } catch (ForegroundServiceStartNotAllowedException | SecurityException | IllegalStateException e) {
+            } catch (ForegroundServiceStartNotAllowedException | IllegalStateException e) {
                 // Android 15+ dataSync quota exhausted (6h/24h): a refused start
                 // must degrade to stopped, never crash the host process.
                 Log.w(TAG, "dataSync start refused (quota exhausted?), stopping", e);

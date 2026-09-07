@@ -439,6 +439,26 @@ def main():
             "per export replaces history instead of appending"
         )
 
+    # apply_only diagnostics guard: a bare "incompatible type" from deep in
+    # Print::apply names no key and previously never reached any log
+    # (2026-09-07 slice failure). apply_only must rethrow with the key.
+    conf = (REPO / "engine/src/main/jni/libslic3r/Config.cpp").read_text()
+    if "apply_only '" not in conf:
+        failures.append(
+            "ConfigBase::apply_only must rethrow set() failures with the key "
+            "name (\"apply_only '<key>': ...\"); keyless config errors are "
+            "undiagnosable"
+        )
+
+    # Slice-error logging guard: slice/config failures surface only in a
+    # dialog today; they must also append to farm_crash.log via
+    # writeCrashDump so the next export carries them to Downloads.
+    if 'writeCrashDump("slice"' not in bed:
+        failures.append(
+            "BedFragment slice/config failure paths must FarmApp.writeCrashDump("
+            '"slice", ...) so slice errors reach farm_crash.log, not just a dialog'
+        )
+
     if failures:
         print("CI GUARD FAILURES:")
         for f in failures:

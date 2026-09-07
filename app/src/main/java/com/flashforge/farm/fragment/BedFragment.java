@@ -686,6 +686,7 @@ public class BedFragment extends Fragment {
                                 FarmApp.genCurrentConfig();
                             } catch (Exception e) {
                                 Log.e("BedFragment", "Failed to write config", e);
+                                FarmApp.writeCrashDump("slice", "config: " + e + "\n" + Log.getStackTraceString(e));
 
                                 ViewUtils.postOnMainThread(()->{
                                     Bus.SLICING_PROGRESS.postValue(new SlicingProgressEvent(100, ""));
@@ -721,6 +722,7 @@ public class BedFragment extends Fragment {
                             });
                         } catch (Exception e) {
                             Log.e("BedFragment", "Slice failed", e);
+                            FarmApp.writeCrashDump("slice", "slice: " + e + "\n" + Log.getStackTraceString(e));
                             ViewUtils.postOnMainThread(()->{
                                 Bus.SLICING_PROGRESS.postValue(new SlicingProgressEvent(100, ""));
                                 new FarmAlertDialogBuilder(ctx)

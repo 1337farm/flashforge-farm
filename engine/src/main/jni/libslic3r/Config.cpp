@@ -494,8 +494,17 @@ void ConfigBase::apply_only(const ConfigBase &other, const t_config_option_keys 
 		if (other_opt == nullptr) {
             // The key was not found in the source config, therefore it will not be initialized!
 //			printf("Not found, therefore not initialized: %s\n", opt_key.c_str());
-		} else
-            my_opt->set(other_opt);
+		} else {
+            try {
+                my_opt->set(other_opt);
+            } catch (const ConfigurationError &e) {
+                // Name the offending key: a bare "incompatible type" from
+                // deep in Print::apply is otherwise undiagnosable (2026-09-07:
+                // slice failed this way with no key attached, and the error
+                // never reached any log).
+                throw ConfigurationError(std::string("apply_only '") + opt_key + "': " + e.what());
+            }
+        }
     }
 }
 

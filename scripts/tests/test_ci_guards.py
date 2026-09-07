@@ -536,6 +536,26 @@ def main():
             "breaks same-run consumption"
         )
 
+    # Immediate-export guard: a crash/error report must reach Downloads when
+    # it happens, not on the next app start — writeCrashDump triggers the
+    # export inline (best-effort), so killing + restarting just to read the
+    # log is unnecessary.
+    if "exportPendingCrashesToDownloads()" not in fapp.split("public static void writeCrashDump", 1)[1].split("public static ", 1)[0]:
+        failures.append(
+            "writeCrashDump must trigger exportPendingCrashesToDownloads inline "
+            "so reports persist to Downloads immediately"
+        )
+
+    # model_slice error-surface guard: native slice failures must surface
+    # as Slic3rRuntimeError (outer catch) so BedFragment logs them; a silent
+    # native death would bypass writeCrashDump entirely.
+    farm_native = (REPO / "app/src/main/jni/farm/farm_native.cpp").read_text()
+    if 'Slic3rRuntimeError' not in farm_native:
+        failures.append(
+            "model_slice must surface native failures as Slic3rRuntimeError "
+            "so the Java slice path can log them"
+        )
+
     if failures:
         print("CI GUARD FAILURES:")
         for f in failures:

@@ -2128,8 +2128,18 @@ public:
     void set(const ConfigOption* rhs) override {
         if (rhs->type() != this->type())
             throw ConfigurationError("ConfigOptionEnumGeneric: Assigning an incompatible type");
-        // rhs could be of the following type: ConfigOptionEnumsGeneric
-        this->values = dynamic_cast<const ConfigOptionEnumsGenericTempl *>(rhs)->values;
+        // rhs is guaranteed coEnums here, but it may be the other nullability
+        // instantiation: Templ<true> and Templ<false> are distinct C++ classes,
+        // so a direct dynamic_cast across variants yields nullptr and the
+        // values read faults at +8 (2026-09-07 farm-slice SIGSEGV, fault 0x8).
+        // All coEnums reporters share the ConfigOptionInts base, so copy via
+        // that instead of crashing.
+        if (auto *same = dynamic_cast<const ConfigOptionEnumsGenericTempl *>(rhs))
+            this->values = same->values;
+        else if (auto *ints = dynamic_cast<const ConfigOptionInts *>(rhs))
+            this->values = ints->values;
+        else
+            throw ConfigurationError("ConfigOptionEnumGeneric: Assigning an incompatible type");
     }
 
     std::string serialize() const override

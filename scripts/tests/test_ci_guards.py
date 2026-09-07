@@ -132,6 +132,10 @@ def main():
     # quality gate AND the APK static-OCCT invariant (no libTK DT_NEEDED),
     # otherwise a pre-static release .so silently reaches package-apk and
     # hard-fails its static-link gate. (2026-09-06: apk failed exactly there.)
+    # It must ALSO compare engine sources (manifest engine_src vs
+    # HEAD:engine): the sha/size/marker gate cannot see source changes, so an
+    # engine PR would otherwise ship the previous release .so.
+    # (2026-09-07: a Config.hpp segfault fix was silently skipped this way.)
     engine = jobs.get("build-engine", {})
     rel = next(
         (
@@ -146,6 +150,25 @@ def main():
             "engine release-reuse step must run the full quality gate (size, "
             "no libTK runtime DT_NEEDED, Orca Slicer/Arachne/gmp/mpfr markers) "
             "so a stale .so falls through to a fresh build"
+        )
+    if "engine_src" not in rel_run or "HEAD:engine" not in rel_run:
+        failures.append(
+            "engine release-reuse step must compare manifest engine_src "
+            "against HEAD:engine and rebuild on mismatch; the .so "
+            "sha/size/marker gate alone reuses a stale .so after engine "
+            "source changes"
+        )
+    pub = next(
+        (
+            s for s in engine.get("steps", [])
+            if isinstance(s, dict) and s.get("name") == "Publish engine release"
+        ),
+        {},
+    )
+    if "engine_src" not in str(pub.get("run", "")):
+        failures.append(
+            "Publish engine release must record engine_src (HEAD:engine tree) "
+            "in engine-manifest.json, or reuse can never detect source changes"
         )
 
     # build-dep must revalidate release/cache trees EXACTLY against the

@@ -459,6 +459,17 @@ def main():
             '"slice", ...) so slice errors reach farm_crash.log, not just a dialog'
         )
 
+    # Region-application diagnostics guard: apply_to_print_region_config does
+    # direct my_opt->set() outside apply_only, so it needs the same key
+    # annotation — it was the remaining keyless "incompatible type" site
+    # (2026-09-07 slice failure).
+    pobj = (REPO / "engine/src/main/jni/libslic3r/PrintObject.cpp").read_text()
+    if "apply_to_print_region_config '" not in pobj:
+        failures.append(
+            "apply_to_print_region_config must rethrow set() failures with "
+            "the key name; keyless region config errors are undiagnosable"
+        )
+
     if failures:
         print("CI GUARD FAILURES:")
         for f in failures:

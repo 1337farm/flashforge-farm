@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <map>
+#include <typeinfo>
 #include <climits>
 #include <cfloat>
 #include <cstdio>
@@ -2043,6 +2044,18 @@ public:
 // Generic enum configuration value.
 // We use this one in DynamicConfig objects when creating a config value object for ConfigOptionType == coEnum.
 // In the StaticConfig, it is better to use the specialized ConfigOptionEnum<T> containers.
+// Diagnostic helper: names both sides of a failed option assignment so the
+// message identifies the mismatched C++ classes (demangle offline with
+// c++filt). rhs may be null at some call sites — report it, don't fault.
+inline std::string config_type_pair_msg(const ConfigOption *dst, const ConfigOption *rhs)
+{
+    std::string out = " (dst ";
+    out += (dst == nullptr) ? std::string("null") : std::string(typeid(*dst).name());
+    out += " <- src ";
+    out += (rhs == nullptr) ? std::string("null") : std::string(typeid(*rhs).name());
+    out += ")";
+    return out;
+}
 class ConfigOptionEnumGeneric : public ConfigOptionInt
 {
 public:
@@ -2068,7 +2081,7 @@ public:
 
     void set(const ConfigOption *rhs) override {
         if (rhs->type() != this->type())
-            throw ConfigurationError("ConfigOptionEnumGeneric: Assigning an incompatible type");
+            throw ConfigurationError(std::string("ConfigOptionEnumGeneric: Assigning an incompatible type") + config_type_pair_msg(this, rhs));
         // rhs could be of the following type: ConfigOptionEnumGeneric or ConfigOptionEnum<T>
         this->value = rhs->getInt();
     }
@@ -2127,7 +2140,7 @@ public:
 
     void set(const ConfigOption* rhs) override {
         if (rhs->type() != this->type())
-            throw ConfigurationError("ConfigOptionEnumGeneric: Assigning an incompatible type");
+            throw ConfigurationError(std::string("ConfigOptionEnumGeneric: Assigning an incompatible type") + config_type_pair_msg(this, rhs));
         // rhs is guaranteed coEnums here, but it may be the other nullability
         // instantiation: Templ<true> and Templ<false> are distinct C++ classes,
         // so a direct dynamic_cast across variants yields nullptr and the

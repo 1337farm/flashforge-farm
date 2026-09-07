@@ -470,6 +470,18 @@ def main():
             "the key name; keyless region config errors are undiagnosable"
         )
 
+    # Enum set() diagnostics guard: both enum set() implementations must
+    # append the dst/src C++ classes (config_type_pair_msg) to the
+    # incompatible-type error — the bare message plus a missing key made the
+    # 2026-09-07 slice failure unidentifiable (demangle offline with c++filt).
+    cfgh = (REPO / "engine/src/main/jni/libslic3r/Config.hpp").read_text()
+    if cfgh.count("config_type_pair_msg") < 3:
+        failures.append(
+            "Config.hpp must define config_type_pair_msg and use it in both "
+            "enum set() type-check throws, so config type mismatches name "
+            "both C++ classes"
+        )
+
     if failures:
         print("CI GUARD FAILURES:")
         for f in failures:

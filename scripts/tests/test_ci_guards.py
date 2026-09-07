@@ -482,6 +482,60 @@ def main():
             "both C++ classes"
         )
 
+    # Crash-banner version guard: every farm_crash.log entry must stamp the
+    # app version + git commit (BuildConfig), so a report is attributable to
+    # the exact binaries that produced it without trusting filenames.
+    if 'BuildConfig.COMMIT' not in fapp or '"build: v"' not in fapp:
+        failures.append(
+            "FarmApp.writeCrashDump banner must stamp build version + "
+            "BuildConfig.COMMIT so crash logs are attributable to exact binaries"
+        )
+
+    # Validated-artifact reuse guards: the engine .so artifact name must bind
+    # the exact source tree (libslic3r-<HEAD:engine>), so a later run reuses
+    # it only for identical sources — otherwise an engine change silently
+    # ships a stale .so (2026-09-07: full 20-min rebuilds on every engine PR
+    # with no reuse path at all). Same-run consumers must resolve the same
+    # name via the build-engine job outputs; cross-run restore accepts only
+    # non-expired artifacts from successful runs passing the quality gate.
+    steps = [s for s in engine.get("steps", []) if isinstance(s, dict)]
+    up = next((s for s in steps if s.get("name") == "Upload libslic3r.so artifact"), {})
+    if "libslic3r-${{ steps.engine-src.outputs.src }}" not in str((up.get("with", {}) or {}).get("name", "")):
+        failures.append(
+            "engine artifact upload name must bind the source tree "
+            "(libslic3r-${{ steps.engine-src.outputs.src }}); an unbound "
+            "name cannot be reused soundly across runs"
+        )
+    art = next((s for s in steps if s.get("name") == "Restore engine from validated PR artifact"), {})
+    art_run = str(art.get("run", ""))
+    for needle in ("expired==false", "conclusion", '"success"', "readelf -d", "art_hit"):
+        if needle not in art_run:
+            failures.append(
+                f"validated-artifact restore step must check {needle}; "
+                "unvalidated reuse ships untested binaries"
+            )
+            break
+    jdk = next((s for s in steps if s.get("name") == "Set up JDK 17"), {})
+    if "art_hit" not in str(jdk.get("if", "")):
+        failures.append(
+            "build steps must skip on validated-artifact hit (art_hit); "
+            "otherwise the reuse path never saves the rebuild"
+        )
+    apk_job = jobs.get("package-apk", {})
+    dl = next(
+        (
+            s for s in apk_job.get("steps", [])
+            if isinstance(s, dict) and s.get("name") == "Download libslic3r.so artifact"
+        ),
+        {},
+    )
+    if "needs.build-engine.outputs.engine_src" not in str((dl.get("with", {}) or {}).get("name", "")):
+        failures.append(
+            "package-apk must download libslic3r-${{ needs.build-engine.outputs.engine_src }} "
+            "(same tree-bound name the engine job uploaded); a static name "
+            "breaks same-run consumption"
+        )
+
     if failures:
         print("CI GUARD FAILURES:")
         for f in failures:

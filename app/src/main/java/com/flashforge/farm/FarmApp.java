@@ -151,6 +151,7 @@ public class FarmApp extends Application {
             File dir = getCrashDir();
             File f = new File(dir, "farm_crash.log");
             String banner = "\n==== " + kind + " crash ====\n"
+                    + "build: v" + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ") commit " + BuildConfig.COMMIT + "\n"
                     + "time: " + new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
                             .format(new java.util.Date())
                     + " pid: " + android.os.Process.myPid() + "\n";

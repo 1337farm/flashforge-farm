@@ -50,8 +50,13 @@ public class FarmApp extends Application {
     // for Bed3D compatibility. Restored by Model.slice() so the native engine runs its btAutoBrim logic.
     public static boolean AUTO_BRIM_SELECTED = false;
 
-    // Pending flashforge-farm calibration for the next slice (CalibMode ordinal; 0 = normal print).
-    // Consumed and reset by BedFragment after slicing.
+    // CalibMode enum values (from native libslic3r CalibMode enum):
+    // 0 = Calib_None
+    // 1 = Calib_PA_Line
+    // 2 = Calib_PA_Pattern  
+    // 3 = Calib_PA_Tower
+    // 4 = Calib_Auto_PA_Line
+    // 5+ = other calibration modes
     public static int PENDING_CALIB_MODE = 0;
     public static double PENDING_CALIB_START = 0, PENDING_CALIB_END = 0, PENDING_CALIB_STEP = 0;
 

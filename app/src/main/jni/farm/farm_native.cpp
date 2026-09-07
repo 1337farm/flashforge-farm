@@ -1388,6 +1388,32 @@ extern "C" {
                 return 0;
             }
             __android_log_print(ANDROID_LOG_WARN, "FarmPaint", "step: config valid, applying");
+
+            // Ensure pressure_advance config values are properly applied during normal slicing.
+            // The engine reads these from the DynamicPrintConfig to emit SET_PRESSURE_ADVANCE commands.
+            // If the user has set enable_pressure_advance=true with a non-zero pressure_advance value
+            // in their filament profile, make sure it's explicitly present and sized correctly.
+            {
+                bool enablePA = config->option("enable_pressure_advance", false) != nullptr
+                    && dynamic_cast<const ConfigOptionBools*>(config->option("enable_pressure_advance", false))
+                    && dynamic_cast<const ConfigOptionBools*>(config->option("enable_pressure_advance", false))->values.size() >= 1
+                    && dynamic_cast<const ConfigOptionBools*>(config->option("enable_pressure_advance", false))->values[0];
+                if (!enablePA) {
+                    // Default to enabling PA if the user has a non-zero pressure_advance value.
+                    if (auto* paOpt = dynamic_cast<const ConfigOptionFloats*>(config->option("pressure_advance", false))) {
+                        for (double v : paOpt->values) {
+                            if (v > 0.0) {
+                                enablePA = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (enablePA) {
+                    config->set_key_value("enable_pressure_advance", new ConfigOptionBools(std::vector<bool>(1, true)));
+                }
+            }
+
             print->apply(model->model, *config);
 
             // flashforge-farm calibration: when a calib mode is requested, set the params on the print so

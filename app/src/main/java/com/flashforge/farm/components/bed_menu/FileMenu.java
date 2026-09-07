@@ -427,6 +427,58 @@ public class FileMenu extends ListBedMenu {
                         Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu());
                         dismiss(true);
                     }),
+                    new PreferenceItem().setIcon(R.drawable.menu_calibrate_la_28).setTitle("PA Tower").setSubtitle("flashforge-farm PA tower — each layer gets a different PA value").setOnClickListener(v -> {
+                        // CalibMode::Calib_PA_Tower: PA increases linearly per layer from start to end.
+                        // Default range: 0 to 0.1 with step 0.002 per layer.
+                        LinearLayout ll = new LinearLayout(ctx);
+                        ll.setOrientation(LinearLayout.VERTICAL);
+                        ll.setPadding(ViewUtils.dp(16), ViewUtils.dp(16), ViewUtils.dp(16), ViewUtils.dp(16));
+                        ll.addView(ViewUtils.makeText(ctx, "PA Tower: start value 0, end value per layer", ViewUtils.dp(14), ThemesRepo.getColor(android.R.attr.textColorSecondary)));
+                        ll.addView(new Space(ctx, new LinearLayout.LayoutParams(0, ViewUtils.dp(8))));
+                        android.widget.EditText startEt = ViewUtils.makeEditText(ctx, "0");
+                        android.widget.EditText endEt = ViewUtils.makeEditText(ctx, "0.1");
+                        android.widget.EditText stepEt = ViewUtils.makeEditText(ctx, "0.002");
+                        ViewUtils.addLabeledEditText(ll, "Start PA", "Start pressure advance value", startEt);
+                        ViewUtils.addLabeledEditText(ll, "End PA", "End pressure advance value", endEt);
+                        ViewUtils.addLabeledEditText(ll, "Step", "PA step per layer", stepEt);
+                        new android.app.AlertDialog.Builder(ctx)
+                            .setTitle("PA Tower Calibration")
+                            .setView(ll)
+                            .setPositiveButton("OK", (d, w) -> {
+                                try {
+                                    FarmApp.PENDING_CALIB_MODE = 3; // CalibMode::Calib_PA_Tower
+                                    FarmApp.PENDING_CALIB_START = Double.parseDouble(startEt.getText().toString());
+                                    FarmApp.PENDING_CALIB_END = Double.parseDouble(endEt.getText().toString());
+                                    FarmApp.PENDING_CALIB_STEP = Double.parseDouble(stepEt.getText().toString());
+                                } catch (NumberFormatException e) {
+                                    FarmApp.PENDING_CALIB_START = 0;
+                                    FarmApp.PENDING_CALIB_END = 0.1;
+                                    FarmApp.PENDING_CALIB_STEP = 0.002;
+                                }
+                                boolean hasModel = FileMenu.this.fragment.getGlView().getRenderer().getModel() != null;
+                                if (!hasModel) {
+                                    ensurePlaceholderModel("pa_tower");
+                                }
+                                Toast.makeText(ctx, "PA Tower armed — go to the Slice tab", Toast.LENGTH_LONG).show();
+                                Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu());
+                                dismiss(true);
+                            })
+                            .setNegativeButton("Cancel", null)
+                            .show();
+                    }),
+                    new PreferenceItem().setIcon(R.drawable.menu_calibrate_la_28).setTitle("PA Pattern").setSubtitle("flashforge-farm PA pattern — number/flow test grid").setOnClickListener(v -> {
+                        FarmApp.PENDING_CALIB_MODE = 2; // CalibMode::Calib_PA_Pattern
+                        FarmApp.PENDING_CALIB_START = 0;
+                        FarmApp.PENDING_CALIB_END = 0.1;
+                        FarmApp.PENDING_CALIB_STEP = 0.002;
+                        boolean hasModel = FileMenu.this.fragment.getGlView().getRenderer().getModel() != null;
+                        if (!hasModel) {
+                            ensurePlaceholderModel("pa_pattern");
+                        }
+                        Toast.makeText(ctx, "PA Pattern armed — go to the Slice tab", Toast.LENGTH_LONG).show();
+                        Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu());
+                        dismiss(true);
+                    }),
                     new PreferenceItem().setIcon(R.drawable.deployed_code_24).setTitle(ctx.getString(R.string.MenuFileCalibrationsModels)).setSubtitle(ctx.getString(R.string.MenuFileCalibrationsModelsDescription)).setOnClickListener(v -> {
                         if (ctx instanceof MainActivity) {
                             ((MainActivity) ctx).showUnfoldMenu(new CalibrationModelsMenu().setFragment(fragment), v);

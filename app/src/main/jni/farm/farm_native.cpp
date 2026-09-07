@@ -1137,8 +1137,12 @@ extern "C" {
             auto print = std::make_unique<Print>();
             auto config = std::make_unique<DynamicPrintConfig>();
             const char *chars = env->GetStringUTFChars(configPath, JNI_FALSE);
-            config->load(std::string(chars), ForwardCompatibilitySubstitutionRule::Disable);
+            bool loaded = config->load(std::string(chars), ForwardCompatibilitySubstitutionRule::Disable);
             env->ReleaseStringUTFChars(configPath, chars);
+            if (!loaded) {
+                env->ThrowNew(env->FindClass("com/flashforge/farm/slic3r/Slic3rRuntimeError"), "config load failed, refusing to slice a half-loaded config");
+                return 0;
+            }
             config->normalize_fdm();
 
             // The app's bed temperatures live in the hot-plate slots (legacy bed_temperature keys

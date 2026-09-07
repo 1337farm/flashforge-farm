@@ -536,6 +536,25 @@ def main():
             "breaks same-run consumption"
         )
 
+    # Immediate-export guard: a crash/error report must reach Downloads when
+    # it happens, not on the next app start — writeCrashDump triggers the
+    # export inline (best-effort), so killing + restarting just to read the
+    # log is unnecessary.
+    if "exportPendingCrashesToDownloads()" not in fapp.split("public static void writeCrashDump", 1)[1].split("public static ", 1)[0]:
+        failures.append(
+            "writeCrashDump must trigger exportPendingCrashesToDownloads inline "
+            "so reports persist to Downloads immediately"
+        )
+
+    # Config-load guard: model_slice must refuse a half-loaded config with a
+    # clear error instead of slicing on into mystery downstream failures.
+    farm_native = (REPO / "app/src/main/jni/farm/farm_native.cpp").read_text()
+    if 'config load failed' not in farm_native:
+        failures.append(
+            "model_slice must fail fast when config->load() returns false "
+            "instead of slicing a half-loaded config"
+        )
+
     if failures:
         print("CI GUARD FAILURES:")
         for f in failures:

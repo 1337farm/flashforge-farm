@@ -392,6 +392,30 @@ def main():
             "to clean up pre-consolidation pile-ups"
         )
 
+    # coEnums cross-variant guard: ConfigOptionEnumsGenericTempl<true> and
+    # <false> are distinct C++ classes sharing the coEnums tag, so set() must
+    # not dynamic_cast across variants (nullptr->values faults at +8;
+    # 2026-09-07 farm-slice SIGSEGV, fault 0x8, in Templ<false>::set <-
+    # apply_only <- Print::apply). Copy via the shared ConfigOptionInts base.
+    cfg = (REPO / "engine/src/main/jni/libslic3r/Config.hpp").read_text()
+    if "dynamic_cast<const ConfigOptionInts *>(rhs)" not in cfg:
+        failures.append(
+            "ConfigOptionEnumsGenericTempl::set must copy via the shared "
+            "ConfigOptionInts base (cross-variant Templ<true>/<false> "
+            "dynamic_cast yields nullptr and faults at +8)"
+        )
+
+    # Crash-log append guard: the Downloads document must accumulate across
+    # crash cycles (capped), not be replaced per export — export deletes the
+    # internal files after publishing, so a truncate rewrite loses history.
+    fapp = (REPO / "app/src/main/java/com/flashforge/farm/FarmApp.java").read_text()
+    if "readDownloadsContent" not in fapp or "MAX_DOWNLOADS_CRASH_LOG" not in fapp:
+        failures.append(
+            "FarmApp export must prepend the previously published Downloads "
+            "content (capped by MAX_DOWNLOADS_CRASH_LOG); a truncate rewrite "
+            "per export replaces history instead of appending"
+        )
+
     if failures:
         print("CI GUARD FAILURES:")
         for f in failures:

@@ -241,8 +241,41 @@ public class FarmApp extends Application {
      * is no on-load error screen. Every internal file is concatenated into the
      * same document, and older farm_crash_* docs from earlier crashes are
      * pruned, so Downloads never accumulates 10-20 crash files from a crash
-     * loop — there is exactly one, always holding the latest crash set.
+     * loop. The document ACCUMULATES across crash cycles (capped): each export
+     * appends after the previously published content instead of replacing it.
      */
+    private static final int MAX_DOWNLOADS_CRASH_LOG = 256 * 1024;
+
+    /** Previously published Downloads farm_crash.log content ("" if none). */
+    public static String readDownloadsContent(android.content.Context ctx, String displayName) {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return "";
+        android.net.Uri base = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+        android.database.Cursor c = null;
+        try {
+            c = ctx.getContentResolver().query(base,
+                    new String[]{android.provider.MediaStore.MediaColumns._ID},
+                    android.provider.MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " + android.provider.MediaStore.MediaColumns.RELATIVE_PATH + "=?",
+                    new String[]{displayName, android.os.Environment.DIRECTORY_DOWNLOADS + "/"}, null);
+            if (c == null || !c.moveToFirst()) return "";
+            android.net.Uri uri = android.content.ContentUris.withAppendedId(base, c.getLong(0));
+            try (java.io.InputStream in = ctx.getContentResolver().openInputStream(uri)) {
+                if (in == null) return "";
+                java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[8192];
+                int n, total = 0;
+                while ((n = in.read(buf)) != -1 && total < MAX_DOWNLOADS_CRASH_LOG * 2) {
+                    bos.write(buf, 0, n);
+                    total += n;
+                }
+                return new String(bos.toByteArray(), StandardCharsets.UTF_8);
+            }
+        } catch (Exception ignored) {
+            return "";
+        } finally {
+            if (c != null) c.close();
+        }
+    }
+
     public static void exportPendingCrashesToDownloads() {
         try {
             java.util.List<File> reports = listCrashReports();
@@ -266,7 +299,26 @@ public class FarmApp extends Application {
                     all.append(sb);
                 }
             }
-            boolean ok = all.length() > 0 && updateOrCreateDownloads(INSTANCE, "farm_crash.log", all.toString());
+            boolean ok = false;
+            if (all.length() > 0) {
+                // Append after the previously published content (capped, keep
+                // the tail) instead of replacing it, so the Downloads log
+                // accumulates across crash cycles.
+                String previous = readDownloadsContent(INSTANCE, "farm_crash.log");
+                StringBuilder combined = new StringBuilder();
+                if (!previous.isEmpty()) {
+                    combined.append(previous);
+                    if (!previous.endsWith("\n")) combined.append('\n');
+                }
+                combined.append(all);
+                String out = combined.toString();
+                if (out.length() > MAX_DOWNLOADS_CRASH_LOG) {
+                    out = out.substring(out.length() - MAX_DOWNLOADS_CRASH_LOG);
+                    int nl = out.indexOf('\n');
+                    if (nl >= 0) out = out.substring(nl + 1);
+                }
+                ok = updateOrCreateDownloads(INSTANCE, "farm_crash.log", out);
+            }
             if (ok) {
                 for (File f : reports) f.delete();
                 Log.i("FarmCrash", "Exported " + reports.size() + " pending crash log(s) to Downloads (single farm_crash.log)");

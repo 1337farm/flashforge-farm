@@ -159,6 +159,12 @@ public class FarmApp extends Application {
                 fos.write(banner.getBytes(StandardCharsets.UTF_8));
                 fos.write(trace.getBytes(StandardCharsets.UTF_8));
             }
+            // Persist to Downloads immediately: a report must never wait for
+            // an app restart to be visible. Best-effort; never mask the crash.
+            try {
+                exportPendingCrashesToDownloads();
+            } catch (Exception ignored) {
+            }
         } catch (Exception ignored) {
             // Persisting the dump is best-effort; never let it mask the crash.
         }

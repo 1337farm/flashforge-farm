@@ -1,5 +1,6 @@
 #include <android/log.h>
 #include <typeinfo>
+#include <memory>
 #include <set>
 #include <algorithm>
 
@@ -1129,18 +1130,22 @@ extern "C" {
         try {
             ModelRef* model = (ModelRef*) (intptr_t) ptr;
 
-            Print print;
-            DynamicPrintConfig config;
+            // Print + DynamicPrintConfig embed several full deep copies of the
+            // ~300-option config. As JNI-function stack locals they eat thread
+            // stack that Slic3r's apply() chain also needs (see the farm-slice
+            // thread note in BedFragment); keep them on the heap instead.
+            auto print = std::make_unique<Print>();
+            auto config = std::make_unique<DynamicPrintConfig>();
             const char *chars = env->GetStringUTFChars(configPath, JNI_FALSE);
-            config.load(std::string(chars), ForwardCompatibilitySubstitutionRule::Disable);
+            config->load(std::string(chars), ForwardCompatibilitySubstitutionRule::Disable);
             env->ReleaseStringUTFChars(configPath, chars);
-            config.normalize_fdm();
+            config->normalize_fdm();
 
             // The app's bed temperatures live in the hot-plate slots (legacy bed_temperature keys
             // migrate to hot_plate_temp); the engine reads the slot picked by curr_bed_type, whose
             // compiled default is Cool Plate — which would silently ignore those values.
-            if (config.option("curr_bed_type", false) == nullptr)
-                config.set_key_value("curr_bed_type", new ConfigOptionEnum<BedType>(btPEI));
+            if (config->option("curr_bed_type", false) == nullptr)
+                config->set_key_value("curr_bed_type", new ConfigOptionEnum<BedType>(btPEI));
 
             // An imported project config can itself declare multiple filaments (e.g. a Bambu 3MF's
             // project_settings carries 8-entry filament_colour/filament_diameter vectors) while other
@@ -1151,9 +1156,9 @@ extern "C" {
             // tower / flush-volume ordering indexes the short vectors out of bounds → SIGSEGV.
             {
                 int cfgFilaments = 0;
-                if (auto* fc = dynamic_cast<const ConfigOptionStrings*>(config.option("filament_colour", false)))
+                if (auto* fc = dynamic_cast<const ConfigOptionStrings*>(config->option("filament_colour", false)))
                     cfgFilaments = std::max(cfgFilaments, (int) fc->values.size());
-                if (auto* fd = dynamic_cast<const ConfigOptionFloats*>(config.option("filament_diameter", false)))
+                if (auto* fd = dynamic_cast<const ConfigOptionFloats*>(config->option("filament_diameter", false)))
                     cfgFilaments = std::max(cfgFilaments, (int) fd->values.size());
                 if (cfgFilaments > numFilaments) {
                     __android_log_print(ANDROID_LOG_WARN, "FarmPaint", "config declares %d filaments (app requested %d); normalizing", cfgFilaments, (int) numFilaments);
@@ -1180,7 +1185,7 @@ extern "C" {
                 }
                 if (maxPaintedState > numFilaments) numFilaments = maxPaintedState;
 
-                config.set_num_filaments((unsigned int) numFilaments);
+                config->set_num_filaments((unsigned int) numFilaments);
 
                 // Resize ONLY per-filament vectors. We EXCLUDE printer-extruder vectors like 
                 // nozzle_diameter to avoid SIGSEGV in DynamicPrintConfig::update_values_to_printer_extruders.
@@ -1207,13 +1212,13 @@ extern "C" {
                     "slow_down_layer_time", "fan_below_layer_time"
                 };
 
-                for (const std::string& key : config.keys()) {
+                for (const std::string& key : config->keys()) {
                     bool isFilament = key.rfind("filament_", 0) == 0 || extraFilamentOpts.count(key) > 0;
                     if (isFilament) {
                         // Skip identity/palette fields during cloning (set explicitly below).
                         if (key == "filament_settings_id" || key == "filament_self_index" || key == "filament_colour" || 
                             key == "filament_multi_colour" || key == "filament_map") continue;
-                        ConfigOption* opt = config.option(key, false);
+                        ConfigOption* opt = config->option(key, false);
                         if (opt && opt->is_vector()) cloneToN(opt);
                     }
                 }
@@ -1233,9 +1238,9 @@ extern "C" {
                     }
                     env->ReleaseIntArrayElements(colorsArr, c, JNI_ABORT);
                     if (!colorStrs.empty()) {
-                        config.set_key_value("filament_colour", new ConfigOptionStrings(colorStrs));
-                        config.set_key_value("filament_multi_colour", new ConfigOptionStrings(colorStrs));
-                        config.set_key_value("filament_colour_type", new ConfigOptionStrings(colorTypes));
+                        config->set_key_value("filament_colour", new ConfigOptionStrings(colorStrs));
+                        config->set_key_value("filament_multi_colour", new ConfigOptionStrings(colorStrs));
+                        config->set_key_value("filament_colour_type", new ConfigOptionStrings(colorTypes));
                     }
                 }
 
@@ -1244,7 +1249,7 @@ extern "C" {
                 {
                     std::vector<int> selfIdx(numFilaments);
                     for (int i = 0; i < numFilaments; ++i) selfIdx[i] = i + 1;
-                    config.set_key_value("filament_self_index", new ConfigOptionInts(selfIdx));
+                    config->set_key_value("filament_self_index", new ConfigOptionInts(selfIdx));
                 }
 
                 // filament_settings_id should also be unique to prevent merging.
@@ -1255,7 +1260,7 @@ extern "C" {
                         snprintf(buf, sizeof(buf), "Filament %d", i + 1);
                         ids.emplace_back(buf);
                     }
-                    config.set_key_value("filament_settings_id", new ConfigOptionStrings(ids));
+                    config->set_key_value("filament_settings_id", new ConfigOptionStrings(ids));
                 }
 
                 // filament_map must map all virtual filaments back to the physical extruder (1).
@@ -1263,7 +1268,7 @@ extern "C" {
                 // beyond the physical extruder count.
                 {
                     std::vector<int> filamentMap(numFilaments, 1);
-                    config.set_key_value("filament_map", new ConfigOptionInts(filamentMap));
+                    config->set_key_value("filament_map", new ConfigOptionInts(filamentMap));
                 }
 
                 // Flush (purge) volumes are project-scoped options that preset INIs never carry,
@@ -1278,11 +1283,11 @@ extern "C" {
                     // exactly that layout, keyed off filament_colour so the per-nozzle dimension matches
                     // the engine's `number_of_extruders`.
                     size_t n = (size_t) numFilaments;
-                    if (auto* fc = dynamic_cast<const ConfigOptionStrings*>(config.option("filament_colour", false)))
+                    if (auto* fc = dynamic_cast<const ConfigOptionStrings*>(config->option("filament_colour", false)))
                         n = std::max(n, fc->values.size());
 
                     size_t nozzles = 1;
-                    if (auto* nd = dynamic_cast<const ConfigOptionFloats*>(config.option("nozzle_diameter", false)))
+                    if (auto* nd = dynamic_cast<const ConfigOptionFloats*>(config->option("nozzle_diameter", false)))
                         if (!nd->values.empty()) nozzles = nd->values.size();
 
                     // Engine default volumes: 280mm^3 between distinct filaments, 0 on the diagonal.
@@ -1290,38 +1295,38 @@ extern "C" {
                     for (size_t z = 0; z < nozzles; ++z)
                         for (size_t i = 0; i < n; ++i)
                             matrix[z * n * n + i * n + i] = 0.;
-                    config.set_key_value("flush_volumes_matrix", new ConfigOptionFloats(matrix));
+                    config->set_key_value("flush_volumes_matrix", new ConfigOptionFloats(matrix));
 
                     // flush_multiplier is indexed per nozzle; one entry per nozzle.
-                    auto* fm = dynamic_cast<const ConfigOptionFloats*>(config.option("flush_multiplier", false));
+                    auto* fm = dynamic_cast<const ConfigOptionFloats*>(config->option("flush_multiplier", false));
                     if (fm == nullptr || fm->values.size() != nozzles)
-                        config.set_key_value("flush_multiplier", new ConfigOptionFloats(std::vector<double>(nozzles, 0.3)));
+                        config->set_key_value("flush_multiplier", new ConfigOptionFloats(std::vector<double>(nozzles, 0.3)));
 
-                    auto* fv = dynamic_cast<const ConfigOptionFloats*>(config.option("flush_volumes_vector", false));
+                    auto* fv = dynamic_cast<const ConfigOptionFloats*>(config->option("flush_volumes_vector", false));
                     if (fv == nullptr || fv->values.size() != n * 2)
-                        config.set_key_value("flush_volumes_vector", new ConfigOptionFloats(std::vector<double>(n * 2, 140.)));
+                        config->set_key_value("flush_volumes_vector", new ConfigOptionFloats(std::vector<double>(n * 2, 140.)));
                 }
 
-                const ConfigOption* nd = config.option("nozzle_diameter");
+                const ConfigOption* nd = config->option("nozzle_diameter");
                 if (nd && static_cast<const ConfigOptionFloats*>(nd)->values.size() <= 1) {
-                    config.set_key_value("single_extruder_multi_material", new ConfigOptionBool(true));
-                    if (config.option("single_extruder_multi_material_priming", false) == nullptr) {
-                        config.set_key_value("single_extruder_multi_material_priming", new ConfigOptionBool(true));
+                    config->set_key_value("single_extruder_multi_material", new ConfigOptionBool(true));
+                    if (config->option("single_extruder_multi_material_priming", false) == nullptr) {
+                        config->set_key_value("single_extruder_multi_material_priming", new ConfigOptionBool(true));
                     }
                 }
 
                 // Enable a prime/wipe tower for reliable filament changes.
-                if (config.option("enable_prime_tower", false) == nullptr) {
-                    config.set_key_value("enable_prime_tower", new ConfigOptionBool(true));
+                if (config->option("enable_prime_tower", false) == nullptr) {
+                    config->set_key_value("enable_prime_tower", new ConfigOptionBool(true));
                 }
 
                 int fdSize = 0;
-                if (auto* fd = dynamic_cast<const ConfigOptionFloats*>(config.option("filament_diameter", false))) fdSize = (int) fd->values.size();
+                if (auto* fd = dynamic_cast<const ConfigOptionFloats*>(config->option("filament_diameter", false))) fdSize = (int) fd->values.size();
                 int fcSize = 0, mxSize = 0, ndSize = 0, fmSize = 0;
-                if (auto* o = dynamic_cast<const ConfigOptionStrings*>(config.option("filament_colour", false))) fcSize = (int) o->values.size();
-                if (auto* o = dynamic_cast<const ConfigOptionFloats*>(config.option("flush_volumes_matrix", false))) mxSize = (int) o->values.size();
-                if (auto* o = dynamic_cast<const ConfigOptionFloats*>(config.option("nozzle_diameter", false))) ndSize = (int) o->values.size();
-                if (auto* o = dynamic_cast<const ConfigOptionFloats*>(config.option("flush_multiplier", false))) fmSize = (int) o->values.size();
+                if (auto* o = dynamic_cast<const ConfigOptionStrings*>(config->option("filament_colour", false))) fcSize = (int) o->values.size();
+                if (auto* o = dynamic_cast<const ConfigOptionFloats*>(config->option("flush_volumes_matrix", false))) mxSize = (int) o->values.size();
+                if (auto* o = dynamic_cast<const ConfigOptionFloats*>(config->option("nozzle_diameter", false))) ndSize = (int) o->values.size();
+                if (auto* o = dynamic_cast<const ConfigOptionFloats*>(config->option("flush_multiplier", false))) fmSize = (int) o->values.size();
                 __android_log_print(ANDROID_LOG_WARN, "FarmPaint", "multicolor slice: numFilaments=%d maxPainted=%d filament_diameter.size=%d filament_colour.size=%d flush_matrix.size=%d nozzle_diameter.size=%d flush_multiplier.size=%d", (int) numFilaments, maxPaintedState, fdSize, fcSize, mxSize, ndSize, fmSize);
             }
 
@@ -1332,14 +1337,14 @@ extern "C" {
             // _make_wipe_tower / reorder_extruders_for_minimum_flush_volume index out of bounds.
             {
                 size_t fc = 0;
-                if (auto* o = dynamic_cast<const ConfigOptionStrings*>(config.option("filament_colour", false)))
+                if (auto* o = dynamic_cast<const ConfigOptionStrings*>(config->option("filament_colour", false)))
                     fc = o->values.size();
                 if (fc > 1) {
                     size_t nozzles = 1;
-                    if (auto* nd = dynamic_cast<const ConfigOptionFloats*>(config.option("nozzle_diameter", false)))
+                    if (auto* nd = dynamic_cast<const ConfigOptionFloats*>(config->option("nozzle_diameter", false)))
                         if (!nd->values.empty()) nozzles = nd->values.size();
 
-                    auto* mx = dynamic_cast<const ConfigOptionFloats*>(config.option("flush_volumes_matrix", false));
+                    auto* mx = dynamic_cast<const ConfigOptionFloats*>(config->option("flush_volumes_matrix", false));
                     if (mx == nullptr || mx->values.size() != fc * fc * nozzles) {
                         __android_log_print(ANDROID_LOG_WARN, "FarmPaint",
                             "normalizing flush matrix: filament_colour=%zu nozzles=%zu old_matrix=%d -> %zu",
@@ -1348,31 +1353,31 @@ extern "C" {
                         for (size_t z = 0; z < nozzles; ++z)
                             for (size_t i = 0; i < fc; ++i)
                                 matrix[z * fc * fc + i * fc + i] = 0.;
-                        config.set_key_value("flush_volumes_matrix", new ConfigOptionFloats(matrix));
+                        config->set_key_value("flush_volumes_matrix", new ConfigOptionFloats(matrix));
                     }
-                    auto* fm = dynamic_cast<const ConfigOptionFloats*>(config.option("flush_multiplier", false));
+                    auto* fm = dynamic_cast<const ConfigOptionFloats*>(config->option("flush_multiplier", false));
                     if (fm == nullptr || fm->values.size() != nozzles)
-                        config.set_key_value("flush_multiplier", new ConfigOptionFloats(std::vector<double>(nozzles, 0.3)));
-                    auto* fv = dynamic_cast<const ConfigOptionFloats*>(config.option("flush_volumes_vector", false));
+                        config->set_key_value("flush_multiplier", new ConfigOptionFloats(std::vector<double>(nozzles, 0.3)));
+                    auto* fv = dynamic_cast<const ConfigOptionFloats*>(config->option("flush_volumes_vector", false));
                     if (fv == nullptr || fv->values.size() != fc * 2)
-                        config.set_key_value("flush_volumes_vector", new ConfigOptionFloats(std::vector<double>(fc * 2, 140.)));
+                        config->set_key_value("flush_volumes_vector", new ConfigOptionFloats(std::vector<double>(fc * 2, 140.)));
                 }
             }
 
             for (auto* mo : model->model.objects) {
-                print.auto_assign_extruders(mo);
+                print->auto_assign_extruders(mo);
             }
 
             // flashforge-farm incorrectly suppresses standard tool changes (T0, T1, etc.) if it thinks
             // the printer is a Bambu Lab machine (is_BBL_printer == true). We force it to false
             // to ensure standard G-code emission for regular Klipper/Marlin printers.
-            print.is_BBL_printer() = false;
+            print->is_BBL_printer() = false;
 
             __android_log_print(ANDROID_LOG_WARN, "FarmPaint", "step: assigned extruders, validating config");
 
             // flashforge-farm's config.validate() returns a map of option-key -> error message
             // instead of a single string; flatten it into one message for the Java side.
-            std::map<std::string, std::string> config_errors = config.validate();
+            std::map<std::string, std::string> config_errors = config->validate();
             if (!config_errors.empty()) {
                 std::string err;
                 for (const auto& kv : config_errors) {
@@ -1383,7 +1388,7 @@ extern "C" {
                 return 0;
             }
             __android_log_print(ANDROID_LOG_WARN, "FarmPaint", "step: config valid, applying");
-            print.apply(model->model, config);
+            print->apply(model->model, *config);
 
             // flashforge-farm calibration: when a calib mode is requested, set the params on the print so
             // the engine generates the calibration test (e.g. PA line pattern) instead of a normal print.
@@ -1394,13 +1399,13 @@ extern "C" {
                 cp.end = calibEnd;
                 cp.step = calibStep;
                 cp.print_numbers = true;
-                print.set_calib_params(cp);
+                print->set_calib_params(cp);
             }
 
             __android_log_print(ANDROID_LOG_WARN, "FarmPaint", "step: applied, print.validate");
 
             // Print::validate() now returns a StringObjectException whose message is in .string.
-            std::string err = print.validate().string;
+            std::string err = print->validate().string;
             if (!err.empty()) {
                 env->ThrowNew(env->FindClass("com/flashforge/farm/slic3r/Slic3rRuntimeError"), err.c_str());
                 return 0;
@@ -1408,7 +1413,7 @@ extern "C" {
 
             std::thread::id id = std::this_thread::get_id();
 
-            print.set_status_callback([&id, &listener](const Slic3r::PrintBase::SlicingStatus &s) {
+            print->set_status_callback([&id, &listener](const Slic3r::PrintBase::SlicingStatus &s) {
                 bool needAttach = id != std::this_thread::get_id();
 
                 JNIEnv* e;
@@ -1428,16 +1433,16 @@ extern "C" {
                 }
             });
             __android_log_print(ANDROID_LOG_WARN, "FarmPaint", "step: print.process");
-            print.process();
+            print->process();
             __android_log_print(ANDROID_LOG_WARN, "FarmPaint", "step: processed, export_gcode");
 
             chars = env->GetStringUTFChars(path, JNI_FALSE);
             GCodeResultRef* resultRef = new GCodeResultRef();
-            print.export_gcode(std::string(chars), &resultRef->result, nullptr);
+            print->export_gcode(std::string(chars), &resultRef->result, nullptr);
             __android_log_print(ANDROID_LOG_WARN, "FarmPaint", "step: exported gcode");
             env->ReleaseStringUTFChars(path, chars);
 
-            resultRef->name = print.output_filename(model->base_name);
+            resultRef->name = print->output_filename(model->base_name);
 
             return (jlong) (intptr_t) resultRef;
         } catch (const std::exception& e) {

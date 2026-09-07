@@ -276,16 +276,63 @@ def main():
                     "(cmdline-tools/latest/bin); GITHUB_PATH only affects later steps"
                 )
 
-    # Slice-thread stack guard: the native slicer (Print::apply -> config
-    # apply -> OpenMP) must run on a big-stack thread. ART's ~1MB default for
-    # `new Thread()` overflows inside Slic3r::Print::apply, faulting in the
-    # vDSO on the first gettimeofday (2026-09-06 farm_crash_9290.log).
+    # Slice-thread stack guard: Slic3r's Print::apply nests several full deep
+    # copies of the print config (by-value DynamicPrintConfig + apply_only
+    # per-option set()), so it must run on a desktop-parity 8MB named thread.
+    # ART's ~1MB default for `new Thread()` overflows inside
+    # Slic3r::Print::apply (2026-09-06 farm_crash_9290.log). The JNI side must
+    # also keep Print/DynamicPrintConfig on the heap, not as stack locals.
     bed = (REPO / "app/src/main/java/com/flashforge/farm/fragment/BedFragment.java").read_text()
-    if not re.search(r"new Thread\(\s*null,\s*\(\) ->", bed) or "32 * 1024 * 1024" not in bed:
+    if not re.search(r"new Thread\(\s*null,\s*\(\) ->", bed) or "8 * 1024 * 1024" not in bed or '"farm-slice"' not in bed:
         failures.append(
-            "BedFragment must run the native slice on a big-stack thread "
-            "(Thread(null, runnable, \"farm-slice\", 32 * 1024 * 1024)); the "
+            "BedFragment must run the native slice on a desktop-parity thread "
+            "(Thread(null, runnable, \"farm-slice\", 8 * 1024 * 1024)); the "
             "default ~1MB new Thread() stack overflows in Slic3r::Print::apply"
+        )
+    farm = (REPO / "app/src/main/jni/farm/farm_native.cpp").read_text()
+    m = re.search(
+        r"Java_com_flashforge_farm_slic3r_Native_model_1slice.*?^}",
+        farm, re.S | re.M)
+    body = m.group(0) if m else ""
+    if "make_unique<Print>()" not in body or "make_unique<DynamicPrintConfig>()" not in body:
+        failures.append(
+            "model_slice must heap-allocate Print/DynamicPrintConfig "
+            "(make_unique); stack locals eat the slice thread's stack"
+        )
+
+    # AutoDispatch dataSync guard: Android 15+ (targetSdk 35) caps dataSync
+    # FGS at 6h/24h and kills the app two ways — running past the cap without
+    # stopSelf (DidNotStopInTime) and starting with a spent quota
+    # (StartNotAllowed at startForeground, 2026-09-06 farm_crash.log). The
+    # service must implement onTimeout -> stopSelf, degrade a refused start
+    # to stopped, never run sticky, and stop itself when idle (restart is
+    # explicit via kick() on app launch + job enqueue).
+    svc = (REPO / "app/src/main/java/com/flashforge/farm/api/AutoDispatchService.java").read_text()
+    if "void onTimeout(int startId, int fgsType)" not in svc:
+        failures.append(
+            "AutoDispatchService must override onTimeout(int, int) -> stopSelf() "
+            "(Android 15+ dataSync 6h/24h quota kills without it)"
+        )
+    if "ForegroundServiceStartNotAllowedException" not in svc:
+        failures.append(
+            "AutoDispatchService must catch ForegroundServiceStartNotAllowedException "
+            "around startForeground (spent quota refuses the start -> stop, never crash)"
+        )
+    if "START_STICKY" in svc and "START_NOT_STICKY" not in svc:
+        failures.append(
+            "AutoDispatchService must not return START_STICKY (system would "
+            "resurrect a dataSync FGS against the 6h/24h quota)"
+        )
+    if "MAX_IDLE_POLLS" not in svc:
+        failures.append(
+            "AutoDispatchService must stop itself after sustained idle polls "
+            "(a never-ending dataSync FGS always exhausts the 6h/24h quota)"
+        )
+    menu = (REPO / "app/src/main/java/com/flashforge/farm/components/bed_menu/SliceMenu.java").read_text()
+    if "AutoDispatchService.kick(ctx)" not in menu:
+        failures.append(
+            "SliceMenu must AutoDispatchService.kick(ctx) after enqueueJob "
+            "(the idle service stops itself; enqueue is a restart point)"
         )
 
     # Crash-log consolidation guards: (1) the native handler must write ONE

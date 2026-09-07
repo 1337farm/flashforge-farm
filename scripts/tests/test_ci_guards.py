@@ -556,6 +556,24 @@ def main():
             "so the Java slice path can log them"
         )
 
+    # Sync-push auth guard: sync-head must push with SYNC_PAT (trusted actor),
+    # not bare GITHUB_TOKEN — token pushes run as github-actions[bot], whose
+    # pull_request runs GitHub gates behind manual approval (2026-09-07: 0-job
+    # action_required zombie runs on PR62 after every sync push).
+    sync = next(
+        (
+            s for s in jobs.get("sync-head", {}).get("steps", [])
+            if isinstance(s, dict) and "self-heal" in str(s.get("name", ""))
+        ),
+        {},
+    )
+    if "SYNC_PAT" not in str(sync.get("run", "")):
+        failures.append(
+            "sync-head push must authenticate with secrets.SYNC_PAT "
+            "(GITHUB_TOKEN pushes run as github-actions[bot] and their "
+            "pull_request runs require manual approval)"
+        )
+
     if failures:
         print("CI GUARD FAILURES:")
         for f in failures:

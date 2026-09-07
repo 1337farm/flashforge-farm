@@ -80,4 +80,37 @@ public class ViewUtils {
     public static int dp(float dp) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, FarmApp.INSTANCE.getResources().getDisplayMetrics());
     }
+
+    public static android.widget.TextView makeText(Context ctx, String text, float textSizeDp, int color) {
+        android.widget.TextView tv = new android.widget.TextView(ctx);
+        tv.setText(text);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSizeDp);
+        tv.setTextColor(color);
+        return tv;
+    }
+
+    public static android.widget.EditText makeEditText(Context ctx, String text) {
+        android.widget.EditText et = new android.widget.EditText(ctx);
+        et.setText(text);
+        et.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        return et;
+    }
+
+    public static void addLabeledEditText(android.widget.LinearLayout parent, String labelText, String hintText, android.widget.EditText editText) {
+        android.widget.LinearLayout itemLayout = new android.widget.LinearLayout(parent.getContext());
+        itemLayout.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        itemLayout.setLayoutParams(new android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT));
+        android.widget.TextView label = new android.widget.TextView(parent.getContext());
+        label.setText(labelText);
+        label.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        itemLayout.addView(label);
+        editText.setHint(hintText);
+        editText.setLayoutParams(new android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT));
+        itemLayout.addView(editText);
+        parent.addView(itemLayout);
+    }
 }

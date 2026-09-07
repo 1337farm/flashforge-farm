@@ -30,6 +30,16 @@ if ! command -v rustup >/dev/null 2>&1; then
 fi
 export PATH="$HOME/.cargo/bin:$PATH"
 command -v cargo >/dev/null 2>&1 || { echo "ERROR: cargo not found after rustup" >&2; exit 1; }
+# Shared compile cache across all farm Rust builds (farm-iroh here,
+# native_iroh_engine in 1337farm/iroh-android-native): same $CARGO_HOME
+# registry plus sccache object cache at $SCCACHE_DIR. Skip silently if
+# sccache is not installed.
+if command -v sccache >/dev/null 2>&1; then
+    export RUSTC_WRAPPER=sccache
+    export CARGO_INCREMENTAL=0
+    export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/.cache/sccache}"
+    export SCCACHE_CACHE_SIZE="${SCCACHE_CACHE_SIZE:-10G}"
+fi
 rustup toolchain install stable --profile minimal --no-self-update >/dev/null 2>&1 || true
 rustup target add aarch64-linux-android >/dev/null
 
@@ -50,8 +60,8 @@ SO="target/aarch64-linux-android/release/libfarm_iroh.so"
 mkdir -p "p2p/output/$ABI"
 cp "$SO" "p2p/output/$ABI/libfarm_iroh.so"
 echo "--- [iroh] generating Kotlin bindings (uniffi) ---"
-cargo install uniffi-bindgen --version 0.32.0 --locked --force >/dev/null 2>&1 || true
+cargo install uniffi --version 0.32.0 --features cli --locked --force >/dev/null 2>&1 || true
 mkdir -p p2p/gen
-uniffi-bindgen generate --lib "$SO" --language kotlin --out-dir p2p/gen
+uniffi-bindgen generate --library "$SO" --language kotlin --out-dir p2p/gen
 ls -la "p2p/output/$ABI/" p2p/gen | head -20
 echo "--- [iroh] done ---"

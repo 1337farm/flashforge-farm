@@ -18,6 +18,7 @@ public class SearchClient {
     private final IrohModelTransport transport;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Map<String, List<SearchResult>> queryCache = new ConcurrentHashMap<>();
+    private final Map<String, UserProfile> profileCache = new ConcurrentHashMap<>();
     private final List<SearchListener> listeners = new CopyOnWriteArrayList<>();
 
     public interface SearchListener {
@@ -126,10 +127,45 @@ public class SearchClient {
         return transport.syncAnnounce();
     }
 
-    public String syncMerge(String ticket) throws Exception {
+    public SyncResult syncMerge(String ticket) throws Exception {
         String res = transport.syncMerge(ticket);
         queryCache.clear();
-        return res;
+        SyncResult parsed = SyncResult.parse(res);
+        for (String pt : parsed.profileTickets) {
+            resolveProfileTicket(pt);
+        }
+        return parsed;
+    }
+
+    public UserProfile fetchProfile(String pubkeyHex, String profileTicket) {
+        if (pubkeyHex == null || profileTicket == null) {
+            return null;
+        }
+        String key = pubkeyHex.trim().toLowerCase();
+        UserProfile cached = profileCache.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        try {
+            byte[] raw = transport.blobFetch(profileTicket);
+            UserProfile p = UserProfile.parse(raw, pubkeyHex);
+            profileCache.put(key, p);
+            return p;
+        } catch (Exception e) {
+            Log.w(TAG, "No profile for " + key, e);
+            return null;
+        }
+    }
+
+    private void resolveProfileTicket(String profileTicket) {
+        try {
+            byte[] raw = transport.blobFetch(profileTicket);
+            UserProfile probe = UserProfile.parse(raw, null);
+            if (probe != null && probe.pubkey != null && !probe.pubkey.isEmpty()) {
+                profileCache.put(probe.pubkey.toLowerCase(), probe);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     public List<String> knownPeers() throws Exception {
@@ -137,10 +173,19 @@ public class SearchClient {
     }
 
     public String profileLabel(String designerName, String pubkeyHex) {
-        String name = (designerName == null || designerName.isEmpty()) ? "anon" : designerName;
         String k = pubkeyHex == null ? "" : pubkeyHex.trim().toLowerCase();
+        UserProfile verified = profileCache.get(k);
+        String name;
+        String mark;
+        if (verified != null && verified.name != null && !verified.name.isEmpty()) {
+            name = verified.name;
+            mark = "verified";
+        } else {
+            name = (designerName == null || designerName.isEmpty()) ? "anon" : designerName;
+            mark = "unverified";
+        }
         String shortKey = k.length() <= 12 ? k : k.substring(0, 8) + ".." + k.substring(k.length() - 4);
-        return name + " - " + shortKey;
+        return name + " [" + mark + "] - " + shortKey;
     }
 
     public UserProfile parseProfile(byte[] raw, String pubkeyHex) {

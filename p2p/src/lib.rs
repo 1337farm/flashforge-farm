@@ -715,7 +715,13 @@ impl FarmEndpoint {
             .ok_or_else(|| FarmError::NotFound("model not indexed".into()))
     }
 
-    pub fn sync_announce(&self) -> Result<String, FarmError> {
+    pub fn blob_fetch(&self, ticket: String) -> Result<Vec<u8>, FarmError> {
+        let t: BlobTicket = ticket.trim().parse().map_err(|_| map_input("bad ticket"))?;
+        let h = rt().block_on(self.download_blob(&t))?;
+        rt().block_on(self.read_blob(h))
+    }
+
+    pub fn sync_announce(&self, profile_ticket: String) -> Result<String, FarmError> {
         let entries = self
             .index
             .read()
@@ -728,7 +734,15 @@ impl FarmEndpoint {
                 "t": self.ticket_for_hash(*h),
             }));
         }
-        let ann = serde_json::json!({"v": 1, "models": models}).to_string();
+        let mut ann = serde_json::json!({"v": 1, "models": models});
+        let pt = profile_ticket.trim().to_string();
+        if !pt.is_empty() {
+            if pt.parse::<BlobTicket>().is_err() {
+                return Err(map_input("bad profile ticket"));
+            }
+            ann["profile"] = serde_json::Value::String(pt);
+        }
+        let ann = ann.to_string();
         let h = rt().block_on(self.add_bytes(ann.into_bytes()))?;
         Ok(self.ticket_for_hash(h))
     }
@@ -744,6 +758,12 @@ impl FarmEndpoint {
             .and_then(|m| m.as_array())
             .ok_or_else(|| map_input("bad announcement"))?;
         let mut tickets = Vec::new();
+        let mut profiles = Vec::new();
+        if let Some(pt) = ann.get("profile").and_then(|x| x.as_str()) {
+            if !pt.trim().is_empty() {
+                profiles.push(pt.to_string());
+            }
+        }
         for m in models.iter().take(MAX_SYNC_MODELS) {
             let (h, mt) = match (
                 m.get("h").and_then(|x| x.as_str()),
@@ -789,6 +809,7 @@ impl FarmEndpoint {
         Ok(serde_json::json!({
             "new_models": tickets.len(),
             "model_tickets": tickets,
+            "profile_tickets": profiles,
         })
         .to_string())
     }

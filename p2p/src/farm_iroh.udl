@@ -58,6 +58,11 @@ interface FarmEndpoint {
     [Throws=FarmError]
     string ticket_info(string ticket);
 
+    // Download a small blob by ticket and return its bytes (profiles,
+    // announcements). Bounded by the blob size cap; not for model files.
+    [Throws=FarmError]
+    bytes blob_fetch(string ticket);
+
     // ===== Models (metadata blob + file blobs + local search index) =====
     // Publish: stores files + metadata, indexes keywords, returns the
     // metadata-blob ticket (share this string; it IS the model ticket).
@@ -83,13 +88,14 @@ interface FarmEndpoint {
     [Throws=FarmError]
     string search_get_metadata(string model_hash);
 
-    // Announcement ticket covering recent index entries. Share it; any peer
-    // that merges it learns your models (epidemic propagation).
+    // Announcement ticket covering recent index entries plus an optional
+    // profile ticket (UserProfile JSON blob). Share it; any peer that
+    // merges it learns your models (epidemic propagation).
     [Throws=FarmError]
-    string sync_announce();
+    string sync_announce(string profile_ticket);
 
     // Merge a peer announcement. Fetches + indexes unknown models (cap 100).
-    // Returns JSON {"new_models": n, "model_tickets": [...]}.
+    // Returns JSON {"new_models": n, "model_tickets": [...], "profile_tickets": [...]}.
     [Throws=FarmError]
     string sync_merge(string ticket);
 

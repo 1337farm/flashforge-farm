@@ -233,6 +233,20 @@ public class SafetyAuditTest {
         tmp.delete();
     }
 
+    @Test
+    public void testSyncResult() {
+        SyncResult r = SyncResult.parse(
+                "{\"new_models\":2,\"model_tickets\":[\"a\",\"b\"],\"profile_tickets\":[\"p\"]}");
+        assertEquals(2, r.newModels);
+        assertEquals(2, r.modelTickets.size());
+        assertEquals(1, r.profileTickets.size());
+        SyncResult empty = SyncResult.parse("not json");
+        assertEquals(0, empty.newModels);
+        assertTrue(empty.modelTickets.isEmpty());
+        SyncResult legacy = SyncResult.parse("{\"new_models\":1,\"model_tickets\":[\"a\"]}");
+        assertTrue(legacy.profileTickets.isEmpty());
+    }
+
     private static String repeat(String s, int n) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < n; i++) {

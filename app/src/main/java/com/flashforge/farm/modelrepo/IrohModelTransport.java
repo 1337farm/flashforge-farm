@@ -218,10 +218,22 @@ public class IrohModelTransport implements ModelTransport {
     }
 
     public String syncAnnounce() throws UnavailableException {
+        return syncAnnounce("");
+    }
+
+    public String syncAnnounce(String profileTicket) throws UnavailableException {
         try {
-            return ep().syncAnnounce();
+            return ep().syncAnnounce(profileTicket == null ? "" : profileTicket);
         } catch (FarmException e) {
             throw new UnavailableException("Announce failed: " + e.getMessage());
+        }
+    }
+
+    public byte[] blobFetch(String ticket) throws UnavailableException {
+        try {
+            return ep().blobFetch(ticket);
+        } catch (FarmException e) {
+            throw new UnavailableException("Blob fetch failed: " + e.getMessage());
         }
     }
 

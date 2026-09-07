@@ -79,13 +79,17 @@ public class SearchClient {
                 for (SearchListener l : listeners) {
                     l.onResults(keyword, results);
                 }
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 Log.e(TAG, "Search failed for: " + keyword, e);
+                String msg = e.getMessage();
+                if (msg == null) {
+                    msg = "search failed";
+                }
                 if (callback != null) {
-                    callback.onError(e.getMessage());
+                    callback.onError(msg);
                 }
                 for (SearchListener l : listeners) {
-                    l.onError(keyword, e.getMessage());
+                    l.onError(keyword, msg);
                 }
             }
         });

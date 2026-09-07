@@ -1141,6 +1141,19 @@ public class MainActivity extends AppCompatActivity {
                 }
                 fos.close();
                 in.close();
+                com.flashforge.farm.modelrepo.verify.Verdict v =
+                        com.flashforge.farm.modelrepo.QuarantineClient.check(
+                                MainActivity.this, f);
+                if (!v.allow) {
+                    f.delete();
+                    String why = v.detail.isEmpty() ? v.reason.name() : v.detail;
+                    ViewUtils.postOnMainThread(() -> new FarmAlertDialogBuilder(MainActivity.this)
+                            .setTitle(R.string.MenuFileOpenFileFailed)
+                            .setMessage("File rejected: " + why)
+                            .setPositiveButton(android.R.string.ok, null)
+                            .show());
+                    return;
+                }
                 loadFile(f, false);
             } catch (Exception e) {
                 Log.e("MainActivity", "Failed to write cache file", e);

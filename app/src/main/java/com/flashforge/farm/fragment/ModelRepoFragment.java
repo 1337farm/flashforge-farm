@@ -100,6 +100,7 @@ public class ModelRepoFragment extends Fragment {
     @Override
     public View onCreateView(Context ctx) {
         ensureIroh(ctx);
+        triggerMigration(ctx);
         trust = new TrustStore(new PrefsStorage(), new java.util.HashSet<String>());
         labels = new LabelAggregator(trust);
         for (String mod : DEFAULT_MODERATORS) {
@@ -167,6 +168,27 @@ public class ModelRepoFragment extends Fragment {
             downloadTicket(ctx, ticket);
         });
         root.addView(fetchBtn);
+
+        LinearLayout syncRow = new LinearLayout(ctx);
+        syncRow.setOrientation(LinearLayout.HORIZONTAL);
+        Button shareBtn = new Button(ctx);
+        shareBtn.setText("Share mine");
+        shareBtn.setOnClickListener(v -> shareModels(ctx, ticketInput));
+        syncRow.addView(shareBtn, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        Button mergeBtn = new Button(ctx);
+        mergeBtn.setText("Merge ticket");
+        mergeBtn.setOnClickListener(v -> {
+            String ticket = ticketInput.getText().toString().trim();
+            if (ticket.isEmpty()) {
+                return;
+            }
+            mergeAnnouncement(ctx, ticket);
+        });
+        syncRow.addView(mergeBtn, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        root.addView(syncRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         statusView = new TextView(ctx);
         statusView.setText(ctx.getString(R.string.ModelRepoIdle));
@@ -317,6 +339,75 @@ public class ModelRepoFragment extends Fragment {
         } else if (transport != null) {
             downloadTicket(ctx, modelHash);
         }
+    }
+
+    private void triggerMigration(final Context ctx) {
+        try {
+            com.flashforge.farm.modelrepo.P2pManager.migrateIfSeeded(ctx,
+                    new com.flashforge.farm.modelrepo.ModelMigrator.Callback() {
+                        @Override
+                        public void onProgress(String model, String stage, int percent) {
+                            setStatus("Seeding " + model + ": " + stage);
+                        }
+
+                        @Override
+                        public void onCompleted(String model, String ticket) {
+                            setStatus("Seeded " + model);
+                        }
+
+                        @Override
+                        public void onError(String model, String error) {
+                            setStatus("Seed " + model + " failed: " + error);
+                        }
+
+                        @Override
+                        public void onAllDone() {
+                            setStatus(ctx.getString(R.string.ModelRepoIdle));
+                            refreshList();
+                        }
+                    });
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void shareModels(final Context ctx, final EditText ticketInput) {
+        if (irohTransport == null) {
+            setStatus(ctx.getString(R.string.ModelRepoUnavailable));
+            return;
+        }
+        setStatus("Building share ticket...");
+        new Thread(() -> {
+            try {
+                final String ann = irohTransport.syncAnnounce();
+                ViewUtils.postOnMainThread(() -> {
+                    ticketInput.setText(ann);
+                    setStatus("Share this ticket: " + ann);
+                });
+            } catch (Exception e) {
+                setStatus("Announce failed: " + e.getMessage());
+            }
+        }, "iroh-announce").start();
+    }
+
+    private void mergeAnnouncement(final Context ctx, final String ticket) {
+        if (searchClient == null) {
+            setStatus(ctx.getString(R.string.ModelRepoUnavailable));
+            return;
+        }
+        setStatus("Merging announcement...");
+        new Thread(() -> {
+            try {
+                final com.flashforge.farm.modelrepo.SyncResult res =
+                        searchClient.syncMerge(ticket);
+                ViewUtils.postOnMainThread(() -> {
+                    setStatus("Merged " + res.newModels + " new model(s)");
+                    refreshList();
+                });
+            } catch (Exception e) {
+                ViewUtils.postOnMainThread(
+                        () -> setStatus("Merge failed: " + e.getMessage()));
+            }
+        }, "iroh-merge").start();
     }
 
     private void downloadTicket(final Context ctx, final String ticket) {

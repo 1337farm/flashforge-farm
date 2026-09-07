@@ -196,6 +196,40 @@ public class SafetyAuditTest {
     }
 
     @Test
+    public void testSniffStreamMatchesFile() throws Exception {
+        byte[] stl = "solid test\nendsolid test\n".getBytes("UTF-8");
+        assertEquals(
+                ModelSafety.sniffKind(writeTmp(stl, ".stl")),
+                ModelSafety.sniffStream(new java.io.ByteArrayInputStream(stl), stl.length));
+        assertEquals("stl-ascii",
+                ModelSafety.sniffStream(new java.io.ByteArrayInputStream(stl), stl.length));
+        byte[] png = new byte[24];
+        png[0] = (byte) 0x89;
+        png[1] = 'P';
+        png[2] = 'N';
+        png[3] = 'G';
+        assertEquals("png",
+                ModelSafety.sniffStream(new java.io.ByteArrayInputStream(png), png.length));
+        assertEquals(
+                ModelSafety.sha256Stream(new java.io.ByteArrayInputStream(stl)),
+                ModelSafety.sha256Stream(new java.io.ByteArrayInputStream(stl)));
+        assertEquals(64, ModelSafety.sha256Stream(
+                new java.io.ByteArrayInputStream(stl)).length());
+    }
+
+    private static File writeTmp(byte[] data, String suffix) throws Exception {
+        File f = File.createTempFile("sniff", suffix);
+        FileOutputStream fos = new FileOutputStream(f);
+        try {
+            fos.write(data);
+        } finally {
+            fos.close();
+        }
+        f.deleteOnExit();
+        return f;
+    }
+
+    @Test
     public void testVerifierRejectsSpoofedExtension() throws Exception {
         File tmp = File.createTempFile("evil", ".stl");
         FileOutputStream fos = new FileOutputStream(tmp);

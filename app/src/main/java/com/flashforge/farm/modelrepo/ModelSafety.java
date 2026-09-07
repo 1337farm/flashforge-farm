@@ -57,6 +57,14 @@ public class ModelSafety {
 
     public static String sniffKind(File f) {
         try (InputStream in = new FileInputStream(f)) {
+            return sniffStream(in, f.length());
+        } catch (Exception e) {
+            return "unreadable";
+        }
+    }
+
+    public static String sniffStream(InputStream in, long len) {
+        try {
             byte[] head = new byte[84];
             int n = 0, r;
             while (n < head.length && (r = in.read(head, n, head.length - n)) != -1) {
@@ -81,7 +89,6 @@ public class ModelSafety {
             // STL: binary files may ALSO start with "solid", so disambiguate
             // by the facet-count/size rule (84-byte header + 50 bytes/facet).
             // Files too short for even the header cannot be valid binary STL.
-            long len = f.length();
             if (len >= 84) {
                 if (!solidLead) {
                     return "stl-binary";
@@ -103,6 +110,21 @@ public class ModelSafety {
         } catch (Exception e) {
             return "unreadable";
         }
+    }
+
+    public static String sha256Stream(InputStream in) throws Exception {
+        java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+        byte[] buf = new byte[32768];
+        int n;
+        while ((n = in.read(buf)) != -1) {
+            md.update(buf, 0, n);
+        }
+        StringBuilder sb = new StringBuilder();
+        for (byte v : md.digest()) {
+            sb.append(Character.forDigit((v >> 4) & 0xF, 16));
+            sb.append(Character.forDigit(v & 0xF, 16));
+        }
+        return sb.toString();
     }
 
     public static boolean extensionMatchesSniff(String ext, String sniffed) {

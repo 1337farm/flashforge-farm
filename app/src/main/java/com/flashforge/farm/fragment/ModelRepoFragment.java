@@ -18,6 +18,7 @@ import com.flashforge.farm.modelrepo.ModelSafety;
 import com.flashforge.farm.modelrepo.ModelTransport;
 import com.flashforge.farm.modelrepo.SearchClient;
 import com.flashforge.farm.modelrepo.TrustStore;
+import com.flashforge.farm.modelrepo.QuarantineClient;
 import com.flashforge.farm.modelrepo.moderation.LabelAggregator;
 import com.flashforge.farm.modelrepo.verify.ModelVerifier;
 import com.flashforge.farm.modelrepo.verify.Verdict;
@@ -415,11 +416,14 @@ public class ModelRepoFragment extends Fragment {
         if (kids == null || kids.length == 0) {
             return Verdict.deny(Verdict.Reason.BAD_METADATA, "empty download");
         }
+        Context ctx = getContext();
         for (File k : kids) {
             if (!k.isFile()) {
                 continue;
             }
-            Verdict v = ModelVerifier.verifyForPublish(k);
+            Verdict v = (ctx != null)
+                    ? QuarantineClient.check(ctx, k)
+                    : ModelVerifier.verifyForPublish(k);
             if (!v.allow) {
                 k.delete();
                 return v;

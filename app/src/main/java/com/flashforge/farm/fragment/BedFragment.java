@@ -49,6 +49,7 @@ import com.flashforge.farm.config.ConfigObject;
 import com.flashforge.farm.events.FlattenModeResetEvent;
 import com.flashforge.farm.events.NeedDismissSnackbarEvent;
 import com.flashforge.farm.events.NeedSnackbarEvent;
+import com.flashforge.farm.events.NeedSnackbarUpdateEvent;
 import com.flashforge.farm.events.ObjectsListChangedEvent;
 import com.flashforge.farm.events.SlicingProgressEvent;
 import com.flashforge.farm.navigation.Fragment;
@@ -89,6 +90,8 @@ public class BedFragment extends Fragment {
     };
 
     private final Bus.Listener<NeedDismissSnackbarEvent> onDismissSnackbar = e -> snackbarsLayout.dismiss(e.tag);
+
+    private final Bus.Listener<NeedSnackbarUpdateEvent> onUpdateSnackbar = e -> snackbarsLayout.update(e.tag, e.progress, e.step, e.detail);
 
     private boolean isAnimatingMenu;
     private boolean isChangingByCode;
@@ -169,6 +172,7 @@ public class BedFragment extends Fragment {
 
         Bus.NEED_SNACKBAR.observeForever(onNeedSnackbar);
         Bus.DISMISS_SNACKBAR.observeForever(onDismissSnackbar);
+        Bus.UPDATE_SNACKBAR.observeForever(onUpdateSnackbar);
     }
 
     public void showUnfoldMenu(UnfoldMenu menu, View from) {

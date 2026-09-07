@@ -16,7 +16,6 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
-import android.widget.Space;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -30,6 +29,7 @@ import java.util.Objects;
 
 import com.flashforge.farm.R;
 import com.flashforge.farm.theme.ThemesRepo;
+import com.flashforge.farm.utils.Prefs;
 import com.flashforge.farm.utils.ViewUtils;
 
 public class SnackbarsLayout extends FrameLayout {
@@ -70,6 +70,29 @@ public class SnackbarsLayout extends FrameLayout {
         }
     }
 
+    public void update(String tag, int percent, CharSequence stepText) {
+        update(tag, percent, stepText, null);
+    }
+
+    public void update(String tag, int percent, CharSequence stepText, CharSequence detail) {
+        for (int i = 0, s = getChildCount(); i < s; i++) {
+            SnackbarView snackbar = (SnackbarView) getChildAt(i);
+            if (Objects.equals(snackbar.snackbar.tag, tag)) {
+                snackbar.updateProgress(percent, stepText, detail);
+            }
+        }
+    }
+
+    public void update(Snackbar snackbar) {
+        if (snackbar.tag == null) return;
+        for (int i = 0, s = getChildCount(); i < s; i++) {
+            SnackbarView view = (SnackbarView) getChildAt(i);
+            if (Objects.equals(view.snackbar.tag, snackbar.tag)) {
+                view.updateProgress(snackbar.percent, snackbar.step, snackbar.detail);
+            }
+        }
+    }
+
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
@@ -103,6 +126,8 @@ public class SnackbarsLayout extends FrameLayout {
         private ProgressBar progressBar;
         private ImageView icon;
         private TextView title;
+        private TextView step;
+        private ProgressBar determinateBar;
         private Snackbar snackbar;
 
         private TextView button;
@@ -126,8 +151,11 @@ public class SnackbarsLayout extends FrameLayout {
             setPadding(ViewUtils.dp(10), ViewUtils.dp(10), ViewUtils.dp(10), ViewUtils.dp(10));
             setMinimumHeight(ViewUtils.dp(48));
 
-            setOrientation(HORIZONTAL);
-            setGravity(Gravity.CENTER_VERTICAL);
+            setOrientation(VERTICAL);
+
+            LinearLayout row = new LinearLayout(context);
+            row.setOrientation(HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
 
             FrameLayout fl = new FrameLayout(context);
             icon = new ImageView(context);
@@ -135,18 +163,26 @@ public class SnackbarsLayout extends FrameLayout {
             progressBar = new ProgressBar(context);
             progressBar.setVisibility(GONE);
             fl.addView(progressBar, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            addView(fl, new LinearLayout.LayoutParams(ViewUtils.dp(28), ViewUtils.dp(28)) {{
+            row.addView(fl, new LinearLayout.LayoutParams(ViewUtils.dp(28), ViewUtils.dp(28)) {{
                 setMarginStart(ViewUtils.dp(4));
                 setMarginEnd(ViewUtils.dp(14));
             }});
+
+            LinearLayout textColumn = new LinearLayout(context);
+            textColumn.setOrientation(VERTICAL);
             title = new TextView(context);
             title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
             title.setTypeface(ViewUtils.getTypeface(ViewUtils.ROBOTO_MEDIUM));
             title.setMaxLines(2);
             title.setEllipsize(TextUtils.TruncateAt.END);
-            addView(title);
-
-            addView(new Space(context), new LinearLayout.LayoutParams(0, 0, 1f));
+            textColumn.addView(title);
+            step = new TextView(context);
+            step.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+            step.setMaxLines(2);
+            step.setEllipsize(TextUtils.TruncateAt.END);
+            step.setVisibility(GONE);
+            textColumn.addView(step);
+            row.addView(textColumn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
             button = new TextView(context);
             button.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
@@ -154,7 +190,16 @@ public class SnackbarsLayout extends FrameLayout {
             button.setMaxLines(1);
             button.setEllipsize(TextUtils.TruncateAt.END);
             button.setPadding(ViewUtils.dp(8), ViewUtils.dp(8), ViewUtils.dp(8),ViewUtils.dp(8));
-            addView(button);
+            row.addView(button);
+            addView(row);
+
+            determinateBar = new ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal);
+            determinateBar.setMax(100);
+            determinateBar.setProgress(0);
+            determinateBar.setVisibility(GONE);
+            addView(determinateBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(3)) {{
+                topMargin = ViewUtils.dp(6);
+            }});
 
             setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT) {{
                 leftMargin = topMargin = rightMargin = bottomMargin = ViewUtils.dp(MARGIN_DP);
@@ -258,6 +303,18 @@ public class SnackbarsLayout extends FrameLayout {
 
             progressBar.setVisibility(snackbar.type == Type.LOADING ? VISIBLE : GONE);
             icon.setVisibility(snackbar.type == Type.LOADING ? GONE : VISIBLE);
+            step.setVisibility(GONE);
+            determinateBar.setVisibility(GONE);
+            if (snackbar.type == Type.LOADING) {
+                CharSequence combined = combine(snackbar.step, snackbar.detail);
+                step.setText(combined);
+                step.setVisibility(combined != null ? VISIBLE : GONE);
+                if (snackbar.percent >= 0) {
+                    progressBar.setVisibility(GONE);
+                    determinateBar.setProgress(snackbar.percent);
+                    determinateBar.setVisibility(VISIBLE);
+                }
+            }
 
             title.setText(snackbar.title);
             button.setText(snackbar.buttonTitle);
@@ -307,6 +364,34 @@ public class SnackbarsLayout extends FrameLayout {
             }
             return this;
         }
+
+        void updateProgress(int percent, CharSequence stepText) {
+            updateProgress(percent, stepText, null);
+        }
+
+        void updateProgress(int percent, CharSequence stepText, CharSequence detail) {
+            boolean loading = snackbar != null && snackbar.type == Type.LOADING;
+            if (!loading) return;
+            progressBar.setVisibility(percent >= 0 ? GONE : VISIBLE);
+            icon.setVisibility(GONE);
+            determinateBar.setVisibility(percent >= 0 ? VISIBLE : GONE);
+            if (percent >= 0) {
+                determinateBar.setProgress(percent);
+            }
+            CharSequence combined = combine(stepText, detail);
+            step.setText(combined);
+            step.setVisibility(combined != null ? VISIBLE : GONE);
+        }
+
+        private CharSequence combine(CharSequence friendly, CharSequence detail) {
+            if (detail == null || !Prefs.isVerboseProgress()) {
+                return friendly;
+            }
+            if (friendly == null || friendly.length() == 0) {
+                return detail;
+            }
+            return new java.lang.StringBuilder(friendly).append("  (").append(detail).append(')');
+        }
     }
 
     public static class Snackbar {
@@ -317,6 +402,10 @@ public class SnackbarsLayout extends FrameLayout {
 
         public CharSequence buttonTitle;
         public View.OnClickListener buttonClick;
+
+        public int percent = -1;
+        public CharSequence step;
+        public CharSequence detail;
 
         public Snackbar(Type type, CharSequence title) {
             this.type = type;

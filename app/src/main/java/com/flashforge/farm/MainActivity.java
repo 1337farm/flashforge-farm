@@ -56,6 +56,7 @@ import com.flashforge.farm.components.UnfoldMenu;
 import com.flashforge.farm.config.ConfigObject;
 import com.flashforge.farm.events.NeedDismissSnackbarEvent;
 import com.flashforge.farm.events.NeedSnackbarEvent;
+import com.flashforge.farm.events.NeedSnackbarUpdateEvent;
 import com.flashforge.farm.events.ObjectsListChangedEvent;
 import com.flashforge.farm.fragment.BedFragment;
 import com.flashforge.farm.fragment.FleetFragment;
@@ -359,6 +360,7 @@ public class MainActivity extends AppCompatActivity {
             File extractDir = new File(FarmApp.getModelCacheDir(), "orca_conv_" + UUID.randomUUID());
             try {
                 copiedArchive = File.createTempFile("orca_conv_", ".zip", FarmApp.getModelCacheDir());
+                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 2, getString(R.string.OrcaConversionCopying)));
                 try (InputStream in = getContentResolver().openInputStream(uri);
                      FileOutputStream fos = new FileOutputStream(copiedArchive)) {
                     if (in == null) {
@@ -367,10 +369,14 @@ public class MainActivity extends AppCompatActivity {
 
                     byte[] buffer = new byte[10240];
                     int c;
+                    long total = 0;
                     while ((c = in.read(buffer)) != -1) {
                         fos.write(buffer, 0, c);
+                        total += c;
+                        Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, (int) Math.min((total / 1024 / 10), 15), getString(R.string.OrcaConversionCopying)));
                     }
                 }
+                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 18, getString(R.string.OrcaConversionReading)));
 
                 if (!extractDir.mkdirs() && !extractDir.isDirectory()) {
                     throw new IOException("Failed to create temporary extraction directory");
@@ -393,7 +399,10 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                importOrcaBundle(root);
+                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 20, getString(R.string.OrcaConversionImporting, 0)));
+
+                importOrcaBundle(root, p -> Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 20 + (int) (p * 75), getString(R.string.OrcaConversionImporting, 20 + (int) (p * 75)))));
+                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 100, getString(R.string.OrcaConversionImporting, 100)));
                 Bus.DISMISS_SNACKBAR.postValue(new NeedDismissSnackbarEvent(tag));
             } catch (IOUtils.MissingProfileException ep) {
                 Bus.DISMISS_SNACKBAR.postValue(new NeedDismissSnackbarEvent(tag));
@@ -819,7 +828,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void importOrcaBundle(JSONObject root) throws Exception {
+    private void importOrcaBundle(JSONObject root, java.util.function.DoubleConsumer onProgress) throws Exception {
         JSONObject bundle = new JSONObject(root.getString("bundle_structure_json"));
 
         HashMap<String, String> files = new HashMap<>();
@@ -830,6 +839,21 @@ public class MainActivity extends AppCompatActivity {
         }
 
         Slic3rConfigWrapper w = new Slic3rConfigWrapper();
+        int total = 0;
+        if (bundle.has("process_config")) {
+            total += bundle.getJSONArray("process_config").length();
+        }
+        if (bundle.has("filament_config")) {
+            total += bundle.getJSONArray("filament_config").length();
+        }
+        if (bundle.has("printer_config")) {
+            total += bundle.getJSONArray("printer_config").length();
+        }
+        if (total == 0) {
+            total = 1;
+        }
+        int done = 0;
+
         if (bundle.has("process_config")) {
             JSONArray arr = bundle.getJSONArray("process_config");
             List<String> names = new ArrayList<>();
@@ -847,6 +871,7 @@ public class MainActivity extends AppCompatActivity {
                     throw new FileNotFoundException(name);
                 }
                 w.printConfigs.add(IOUtils.configJsonToIni(new JSONObject(content), "process", Slic3rConfigWrapper.PRINT_CONFIG_KEYS, stripped));
+                onProgress.accept((double) (++done) / total);
             }
             resolveBundleInherits(w.printConfigs, w::findPrint, name -> FarmApp.CONFIG.findPrint(name));
         }
@@ -867,6 +892,7 @@ public class MainActivity extends AppCompatActivity {
                     throw new FileNotFoundException(name);
                 }
                 w.filamentConfigs.add(IOUtils.configJsonToIni(new JSONObject(content), "filament", Slic3rConfigWrapper.FILAMENT_CONFIG_KEYS, stripped));
+                onProgress.accept((double) (++done) / total);
             }
             resolveBundleInherits(w.filamentConfigs, w::findFilament, name -> FarmApp.CONFIG.findFilament(name));
         }
@@ -887,6 +913,7 @@ public class MainActivity extends AppCompatActivity {
                     throw new FileNotFoundException(name);
                 }
                 w.printerConfigs.add(IOUtils.configJsonToIni(new JSONObject(content), "machine", Slic3rConfigWrapper.PRINTER_CONFIG_KEYS, stripped));
+                onProgress.accept((double) (++done) / total);
             }
             resolveBundleInherits(w.printerConfigs, w::findPrinter, name -> FarmApp.CONFIG.findPrinter(name));
         }
@@ -1006,7 +1033,11 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     boolean gcode = isGcodeFile(f.getName());
                     boolean project3mf = is3mfFile(f.getName());
+                    Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, -1, getString(R.string.MenuFileOpenFileReading, f.getName())));
                     Project3mfImportResult projectImport = project3mf ? importEmbedded3mfProfiles(f) : new Project3mfImportResult();
+                    if (project3mf && projectImport.importedProfiles > 0) {
+                        Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 40, getString(R.string.MenuFileOpenFileImportingProfiles)));
+                    }
                     if (gcode) {
                         fragment.loadGCode(f);
                         fragment.getGlView().queueEvent(new Runnable() {

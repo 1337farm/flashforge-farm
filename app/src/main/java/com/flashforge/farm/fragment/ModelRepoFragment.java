@@ -300,12 +300,14 @@ public class ModelRepoFragment extends Fragment {
 
                     @Override
                     public void onProgress(String t, long downloadedBytes, long totalBytes) {
+                        int percent = Math.min(100, (int) (totalBytes > 0 ? downloadedBytes * 100 / totalBytes : 0));
                         setStatus(ctx.getString(R.string.ModelRepoProgress,
-                                downloadedBytes / 1024, Math.max(totalBytes, 1) / 1024));
+                                percent, downloadedBytes / 1024, Math.max(totalBytes, 1) / 1024));
                     }
 
                     @Override
                     public void onComplete(String t, File d) {
+                        setStatus(ctx.getString(R.string.ModelRepoVerifying));
                         Verdict v = postVerify(d);
                         if (!v.allow) {
                             fail(t, v.detail.isEmpty() ? v.reason.name() : v.detail);
@@ -460,12 +462,14 @@ public class ModelRepoFragment extends Fragment {
 
                 @Override
                 public void onProgress(String t, long downloadedBytes, long totalBytes) {
+                    int percent = Math.min(100, (int) (totalBytes > 0 ? downloadedBytes * 100 / totalBytes : 0));
                     setStatus(ctx.getString(R.string.ModelRepoProgress,
-                            downloadedBytes / 1024, Math.max(totalBytes, 1) / 1024));
+                            percent, downloadedBytes / 1024, Math.max(totalBytes, 1) / 1024));
                 }
 
                 @Override
                 public void onComplete(String t, File d) {
+                    setStatus(ctx.getString(R.string.ModelRepoVerifying));
                     Verdict v = postVerify(d);
                     if (!v.allow) {
                         fail(t, v.detail.isEmpty() ? v.reason.name() : v.detail);

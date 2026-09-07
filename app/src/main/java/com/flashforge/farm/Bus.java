@@ -11,6 +11,7 @@ import com.flashforge.farm.events.MeasurePointsChangedEvent;
 import com.flashforge.farm.events.NeedDismissCalibrationsMenu;
 import com.flashforge.farm.events.NeedDismissSnackbarEvent;
 import com.flashforge.farm.events.NeedSnackbarEvent;
+import com.flashforge.farm.events.NeedSnackbarUpdateEvent;
 import com.flashforge.farm.events.ObjectsListChangedEvent;
 import com.flashforge.farm.events.SelectedObjectChangedEvent;
 import com.flashforge.farm.events.SlicingProgressEvent;
@@ -56,6 +57,7 @@ public final class Bus {
     }
 
     public static final Emitter<NeedSnackbarEvent> NEED_SNACKBAR = new Emitter<>();
+    public static final Emitter<NeedSnackbarUpdateEvent> UPDATE_SNACKBAR = new Emitter<>();
     public static final Emitter<NeedDismissSnackbarEvent> DISMISS_SNACKBAR = new Emitter<>();
     public static final Emitter<ObjectsListChangedEvent> OBJECTS_LIST_CHANGED = new Emitter<>();
     public static final Emitter<SelectedObjectChangedEvent> SELECTED_OBJECT_CHANGED = new Emitter<>();

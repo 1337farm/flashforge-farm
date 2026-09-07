@@ -21,6 +21,8 @@
     <string name="MenuFileOpenFileFailedNullName">Failed to resolve file name.</string>
     <string name="MenuFileOpenFileBigObject">File has more than 500k triangles. Processing could be slow.</string>
     <string name="MenuFileOpenFileLoading">Loading file…</string>
+    <string name="MenuFileOpenFileReading">Reading %1$s…</string>
+    <string name="MenuFileOpenFileImportingProfiles">Importing embedded profiles…</string>
     <string name="MenuFileDelete">Remove model</string>
     <string name="BedContextMenuTitle">Bed actions</string>
     <string name="ModelContextMenuTitle">Model actions</string>
@@ -227,6 +229,11 @@
     <string name="ChangelogOK">OK</string>
     <string name="OrcaConversionPleaseWait">Converting profiles, please wait…</string>
     <string name="OrcaConversionNotAConfigBundle">Not a config bundle</string>
+    <string name="OrcaConversionCopying">Copying profile bundle…</string>
+    <string name="OrcaConversionReading">Reading profile bundle…</string>
+    <string name="OrcaConversionImporting">Installing profiles… %1$d%%</string>
+    <string name="SettingsInterfaceVerboseProgress">Show detailed progress</string>
+    <string name="SettingsInterfaceVerboseProgressDescription">Show per-step details (file names, engine messages) while downloading, importing and installing.</string>
     <string name="AppCrashed">Something went wrong</string>
     <string name="AppCrashedDesc">Android version: %1$s\nDevice: %2$s\nLogs:\n%3$s</string>
     <string name="AppCrashedShare">Share</string>
@@ -248,7 +255,8 @@
     <string name="ModelRepoResolving">Resolving…</string>
     <string name="ModelRepoConfirm">Found “%1$s” by %2$s. Tap Fetch again to confirm download.</string>
     <string name="ModelRepoDownloading">Downloading %1$s…</string>
-    <string name="ModelRepoProgress">%1$d / %2$d KB</string>
+    <string name="ModelRepoProgress">%1$d%% (KB %2$d / %3$d)</string>
+    <string name="ModelRepoVerifying">Verifying download…</string>
     <string name="ModelRepoDone">Download complete. Tap a file to open it.</string>
     <string name="ModelRepoFailed">Failed: %1$s</string>
     <string name="ModelRepoUnavailable">P2P transport not available in this build</string>

@@ -494,7 +494,17 @@ jobs:
                --dir "$DL" --clobber >/dev/null 2>&1; then
             WANT="$(python3 -c "import json;print(json.load(open('$DL/engine-manifest.json'))['files']['libslic3r.so'])" 2>/dev/null || true)"
             GOT="$(sha256sum "$DL/libslic3r.so" 2>/dev/null | cut -d' ' -f1)"
-            if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
+            # Source-freshness: the .so must have been built from the CURRENT
+            # engine/ tree. The sha/size/marker gate alone cannot see source
+            # changes (2026-09-07: a Config.hpp fix was silently skipped and
+            # the APK shipped a stale .so). Old manifests lack engine_src and
+            # therefore always rebuild once, then republish with the field.
+            SRC="$(git rev-parse HEAD:engine 2>/dev/null || true)"
+            SRC_WANT="$(python3 -c "import json;print(json.load(open('$DL/engine-manifest.json')).get('engine_src',''))" 2>/dev/null || true)"
+            if [ -z "$SRC" ] || [ -z "$SRC_WANT" ] || [ "$SRC" != "$SRC_WANT" ]; then
+              echo "engine sources changed since release (src=$SRC want=$SRC_WANT); ignoring and rebuilding"
+              HIT=0
+            elif [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
               # Quality gate mirrors the publish step + the APK static-OCCT
               # check, so a STALE release .so can never be reused: if it is
               # too small, still links OCCT at runtime (libTK DT_NEEDED), or
@@ -791,8 +801,9 @@ jobs:
           SHA="$(git rev-parse --short=10 HEAD)"
           DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           SUM="$(sha256sum "$OUT/libslic3r.so" | cut -d' ' -f1)"
-          printf '{"commit":"%s","built_at":"%s","abi":"%s","files":{"libslic3r.so":"%s"}}\n' \
-            "$SHA" "$DATE" "$ABI" "$SUM" > "$OUT/engine-manifest.json"
+          SRC="$(git rev-parse HEAD:engine)"
+          printf '{"commit":"%s","built_at":"%s","abi":"%s","engine_src":"%s","files":{"libslic3r.so":"%s"}}\n' \
+            "$SHA" "$DATE" "$ABI" "$SRC" "$SUM" > "$OUT/engine-manifest.json"
           gh release delete engine-latest --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
           gh release create engine-latest "$OUT/libslic3r.so" "$OUT/engine-manifest.json" --repo "${{ github.repository }}" \
             --title "Engine libslic3r.so (latest)" \

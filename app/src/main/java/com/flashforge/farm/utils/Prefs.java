@@ -169,6 +169,14 @@ public class Prefs {
         mPrefs.edit().putBoolean("performance_mode", en).apply();
     }
 
+    public static boolean isVerboseProgress() {
+        return mPrefs.getBoolean("verbose_progress", false);
+    }
+
+    public static void setVerboseProgress(boolean en) {
+        mPrefs.edit().putBoolean("verbose_progress", en).apply();
+    }
+
     public enum ThemeMode {
         SYSTEM(R.string.SettingsInterfaceThemeSystem),
         LIGHT(R.string.SettingsInterfaceThemeLight),

@@ -546,13 +546,14 @@ def main():
             "so reports persist to Downloads immediately"
         )
 
-    # Config-load guard: model_slice must refuse a half-loaded config with a
-    # clear error instead of slicing on into mystery downstream failures.
+    # model_slice error-surface guard: native slice failures must surface
+    # as Slic3rRuntimeError (outer catch) so BedFragment logs them; a silent
+    # native death would bypass writeCrashDump entirely.
     farm_native = (REPO / "app/src/main/jni/farm/farm_native.cpp").read_text()
-    if 'config load failed' not in farm_native:
+    if 'Slic3rRuntimeError' not in farm_native:
         failures.append(
-            "model_slice must fail fast when config->load() returns false "
-            "instead of slicing a half-loaded config"
+            "model_slice must surface native failures as Slic3rRuntimeError "
+            "so the Java slice path can log them"
         )
 
     if failures:

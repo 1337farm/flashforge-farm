@@ -7,9 +7,11 @@ in-repo for Android arm64-v8a. Rationale:
   only (verified: no Android ABIs in 1.0.0 or 1.1.0) — unusable on-device.
 - n0's FFI surface exposes endpoints/streams only; we also need blobs and
   gossip, so a custom surface is required regardless.
-- Custom UDL = minimal attack/perf surface: endpoint lifecycle only in v1
-  (blobs/gossip follow the same pattern). Sync functions over an internal
-  `block_on` tokio runtime — nothing async crosses FFI.
+- Custom UDL = minimal attack/perf surface: endpoint lifecycle, blobs,
+  tickets, model publish/fetch (polling), local search index, epidemic
+  sync announcements. Sync functions over an internal `block_on` tokio
+  runtime — nothing async crosses FFI. Background fetch runs on the
+  runtime; Java polls `fetch_poll(handle)`.
 - Bulk bytes never cross JNA (sockets live in Rust); JNA carries control
   calls only, so FFI overhead is negligible.
 

@@ -20,6 +20,20 @@ import com.flashforge.farm.FarmApp;
 public class Native {
     private static final String TAG = "slic3r.Native";
 
+    // Bundle-size note (2026-09-07, measured 40.8MB APK): libslic3r.so alone
+    // is 24.3MB compressed (60%; 65MB raw, already stripped, OCCT static
+    // inside). Rest is DEX 6.8MB (no R8), assets icons 3.7MB, arsc 1.5MB.
+    // DECISION: leave as-is (single self-contained APK, zero install-time
+    // failure modes). If a ~20MB base is ever required, the agreed design is
+    // download-on-demand, not OCCT surgery: ship everything EXCEPT
+    // libslic3r.so (~17MB base) and fetch the engine pack on first slice via
+    // a new EngineLoader.ensureLoaded() called from loadLib("slic3r") below —
+    // system DownloadManager (resumable, no FGS/quota cost), sha256 verified
+    // against CI-baked BuildConfig.ENGINE_SHA/ENGINE_SRC, atomic install into
+    // files/engine/<src>/, System.load(absolutePath) (bundled gmp/mpfr still
+    // satisfy DT_NEEDED), hash mismatch -> "update the app", never slice
+    // unready. Open: trigger on first launch vs first slice; rolling
+    // engine-latest vs immutable per-version assets.
     static {
         long start = System.currentTimeMillis();
         loadLib("c++_shared");

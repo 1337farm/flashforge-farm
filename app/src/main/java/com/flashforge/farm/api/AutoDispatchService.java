@@ -1,6 +1,8 @@
 package com.flashforge.farm.api;
 
+import android.app.ForegroundServiceStartNotAllowedException;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.IBinder;
@@ -31,8 +33,21 @@ import com.flashforge.farm.utils.PrinterFleetManager;
 public class AutoDispatchService extends Service {
     private static final String TAG = "AutoDispatchService";
     private static final long POLL_INTERVAL_MS = 15000; // Poll every 15 seconds
+    private static final int MAX_IDLE_POLLS = 8; // Stop after ~2 min with no pending work
     private Handler handler;
     private Runnable pollRunnable;
+    private int idlePolls = 0;
+
+    /** Restart entry point: every start path must funnel here so a refused
+     *  dataSync start (quota exhausted) degrades to stopped, never a crash. */
+    public static void kick(Context ctx) {
+        if (ctx == null) return;
+        try {
+            ctx.startService(new Intent(ctx, AutoDispatchService.class));
+        } catch (SecurityException | IllegalStateException e) {
+            Log.w(TAG, "Auto-dispatch start refused, staying stopped", e);
+        }
+    }
 
     @Override
     public void onCreate() {
@@ -53,7 +68,23 @@ public class AutoDispatchService extends Service {
             .build();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+            try {
+                startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+            } catch (ForegroundServiceStartNotAllowedException e) {
+                // Android 15+ dataSync quota exhausted (6h/24h): a refused start
+                // must degrade to stopped, never crash the host process.
+                Log.w(TAG, "dataSync start refused (quota exhausted?), stopping", e);
+                stopSelf();
+                return;
+            } catch (RuntimeException e) {
+                // Sequential (not multi-) catch: subclass first is required and
+                // always legal. The try holds exactly one framework call, so
+                // this cannot mask app bugs — any other refusal still stops
+                // instead of killing the process at launch.
+                Log.w(TAG, "startForeground refused, stopping", e);
+                stopSelf();
+                return;
+            }
         } else {
             startForeground(1, notification);
         }
@@ -62,16 +93,34 @@ public class AutoDispatchService extends Service {
         pollRunnable = new Runnable() {
             @Override
             public void run() {
-                checkQueueAndDispatch();
+                if (!checkQueueAndDispatch()) {
+                    idlePolls++;
+                    if (idlePolls >= MAX_IDLE_POLLS) {
+                        stopSelf();
+                        return;
+                    }
+                } else {
+                    idlePolls = 0;
+                }
                 handler.postDelayed(this, POLL_INTERVAL_MS);
             }
         };
         handler.post(pollRunnable);
     }
 
-    private void checkQueueAndDispatch() {
+    // Android 15+ (API 35): the dataSync 6h/24h quota calls this before killing
+    // the process. Stop within seconds so the timeout never becomes a crash.
+    // (Never invoked below API 35; overriding is safe down to minSdk.)
+    @Override
+    public void onTimeout(int startId, int fgsType) {
+        Log.w(TAG, "dataSync timeout, stopping (startId=" + startId + " type=" + fgsType + ")");
+        stopSelf();
+    }
+
+    /** @return true if a pending job was found (service still has work). */
+    private boolean checkQueueAndDispatch() {
         List<PrintQueueManager.QueueItem> queue = PrintQueueManager.getQueue();
-        if (queue.isEmpty()) return;
+        if (queue.isEmpty()) return false;
 
         PrintQueueManager.QueueItem nextJob = null;
         for (PrintQueueManager.QueueItem item : queue) {
@@ -81,7 +130,7 @@ public class AutoDispatchService extends Service {
             }
         }
 
-        if (nextJob == null) return;
+        if (nextJob == null) return false;
 
         List<PrinterFleetManager.Printer> printers = PrinterFleetManager.getPrinters();
         for (PrinterFleetManager.Printer printer : printers) {
@@ -91,9 +140,10 @@ public class AutoDispatchService extends Service {
 
                 checkPrinterIdleAndSend(printer, nextJob);
                 // Try only one matched printer per polling cycle to avoid race conditions
-                break;
+                return true;
             }
         }
+        return true;
     }
 
     private void checkPrinterIdleAndSend(PrinterFleetManager.Printer printer, PrintQueueManager.QueueItem job) {
@@ -187,7 +237,10 @@ public class AutoDispatchService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        return START_STICKY;
+        // Lifecycle is explicit (app launch + job enqueue via kick()); never
+        // let the system resurrect a dataSync FGS behind our back against the
+        // 6h/24h quota.
+        return START_NOT_STICKY;
     }
 
     @Override

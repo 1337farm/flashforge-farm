@@ -18,6 +18,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import com.flashforge.farm.utils.PrintQueueManager;
 import com.flashforge.farm.utils.PrinterFleetManager;
+import com.flashforge.farm.api.AutoDispatchService;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.app.AlertDialog;
@@ -193,6 +194,8 @@ public class SliceMenu extends ListBedMenu {
                     colorInput.getText().toString()
                 );
                 PrintQueueManager.enqueueJob(item);
+                // The dispatcher stops itself when idle; wake it for the new job.
+                AutoDispatchService.kick(ctx);
                 Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(SnackbarsLayout.Type.DONE, R.string.MenuSliceSendToPrinterOK));
             } catch (IOException e) {
                 e.printStackTrace();

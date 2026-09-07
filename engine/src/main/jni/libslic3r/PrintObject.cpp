@@ -3640,8 +3640,18 @@ static void apply_to_print_region_config(PrintRegionConfig &out, const DynamicPr
                         else if (it->first == "inner_wall_filament_id")
                             feature_overrides.inner_wall_filament_id = false;
                     }
-                } else
-                    my_opt->set(it->second.get());
+                } else {
+                    try {
+                        my_opt->set(it->second.get());
+                    } catch (const ConfigurationError &e) {
+                        // Name the offending key: a bare "incompatible type"
+                        // from region application is otherwise undiagnosable
+                        // (2026-09-07 slice failure carried no key and reached
+                        // no log; apply_only is already annotated, this direct
+                        // set() was the remaining keyless site).
+                        throw ConfigurationError(std::string("apply_to_print_region_config '") + it->first + "': " + e.what());
+                    }
+                }
             }
 
     // 3) Apply base extruder only to features that were not explicitly overridden.

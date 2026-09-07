@@ -29,12 +29,21 @@ public class IrohModelTransport implements ModelTransport {
             return;
         }
         try {
+            System.loadLibrary("farm_iroh");
+        } catch (UnsatisfiedLinkError e) {
+            Log.e(TAG, "Native libfarm_iroh.so missing", e);
+            throw new UnavailableException("P2P native library missing in this build");
+        }
+        try {
             byte[] sk = (secretKey != null && secretKey.length == 32) ? secretKey : new byte[0];
             endpoint = Farm_irohKt.connect(sk, dataDir);
             Log.i(TAG, "Iroh endpoint initialized: " + bytesToHex(endpoint.endpointId()));
         } catch (FarmException e) {
             Log.e(TAG, "Failed to initialize Iroh endpoint", e);
             throw new UnavailableException("Iroh init failed: " + e.getMessage());
+        } catch (UnsatisfiedLinkError | ExceptionInInitializerError e) {
+            Log.e(TAG, "Native binding failed", e);
+            throw new UnavailableException("P2P native binding failed");
         }
     }
 
@@ -105,9 +114,10 @@ public class IrohModelTransport implements ModelTransport {
                 l.onError(t, "fetch timed out");
             } catch (UnavailableException ue) {
                 l.onError(t, ue.getMessage());
-            } catch (Exception ex) {
+            } catch (Throwable ex) {
                 Log.e(TAG, "Fetch failed for " + t, ex);
-                l.onError(t, ex.getMessage());
+                String msg = ex.getMessage();
+                l.onError(t, msg == null ? "fetch failed" : msg);
             } finally {
                 if (handle >= 0) {
                     try {

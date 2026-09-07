@@ -502,10 +502,13 @@ public class FarmApp extends Application {
                     } else {
                         String existing = singleObject.values.get(key);
                         if (existing != null) {
-                            singleObject.values.put(key, existing + ";" + val);
+                            // The engine parses multi-extruder vectors from commas (see
+                            // Config::single_sep = ','); ';' only separates coStrings and
+                            // makes every other vector option fail the INI load.
+                            singleObject.values.put(key, existing + "," + val);
                         } else {
                             StringBuilder sb = new StringBuilder();
-                            for (int j = 0; j < i; j++) sb.append(";");
+                            for (int j = 0; j < i; j++) sb.append(",");
                             sb.append(val);
                             singleObject.values.put(key, sb.toString());
                         }

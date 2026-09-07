@@ -1,5 +1,7 @@
 #include <android/log.h>
 #include <typeinfo>
+#include <cxxabi.h>
+#include <cstdlib>
 #include <memory>
 #include <set>
 #include <algorithm>
@@ -1124,6 +1126,44 @@ extern "C" {
         } catch (const std::exception& e) {
             env->ThrowNew(env->FindClass("java/lang/RuntimeException"), e.what());
         }
+    }
+
+    // Diagnostic inventory for slice failures: every config key with its def
+    // type tag and the ACTUAL C++ class held (demangled) plus vector length.
+    // A class-vs-def mismatch here is exactly the "incompatible type" family
+    // of failures; keys missing from the def are flagged too. Best-effort:
+    // never let inventory itself mask the original error.
+    static std::string describe_slice_config(const DynamicPrintConfig& config)
+    {
+        std::string out = "-- config inventory (key : def-type / class / size-or-value) --\n";
+        try {
+            for (const std::string& key : config.keys()) {
+                if (out.size() > 180000) { out += "... (truncated)\n"; break; }
+                const ConfigOption* opt = nullptr;
+                try { opt = config.option(key, false); } catch (...) {}
+                int deftype = -1;
+                try { deftype = (int) print_config_def.get(key).type; } catch (...) {}
+                out += key + " : def=" + std::to_string(deftype);
+                if (opt == nullptr) { out += " opt=null\n"; continue; }
+                int status = 0;
+                char* dem = abi::__cxa_demangle(typeid(*opt).name(), nullptr, nullptr, &status);
+                out += std::string(" ") + (status == 0 && dem != nullptr ? dem : typeid(*opt).name());
+                if (dem != nullptr) free(dem);
+                try {
+                    if (auto* v = dynamic_cast<const ConfigOptionVectorBase*>(opt))
+                        out += " n=" + std::to_string(v->size());
+                    else {
+                        std::string s = opt->serialize();
+                        if (s.size() > 64) s = s.substr(0, 64) + "...";
+                        out += " val=" + s;
+                    }
+                } catch (...) { out += " <unreadable>"; }
+                out += "\n";
+            }
+        } catch (...) {
+            out += "<inventory failed>\n";
+        }
+        return out;
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_model_1slice(JNIEnv* env, jclass, jlong ptr, jstring configPath, jstring path, jobject listener, jint numFilaments, jintArray colorsArr, jint calibMode, jdouble calibStart, jdouble calibEnd, jdouble calibStep) {

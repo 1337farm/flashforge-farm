@@ -468,6 +468,8 @@ jobs:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/23.1.7779620
+    outputs:
+      engine_src: ${{ steps.engine-src.outputs.src }}
     steps:
       - name: Checkout repository
         run: |
@@ -482,6 +484,13 @@ jobs:
         run: |
           DEPKEY="${{ needs.build-dep.outputs.tbb_dep_key }}|${{ needs.build-dep.outputs.boost_dep_key }}|${{ needs.build-dep.outputs.occt_dep_key }}"
           echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','engine/src/main/jni/**','app/build.gradle','scripts/build_all_deps_android.sh') }}-ndk${{ env.NDK_VERSION }}-$ABI-$DEPKEY" >> "$GITHUB_OUTPUT"
+
+      - name: Compute engine source tree
+        id: engine-src
+        run: |
+          # Content-addresses engine/ for artifact binding (upload name) and
+          # validated-build reuse. Shallow checkout still carries HEAD's tree.
+          echo "src=$(git rev-parse HEAD:engine)" >> "$GITHUB_OUTPUT"
 
       - name: Restore engine from release (published build reuse)
         id: engine-rel
@@ -533,8 +542,55 @@ jobs:
           fi
           echo "hit=$HIT" >> "$GITHUB_OUTPUT"
 
-      - name: Set up JDK 17
+      - name: Restore engine from validated PR artifact
+        id: engine-art
         if: steps.engine-rel.outputs.hit != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Skip the full rebuild when a previous run already validated this
+          # EXACT engine tree: artifacts upload under the tree-bound name
+          # libslic3r-<HEAD:engine>, so a name match is a source match. Only
+          # completed-successful runs qualify, and the .so passes the same
+          # quality gate as the release path before staging. Any miss falls
+          # through to a source build.
+          SRC="${{ steps.engine-src.outputs.src }}"
+          ART=0
+          DL="$RUNNER_TEMP/rel-art"; mkdir -p "$DL"
+          command -v unzip >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq unzip; } || true
+          NAME="libslic3r-$SRC"
+          gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" --paginate -q \
+            "[.artifacts[] | select(.name==\"$NAME\" and .expired==false)] | sort_by(.created_at) | reverse | .[0:3][] | \"\(.id) \(.workflow_run.id)\"" \
+            > "$DL/cands.txt" 2>/dev/null || true
+          while read -r AID RID; do
+            [ -n "$AID" ] && [ -n "$RID" ] || continue
+            CONCL="$(gh api "repos/${{ github.repository }}/actions/runs/$RID" -q '.conclusion' 2>/dev/null || true)"
+            [ "$CONCL" = "success" ] || { echo "artifact $AID run $RID not successful ($CONCL); skipping"; continue; }
+            gh api "repos/${{ github.repository }}/actions/artifacts/$AID/zip" > "$DL/art.zip" 2>/dev/null || continue
+            rm -rf "$DL/unp"; mkdir -p "$DL/unp"
+            unzip -o -q "$DL/art.zip" -d "$DL/unp" 2>/dev/null || continue
+            SO="$(find "$DL/unp" -name 'libslic3r.so' 2>/dev/null | head -1)"
+            [ -n "$SO" ] || continue
+            SZ="$(stat -c%s "$SO" 2>/dev/null || echo 0)"
+            if [ "$SZ" -le 10000000 ] \
+               || readelf -d "$SO" | grep -q 'libTK' \
+               || ! strings "$SO" | grep -q -F 'Orca Slicer' \
+               || ! strings "$SO" | grep -q -F 'Arachne' \
+               || ! readelf -d "$SO" | grep -q "libgmp" \
+               || ! readelf -d "$SO" | grep -q "libmpfr"; then
+              echo "artifact $AID failed quality gate; ignoring"
+              continue
+            fi
+            mkdir -p /tmp/engine-output
+            cp "$SO" /tmp/engine-output/libslic3r.so
+            ART=1
+            echo "staged validated artifact $NAME from run $RID (no rebuild)"
+            break
+          done < "$DL/cands.txt"
+          echo "art_hit=$ART" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK 17
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |
           curl -fsSL -o /tmp/temurin17.tar.gz "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse"
           rm -rf /tmp/jdk17 && mkdir -p /tmp/jdk17
@@ -565,13 +621,13 @@ jobs:
             || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
 
       - name: Install ccache
-        if: steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |
           sudo apt-get update
           sudo apt-get install -y ccache
 
       - name: Restore ccache
-        if: steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         uses: actions/cache@v5
         with:
           path: ${{ env.CCACHE_DIR }}
@@ -580,14 +636,14 @@ jobs:
             engine-ccache-${{ runner.os }}-
 
       - name: Initialize ccache
-        if: steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |
           ccache -M 6G
           ccache -z
           ccache --version | head -1
 
       - name: Restore Boost from release (build needs)
-        if: steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -601,7 +657,7 @@ jobs:
           echo "Boost restored from release"
 
       - name: Restore oneTBB from release (build needs)
-        if: steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -615,7 +671,7 @@ jobs:
           echo "oneTBB restored from release"
 
       - name: Restore OCCT from release (build needs)
-        if: steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -629,14 +685,14 @@ jobs:
           echo "OCCT restored from release"
 
       - name: Validate restored deps
-        if: steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |
           for d in engine/src/main/jniImports/boost engine/src/main/jniImports/oneTBB engine/src/main/occt; do
             test -n "$(ls -A "$d" 2>/dev/null)" || { echo "ERROR: missing restored deps at $d"; exit 1; }
           done
 
       - name: Test restored deps exactly (revoke poison on failure)
-        if: steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -737,7 +793,7 @@ jobs:
             --notes "Rolling release of the GMP/MPFR native deps built from source. Re-published whenever the dep rebuilds."
 
       - name: Build native engine .so from source (standalone CMake)
-        if: steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |
           export PATH="/usr/lib/ccache:$PATH"
           cmake -S engine -B engine/build \
@@ -761,13 +817,17 @@ jobs:
           test -n "$SO" || { echo "FAILED: libslic3r.so not found"; exit 1; }
 
       - name: Show ccache stats
-        if: steps.engine-rel.outputs.hit != '1'
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: ccache -s
 
       - name: Upload libslic3r.so artifact
         uses: actions/upload-artifact@v6
         with:
-          name: libslic3r
+          # Tree-bound name: a later run with identical engine/ sources can
+          # reuse this validated artifact instead of rebuilding (see the
+          # engine-art restore step). Same-run consumers use the same name
+          # via the build-engine job outputs.
+          name: libslic3r-${{ steps.engine-src.outputs.src }}
           path: ${{ steps.find-so.outputs.so_artifact }}
           retention-days: 7
 
@@ -954,7 +1014,7 @@ jobs:
         if: needs.changes.outputs.native == 'true'
         uses: actions/download-artifact@v6
         with:
-          name: libslic3r
+          name: libslic3r-${{ needs.build-engine.outputs.engine_src }}
           path: /tmp/libslic3r-artifact
 
       - name: Restore engine from release (non-native PRs)

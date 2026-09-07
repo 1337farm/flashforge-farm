@@ -78,7 +78,8 @@ public class MainActivity extends AppCompatActivity {
     public final static int REQUEST_CODE_OPEN_FILE = 1, REQUEST_CODE_EXPORT_GCODE = 2,
                             REQUEST_CODE_IMPORT_PROFILES = 3, REQUEST_CODE_EXPORT_PROFILES = 4,
                             REQUEST_CODE_EXPORT_3MF = 5,
-                            REQUEST_CODE_PROVISION_USB = 6, REQUEST_CODE_UNINSTALL_USB = 7;
+                            REQUEST_CODE_PROVISION_USB = 6, REQUEST_CODE_UNINSTALL_USB = 7,
+                            REQUEST_CODE_IMPORT_MODEL = 8;
 
     private static MainActivity activeInstance;
 
@@ -326,6 +327,11 @@ public class MainActivity extends AppCompatActivity {
                             .setMessage(e.toString())
                             .setPositiveButton(android.R.string.ok, null)
                             .show();
+                }
+            } else if (requestCode == MainActivity.REQUEST_CODE_IMPORT_MODEL) {
+                Fragment cur = getNavigationDelegate().getCurrentFragment();
+                if (cur instanceof com.flashforge.farm.fragment.ModelPublishFragment) {
+                    ((com.flashforge.farm.fragment.ModelPublishFragment) cur).handlePickedFile(data);
                 }
             } else if (requestCode == MainActivity.REQUEST_CODE_PROVISION_USB
                     || requestCode == MainActivity.REQUEST_CODE_UNINSTALL_USB) {

@@ -78,7 +78,6 @@ public class ModelRepoFragment extends Fragment {
         }
     }
 
-    @Override
     public void subscribeModerator(String ownerPubkeyHex) {
         if (labels != null && ownerPubkeyHex != null) {
             labels.subscribe(ownerPubkeyHex);

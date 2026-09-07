@@ -156,6 +156,11 @@ public class ModelPublishFragment extends Fragment {
     }
 
     private void openFilePicker() {
+        Context ctx = getContext();
+        if (!(ctx instanceof MainActivity)) {
+            Toast.makeText(ctx, "File picker needs the main screen", Toast.LENGTH_SHORT).show();
+            return;
+        }
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("*/*");
@@ -166,12 +171,11 @@ public class ModelPublishFragment extends Fragment {
             "model/obj",
             "application/octet-stream"
         });
-        startActivityForResult(intent, REQUEST_PICK_FILE);
+        ((MainActivity) ctx).startActivityForResult(intent, MainActivity.REQUEST_CODE_IMPORT_MODEL);
     }
 
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == REQUEST_PICK_FILE && resultCode == Activity.RESULT_OK && data != null) {
+    public void handlePickedFile(Intent data) {
+        if (data != null) {
             Uri uri = data.getData();
             if (uri != null) {
                 try {

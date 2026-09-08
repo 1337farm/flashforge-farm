@@ -727,11 +727,11 @@ public class BedFragment extends Fragment {
                         } catch (Exception e) {
                             Log.e("BedFragment", "Slice failed", e);
                             Runtime rt = Runtime.getRuntime();
-                            String ctx = "cfg=" + cfg.getAbsolutePath() + " gcode=" + gcode.getAbsolutePath()
+                            String sliceCtx = "cfg=" + cfg.getAbsolutePath() + " gcode=" + gcode.getAbsolutePath()
                                     + " thread=" + Thread.currentThread().getName()
                                     + " mem=" + (rt.totalMemory() - rt.freeMemory()) / 1048576 + "/"
                                     + rt.maxMemory() / 1048576 + "MB";
-                            FarmApp.writeCrashDump("slice", ctx + "\nslice: " + e + "\n" + Log.getStackTraceString(e));
+                            FarmApp.writeCrashDump("slice", sliceCtx + "\nslice: " + e + "\n" + Log.getStackTraceString(e));
                             ViewUtils.postOnMainThread(()->{
                                 Bus.SLICING_PROGRESS.postValue(new SlicingProgressEvent(100, ""));
                                 new FarmAlertDialogBuilder(ctx)

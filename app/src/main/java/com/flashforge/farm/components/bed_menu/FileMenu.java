@@ -432,20 +432,22 @@ public class FileMenu extends ListBedMenu {
                     new PreferenceItem().setIcon(R.drawable.menu_calibrate_la_28).setTitle("PA Tower").setSubtitle("flashforge-farm PA tower — each layer gets a different PA value").setOnClickListener(v -> {
                         // CalibMode::Calib_PA_Tower: PA increases linearly per layer from start to end.
                         // Default range: 0 to 0.1 with step 0.002 per layer.
-                        LinearLayout ll = new LinearLayout(ctx);
-                        ll.setOrientation(LinearLayout.VERTICAL);
-                        ll.setPadding(ViewUtils.dp(16), ViewUtils.dp(16), ViewUtils.dp(16), ViewUtils.dp(16));
-                        ll.addView(ViewUtils.makeText(ctx, "PA Tower: start value 0, end value per layer", ViewUtils.dp(14), ThemesRepo.getColor(android.R.attr.textColorSecondary)));
-                        ll.addView(new Space(ctx, new LinearLayout.LayoutParams(0, ViewUtils.dp(8))));
+                        LinearLayout towerLl = new LinearLayout(ctx);
+                        towerLl.setOrientation(LinearLayout.VERTICAL);
+                        towerLl.setPadding(ViewUtils.dp(16), ViewUtils.dp(16), ViewUtils.dp(16), ViewUtils.dp(16));
+                        towerLl.addView(ViewUtils.makeText(ctx, "PA Tower: start value 0, end value per layer", ViewUtils.dp(14), ThemesRepo.getColor(android.R.attr.textColorSecondary)));
+                        Space towerGap = new Space(ctx);
+                        towerGap.setLayoutParams(new LinearLayout.LayoutParams(0, ViewUtils.dp(8)));
+                        towerLl.addView(towerGap);
                         android.widget.EditText startEt = ViewUtils.makeEditText(ctx, "0");
                         android.widget.EditText endEt = ViewUtils.makeEditText(ctx, "0.1");
                         android.widget.EditText stepEt = ViewUtils.makeEditText(ctx, "0.002");
-                        ViewUtils.addLabeledEditText(ll, "Start PA", "Start pressure advance value", startEt);
-                        ViewUtils.addLabeledEditText(ll, "End PA", "End pressure advance value", endEt);
-                        ViewUtils.addLabeledEditText(ll, "Step", "PA step per layer", stepEt);
+                        ViewUtils.addLabeledEditText(towerLl, "Start PA", "Start pressure advance value", startEt);
+                        ViewUtils.addLabeledEditText(towerLl, "End PA", "End pressure advance value", endEt);
+                        ViewUtils.addLabeledEditText(towerLl, "Step", "PA step per layer", stepEt);
                         new android.app.AlertDialog.Builder(ctx)
                             .setTitle("PA Tower Calibration")
-                            .setView(ll)
+                            .setView(towerLl)
                             .setPositiveButton("OK", (d, w) -> {
                                 try {
                                     FarmApp.PENDING_CALIB_MODE = 3; // CalibMode::Calib_PA_Tower

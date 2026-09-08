@@ -1,6 +1,7 @@
 package com.flashforge.farm.utils;
 
 import android.animation.TimeInterpolator;
+import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;

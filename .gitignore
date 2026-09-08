@@ -70,3 +70,4 @@ p2p/target/
 p2p/output/
 p2p/.cargo/
 scripts/tests/engine_repro/regress/.run.log
+scripts/tests/engine_repro/regress/.engine_pin

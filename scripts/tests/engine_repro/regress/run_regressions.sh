@@ -24,7 +24,9 @@ REG="$REPO/scripts/tests/engine_repro/regress"
 
 ENGINE_LIBS_DIR="${1:-}"
 export ENGINE_LIBS_DIR
-bash "$REPO/scripts/tests/engine_repro/build_harness.sh" >/dev/null || exit 2
+# build_harness.sh resolves a real libslic3r.so (falling back to the local
+# engine/output staging dir when no explicit dir is given) and prints it.
+ENGINE_LIBS_DIR="$(bash "$REPO/scripts/tests/engine_repro/build_harness.sh" "$ENGINE_LIBS_DIR")" || exit 2
 
 echo "engine under test: $ENGINE_LIBS_DIR/libslic3r.so"
 sha256sum "$ENGINE_LIBS_DIR/libslic3r.so" 2>/dev/null | awk '{print "engine sha256:", $1}'

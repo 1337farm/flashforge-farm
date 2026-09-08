@@ -635,6 +635,21 @@ def main():
             "and prune legacy/other-build docs by name comparison"
         )
 
+    # Slice-verbosity guards: failures must carry actionable context — the
+    # native catch attaches a per-key config inventory (def type + actual
+    # C++ class), and the Java slice catch logs paths/thread/memory. A bare
+    # message + stack alone could not identify the 2026-09-07 config culprit.
+    if 'describe_slice_config(*config)' not in farm_native or '__cxa_demangle' not in farm_native:
+        failures.append(
+            "model_slice catch must attach describe_slice_config inventory "
+            "(demangled per-key classes) so config failures are diagnosable offline"
+        )
+    if 'thread=" + Thread.currentThread' not in bed:
+        failures.append(
+            "BedFragment slice failure must log paths/thread/memory context, "
+            "not just the exception"
+        )
+
     if failures:
         print("CI GUARD FAILURES:")
         for f in failures:

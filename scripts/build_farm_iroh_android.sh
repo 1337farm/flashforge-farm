@@ -54,13 +54,19 @@ EOF
 echo "--- [iroh] building farm-iroh cdylib (arm64-v8a, release) ---"
 cargo build --release --target aarch64-linux-android --manifest-path p2p/Cargo.toml
 
-SO="target/aarch64-linux-android/release/libfarm_iroh.so"
+# With --manifest-path p2p/Cargo.toml, cargo places the target dir under the
+# crate root (p2p/target), not the invoking directory.
+SO="p2p/target/aarch64-linux-android/release/libfarm_iroh.so"
 [ -f "$SO" ] || { echo "ERROR: $SO not built" >&2; exit 1; }
 
 mkdir -p "p2p/output/$ABI"
 cp "$SO" "p2p/output/$ABI/libfarm_iroh.so"
 echo "--- [iroh] generating Kotlin bindings (uniffi) ---"
-cargo install uniffi --version 0.32.0 --features cli --locked --force >/dev/null 2>&1 || true
+# Reinstall only when the pinned CLI is absent/stale: cargo install --force
+# re-downloads and rebuilds every run (~5-10 min), defeating the CI cache.
+if ! uniffi-bindgen --version 2>/dev/null | grep -q '0.32'; then
+    cargo install uniffi --version 0.32.0 --features cli --locked
+fi
 mkdir -p p2p/gen
 uniffi-bindgen generate --library "$SO" --language kotlin --out-dir p2p/gen
 ls -la "p2p/output/$ABI/" p2p/gen | head -20

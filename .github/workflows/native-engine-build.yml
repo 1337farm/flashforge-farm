@@ -171,6 +171,7 @@ jobs:
       pull-requests: read
     outputs:
       native: ${{ steps.filter.outputs.native }}
+      iroh: ${{ steps.filter.outputs.iroh }}
     steps:
       - name: Detect native-affecting changes
         id: filter
@@ -180,6 +181,8 @@ jobs:
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             echo "native=true (non-PR: always full build)"
             echo "native=true" >> "$GITHUB_OUTPUT"
+            echo "iroh=true (non-PR: always build farm-iroh)"
+            echo "iroh=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # File list via API: immune to shallow-checkout merge-base issues.
@@ -197,6 +200,13 @@ jobs:
           fi
           if [ "$NATIVE" = "1" ]; then echo "native=true (native inputs changed)"; echo "native=true" >> "$GITHUB_OUTPUT"
           else echo "native=false (no native inputs changed; APK assembles against releases)"; echo "native=false" >> "$GITHUB_OUTPUT"; fi
+          # farm-iroh (custom UniFFI binding): p2p/ source tree or the iroh
+          # build script changing must stage that .so from a fresh build, and
+          # any workflow change re-drives the whole chain anyway.
+          IROH=0
+          echo "$FILES" | grep -qE '^(p2p/|scripts/build_farm_iroh_android.sh|\.github/workflows/native-engine-build.yml)' && IROH=1
+          if [ "$IROH" = "1" ]; then echo "iroh=true (farm-iroh inputs changed)"; echo "iroh=true" >> "$GITHUB_OUTPUT"
+          else echo "iroh=false"; echo "iroh=false" >> "$GITHUB_OUTPUT"; fi
 
   build-dep:
     name: dep-${{ matrix.dep }}
@@ -880,10 +890,165 @@ jobs:
             --title "Engine libslic3r.so (latest)" \
             --notes "Rolling release of libslic3r.so built from source. Re-published whenever the engine rebuilds."
 
+  build-iroh:
+    name: iroh
+    runs-on: ubuntu-24.04
+    needs: [changes]
+    # farm-iroh: the custom UniFFI cdylib (P2P model-registry transport) built
+    # entirely from source via scripts/build_farm_iroh_android.sh (iroh/-base/
+    # -blobs/-tickets + uniffi 0.32 pinned in p2p/Cargo.toml). No prebuilt
+    # Maven FFI is used. Always runs on main (keeps farm-iroh-latest rolling
+    # and feeds the APK); on PRs when p2p/ or the build script changed, or
+    # when the native chain is already building anyway. Mirrors build-engine's
+    # release-first reuse: verify farm-iroh-latest against the CURRENT
+    # p2p/ tree + build script (manifest iroh_src) and only compile on miss.
+    if: github.ref == 'refs/heads/main' || needs.changes.outputs.iroh == 'true' || needs.changes.outputs.native == 'true'
+    timeout-minutes: 300
+    permissions:
+      contents: write
+    outputs:
+      iroh_src: ${{ steps.iroh-src.outputs.src }}
+    env:
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/23.1.7779620
+      ABI: arm64-v8a
+    steps:
+      - name: Checkout repository
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --depth 100 origin "${{ github.sha }}"
+          git checkout "${{ github.sha }}"
+
+      - name: Compute farm-iroh source key
+        id: iroh-src
+        run: |
+          # Content-addresses the p2p/ tree AND the build script (both change
+          # the .so), for artifact naming, cache keys and manifest freshness.
+          SRC="$(git rev-parse HEAD:p2p | head -1)-$(git rev-parse HEAD:scripts/build_farm_iroh_android.sh | head -1)"
+          echo "src=$SRC"
+          echo "src=$SRC" >> "$GITHUB_OUTPUT"
+
+      - name: Restore farm-iroh from release (published build reuse)
+        id: iroh-rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          HIT=0
+          DL="$RUNNER_TEMP/rel-iroh"; mkdir -p "$DL"
+          if gh release download farm-iroh-latest --pattern 'libfarm_iroh.so' --pattern 'iroh-manifest.json' \
+               --dir "$DL" --clobber >/dev/null 2>&1; then
+            SRC="$(git rev-parse HEAD:p2p | head -1)-$(git rev-parse HEAD:scripts/build_farm_iroh_android.sh | head -1)"
+            SRC_WANT="$(python3 -c "import json;print(json.load(open('$DL/iroh-manifest.json')).get('iroh_src',''))" 2>/dev/null || true)"
+            if [ -z "$SRC" ] || [ -z "$SRC_WANT" ] || [ "$SRC" != "$SRC_WANT" ]; then
+              echo "farm-iroh sources changed since release (src=$SRC want=$SRC_WANT); rebuilding"
+            else
+              WANT="$(python3 -c "import json;print(json.load(open('$DL/iroh-manifest.json'))['files']['libfarm_iroh.so'])" 2>/dev/null || true)"
+              GOT="$(sha256sum "$DL/libfarm_iroh.so" 2>/dev/null | cut -d' ' -f1)"
+              SZ="$(stat -c%s "$DL/libfarm_iroh.so" 2>/dev/null || echo 0)"
+              if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ] \
+                 && [ "$SZ" -gt 1000000 ] \
+                 && readelf -h "$DL/libfarm_iroh.so" | grep -q 'AArch64' \
+                 && strings "$DL/libfarm_iroh.so" | grep -q -F 'checksum_func_connect'; then
+                mkdir -p "p2p/output/$ABI"
+                cp "$DL/libfarm_iroh.so" "p2p/output/$ABI/libfarm_iroh.so"
+                HIT=1
+                echo "farm-iroh release verified and staged (quality gate passed, no rebuild)"
+              else
+                echo "farm-iroh release sha/marker gate failed; rebuilding"
+              fi
+            fi
+          else
+            echo "no usable farm-iroh-latest release; continuing"
+          fi
+          echo "hit=$HIT" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK / NDK
+        if: steps.iroh-rel.outputs.hit != '1'
+        run: |
+          SDK=/usr/local/lib/android/sdk
+          test -d "$SDK/cmdline-tools" || { echo "ERROR: preinstalled SDK missing at $SDK"; exit 1; }
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "$SDK/cmdline-tools/latest/bin:$SDK/platform-tools" >> "$GITHUB_PATH"
+          # GITHUB_PATH applies to later steps only; export locally for this step.
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --version
+
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.iroh-rel.outputs.hit != '1'
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37.0" "cmake;3.22.1"
+          # API 37 ships as android-37.0 only; builds resolve android-37.
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+          "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android23-clang" --version \
+            || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
+
+      - name: Restore Rust toolchain + registry cache
+        if: steps.iroh-rel.outputs.hit != '1'
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo
+            ~/.rustup
+          key: iroh-cargo-${{ runner.os }}-${{ hashFiles('p2p/Cargo.lock') }}
+          restore-keys: |
+            iroh-cargo-${{ runner.os }}-
+
+      - name: Build farm-iroh cdylib + generate Kotlin bindings (source, NDK)
+        if: steps.iroh-rel.outputs.hit != '1'
+        run: |
+          chmod +x scripts/build_farm_iroh_android.sh
+          ./scripts/build_farm_iroh_android.sh
+          test -f "p2p/output/$ABI/libfarm_iroh.so" \
+            || { echo "ERROR: build_farm_iroh_android.sh did not stage libfarm_iroh.so"; exit 1; }
+
+      - name: Upload farm-iroh artifact
+        uses: actions/upload-artifact@v6
+        with:
+          # Source-bound name: a later run with identical p2p/ + build-script
+          # sources reuses this validated artifact (see package-apk).
+          name: farm-iroh-${{ steps.iroh-src.outputs.src }}
+          path: p2p/output/${{ env.ABI }}/libfarm_iroh.so
+          retention-days: 7
+
+      - name: Publish farm-iroh release
+        if: github.ref == 'refs/heads/main' && steps.iroh-rel.outputs.hit != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          OUT="$RUNNER_TEMP/iroh-release"
+          mkdir -p "$OUT"
+          SO="p2p/output/$ABI/libfarm_iroh.so"
+          test -f "$SO" || { echo "ERROR: no libfarm_iroh.so to publish"; exit 1; }
+          # Quality gate: real cdylib is tens of MB, AArch64, and carries the
+          # uniffi checksum symbols the bindings call. Publishes (including
+          # backfill of cache-hit builds) only pass here.
+          SZ="$(stat -c%s "$SO")"
+          test "$SZ" -gt 1000000 || { echo "ERROR: libfarm_iroh.so too small ($SZ bytes)"; exit 1; }
+          readelf -h "$SO" | grep -q 'AArch64' || { echo "ERROR: libfarm_iroh.so not AArch64"; exit 1; }
+          strings "$SO" | grep -q -F 'checksum_func_connect' \
+            || { echo "ERROR: libfarm_iroh.so missing uniffi checksum marker"; exit 1; }
+          echo "libfarm_iroh.so quality OK ($SZ bytes, AArch64, uniffi marker present)"
+          cp "$SO" "$OUT/libfarm_iroh.so"
+          SHA="$(git rev-parse --short=10 HEAD)"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          SUM="$(sha256sum "$OUT/libfarm_iroh.so" | cut -d' ' -f1)"
+          SRC="${{ steps.iroh-src.outputs.src }}"
+          printf '{"commit":"%s","built_at":"%s","abi":"%s","iroh_src":"%s","files":{"libfarm_iroh.so":"%s"}}\n' \
+            "$SHA" "$DATE" "$ABI" "$SRC" "$SUM" > "$OUT/iroh-manifest.json"
+          gh release delete farm-iroh-latest --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
+          gh release create farm-iroh-latest "$OUT/libfarm_iroh.so" "$OUT/iroh-manifest.json" --repo "${{ github.repository }}" \
+            --title "farm-iroh cdylib (latest)" \
+            --notes "Rolling release of libfarm_iroh.so built from source. Re-published whenever the farm-iroh crate rebuilds."
+
   package-apk:
     name: apk
     runs-on: ubuntu-24.04
-    needs: [build-dep, build-engine, changes]
+    needs: [build-dep, build-engine, build-iroh, changes]
     # Skipped upstream jobs (path-filtered native builds) must NOT skip this
     # job: without this gate, GitHub skips the whole APK assembly+test stage
     # whenever deps/engine legitimately skip. Only genuine failure or
@@ -897,7 +1062,11 @@ jobs:
     # path-filter, apk clicked through on the naive form below, and merge
     # never fired. With !cancelled() the state machine actually evaluates
     # the result guards instead of dropping the job.
-    if: '!cancelled() && needs.changes.result == ''success'' && needs.build-dep.result != ''failure'' && needs.build-dep.result != ''cancelled'' && needs.build-engine.result != ''failure'' && needs.build-engine.result != ''cancelled'''
+    #
+    # build-iroh is allowed to SKIP (p2p untouched) — then farm-iroh is
+    # restored from the farm-iroh-latest release below; only a real failure
+    # or cancellation of that job blocks the APK.
+    if: '!cancelled() && needs.changes.result == ''success'' && needs.build-dep.result != ''failure'' && needs.build-dep.result != ''cancelled'' && needs.build-engine.result != ''failure'' && needs.build-engine.result != ''cancelled'' && needs.build-iroh.result != ''failure'' && needs.build-iroh.result != ''cancelled'''
     timeout-minutes: 120
     permissions:
       contents: write
@@ -1073,6 +1242,56 @@ jobs:
             && strings "$SO" | grep -q -F 'Arachne' \
             && echo "OK: staged engine .so carries engine markers" \
             || { echo "ERROR: staged engine .so failed marker check"; exit 1; }
+
+      - name: Download farm-iroh artifact (source-built / release-verified)
+        if: needs.changes.outputs.native == 'true' || needs.changes.outputs.iroh == 'true'
+        uses: actions/download-artifact@v6
+        with:
+          name: farm-iroh-${{ needs.build-iroh.outputs.iroh_src }}
+          path: /tmp/farm-iroh-artifact
+
+      - name: Restore farm-iroh from release (non-iroh/native runs)
+        if: needs.changes.outputs.native != 'true' && needs.changes.outputs.iroh != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DL="$RUNNER_TEMP/rel-iroh"; mkdir -p "$DL"
+          if gh release download farm-iroh-latest --pattern 'libfarm_iroh.so' --pattern 'iroh-manifest.json' \
+               --dir "$DL" --clobber >/dev/null 2>&1; then
+            # Source-freshness mirror of the engine release reuse: only a .so
+            # built from the CURRENT p2p/ tree + build script is staged;
+            # otherwise degrade (P2P transport unavailable at runtime) rather
+            # than ship a stale native lib.
+            SRC="$(git rev-parse HEAD:p2p | head -1)-$(git rev-parse HEAD:scripts/build_farm_iroh_android.sh | head -1)"
+            SRC_WANT="$(python3 -c "import json;print(json.load(open('$DL/iroh-manifest.json')).get('iroh_src',''))" 2>/dev/null || true)"
+            if [ -n "$SRC" ] && [ "$SRC" = "$SRC_WANT" ]; then
+              WANT="$(python3 -c "import json;print(json.load(open('$DL/iroh-manifest.json'))['files']['libfarm_iroh.so'])" 2>/dev/null || true)"
+              GOT="$(sha256sum "$DL/libfarm_iroh.so" | cut -d' ' -f1)"
+              if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
+                mkdir -p p2p/output/arm64-v8a
+                cp "$DL/libfarm_iroh.so" p2p/output/arm64-v8a/libfarm_iroh.so
+                echo "farm-iroh restored from release (fresh, sha-verified)"
+                exit 0
+              fi
+              echo "farm-iroh release sha mismatch; degrading (no .so staged)"
+            else
+              echo "farm-iroh release stale for this source; degrading (no .so staged)"
+            fi
+          else
+            echo "no farm-iroh-latest release yet; degrading (no .so staged)"
+          fi
+
+      - name: Verify staged farm-iroh .so
+        run: |
+          SO=p2p/output/arm64-v8a/libfarm_iroh.so
+          if [ -f "$SO" ]; then
+            readelf -h "$SO" | grep -q 'AArch64' || { echo "ERROR: staged libfarm_iroh.so not AArch64"; exit 1; }
+            strings "$SO" | grep -q -F 'checksum_func_connect' \
+              || { echo "ERROR: staged libfarm_iroh.so missing uniffi marker"; exit 1; }
+            echo "OK: staged libfarm_iroh.so genuine ($(stat -c%s "$SO") bytes)"
+          else
+            echo "WARN: no libfarm_iroh.so staged; P2P model transport degrades (IrohModelTransport -> UnavailableException)"
+          fi
 
       - name: Run Android unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace

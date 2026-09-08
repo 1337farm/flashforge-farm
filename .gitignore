@@ -41,7 +41,6 @@ engine/build/
 engine/output/
 p2p/build/
 p2p/output/
-p2p/gen/
 p2p/.cargo/
 p2p/target/
 app/src/main/assets/update.json
@@ -69,5 +68,6 @@ app/screen.png
 # NDK/linker paths vary per machine)
 p2p/target/
 p2p/output/
-p2p/gen/
 p2p/.cargo/
+scripts/tests/engine_repro/regress/.run.log
+scripts/tests/engine_repro/regress/.engine_pin

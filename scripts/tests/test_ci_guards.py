@@ -574,7 +574,7 @@ def main():
             "pull_request runs require manual approval)"
         )
 
-    # farm-iroh release-reuse must not stage a stale .so: the cdylib output
+# farm-iroh release-reuse must not stage a stale .so: the cdylib output
     # depends on BOTH the p2p/ tree AND scripts/build_farm_iroh_android.sh,
     # so the manifest iroh_src key must cover both; the gate mirrors the
     # publish quality gate (size/arch/uniffi marker). Cheap to compile, so
@@ -617,6 +617,22 @@ def main():
         failures.append(
             "Publish farm-iroh release must gate on refs/heads/main only "
             "(rolling release; PR builds upload artifacts instead)"
+        )
+
+    # Per-build log-file guard: each build must append to its own Downloads
+    # document (name carries the build commit) instead of every crash cycle
+    # replacing one shared file; prune must keep the current build's file
+    # while removing legacy/other-build docs.
+    if 'crashDownloadsName()' not in fapp or '"farm_crash_" + c + ".log"' not in fapp:
+        failures.append(
+            "FarmApp must publish per-build Downloads docs via "
+            "crashDownloadsName() (farm_crash_<commit>.log); a single shared "
+            "name gets replaced instead of appended across builds"
+        )
+    if 'keep.equals(name)' not in fapp:
+        failures.append(
+            "pruneStaleCrashFiles must keep the current build's document "
+            "and prune legacy/other-build docs by name comparison"
         )
 
     if failures:

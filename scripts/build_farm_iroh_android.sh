@@ -62,11 +62,17 @@ export AR_aarch64_linux_android="$TOOLBIN/llvm-ar"
 export PATH="$TOOLBIN:$PATH"
 
 echo "--- [iroh] building farm-iroh cdylib (arm64-v8a, release) ---"
-cargo build --release --target aarch64-linux-android --manifest-path p2p/Cargo.toml
+# Build from the crate root, not --manifest-path from the repo root: uniffi's
+# build.rs shells out to `cargo metadata`, which resolves against the invoking
+# CWD — with CWD=$ROOT that finds no Cargo.toml ("could not find Cargo.toml").
+# (Target linker/ar come from the env vars above, so the CWD change loses nothing.)
+(
+    cd p2p
+    cargo build --release --target aarch64-linux-android
+)
 
-# With --manifest-path p2p/Cargo.toml, cargo places the target dir under the
-# crate root (p2p/target), not the invoking directory.
-SO="p2p/target/aarch64-linux-android/release/libfarm_iroh.so"
+# With CWD=p2p, cargo places the target dir under the crate root.
+SO="$ROOT/p2p/target/aarch64-linux-android/release/libfarm_iroh.so"
 [ -f "$SO" ] || { echo "ERROR: $SO not built" >&2; exit 1; }
 
 mkdir -p "p2p/output/$ABI"

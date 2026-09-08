@@ -1153,7 +1153,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh pr merge "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --squash --delete-branch
+          # --auto: without it gh pr merge only merges when the PR is
+          # mergeable at that instant; the merge job often runs before GitHub
+          # re-evaluates mergeability of the just-built head, and the command
+          # then aborts with "base branch policy prohibits the merge".
+          gh pr merge "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --squash --delete-branch --auto
 
       - name: Dispatch main pipeline to refresh rolling releases
         env:

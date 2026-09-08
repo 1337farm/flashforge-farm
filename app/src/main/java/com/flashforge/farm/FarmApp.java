@@ -50,8 +50,13 @@ public class FarmApp extends Application {
     // for Bed3D compatibility. Restored by Model.slice() so the native engine runs its btAutoBrim logic.
     public static boolean AUTO_BRIM_SELECTED = false;
 
-    // Pending flashforge-farm calibration for the next slice (CalibMode ordinal; 0 = normal print).
-    // Consumed and reset by BedFragment after slicing.
+    // CalibMode enum values (from native libslic3r CalibMode enum):
+    // 0 = Calib_None
+    // 1 = Calib_PA_Line
+    // 2 = Calib_PA_Pattern  
+    // 3 = Calib_PA_Tower
+    // 4 = Calib_Auto_PA_Line
+    // 5+ = other calibration modes
     public static int PENDING_CALIB_MODE = 0;
     public static double PENDING_CALIB_START = 0, PENDING_CALIB_END = 0, PENDING_CALIB_STEP = 0;
 
@@ -243,8 +248,8 @@ public class FarmApp extends Application {
     /**
      * Silently export any pending crash dumps (native crashes write straight to
      * getCrashDir() at signal time and never get a chance to run the Java
-     * uncaught handler) into ONE canonical Downloads document (farm_crash.log),
-     * then clear them. Called on app start so a crash is never lost and there
+     * uncaught handler) into this build's Downloads document
+     * (crashDownloadsName(), e.g. farm_crash_<commit>.log), then clear them. Called on app start so a crash is never lost and there
      * is no on-load error screen. Every internal file is concatenated into the
      * same document, and older farm_crash_* docs from earlier crashes are
      * pruned, so Downloads never accumulates 10-20 crash files from a crash
@@ -283,6 +288,23 @@ public class FarmApp extends Application {
         }
     }
 
+    /**
+     * Canonical Downloads document for crash reports. Includes the app build
+     * commit so each build appends to its own file (same hash -> same file,
+     * new hash -> new file) instead of every crash cycle replacing one shared
+     * document. Falls back to the legacy name when the commit is unknown.
+     */
+    public static String crashDownloadsName() {
+        try {
+            String c = BuildConfig.COMMIT;
+            if (c != null && !c.isEmpty() && !"unknown".equalsIgnoreCase(c)) {
+                return "farm_crash_" + c + ".log";
+            }
+        } catch (Exception ignored) {
+        }
+        return "farm_crash.log";
+    }
+
     public static void exportPendingCrashesToDownloads() {
         try {
             java.util.List<File> reports = listCrashReports();
@@ -308,10 +330,11 @@ public class FarmApp extends Application {
             }
             boolean ok = false;
             if (all.length() > 0) {
-                // Append after the previously published content (capped, keep
-                // the tail) instead of replacing it, so the Downloads log
-                // accumulates across crash cycles.
-                String previous = readDownloadsContent(INSTANCE, "farm_crash.log");
+                // Append after the previously published content for THIS BUILD
+                // (capped, keep the tail) instead of replacing it, so the
+                // build's log accumulates across crash cycles.
+                String docName = crashDownloadsName();
+                String previous = readDownloadsContent(INSTANCE, docName);
                 StringBuilder combined = new StringBuilder();
                 if (!previous.isEmpty()) {
                     combined.append(previous);
@@ -324,11 +347,11 @@ public class FarmApp extends Application {
                     int nl = out.indexOf('\n');
                     if (nl >= 0) out = out.substring(nl + 1);
                 }
-                ok = updateOrCreateDownloads(INSTANCE, "farm_crash.log", out);
+                ok = updateOrCreateDownloads(INSTANCE, docName, out);
             }
             if (ok) {
                 for (File f : reports) f.delete();
-                Log.i("FarmCrash", "Exported " + reports.size() + " pending crash log(s) to Downloads (single farm_crash.log)");
+                Log.i("FarmCrash", "Exported " + reports.size() + " pending crash log(s) to Downloads (" + crashDownloadsName() + ")");
             }
         } catch (Exception ignored) {
         }
@@ -386,26 +409,34 @@ public class FarmApp extends Application {
     }
 
     /**
-     * Delete older crash documents the app previously published to Downloads
-     * (per-pid / per-timestamp farm_crash_* files from before the consolidation,
-     * plus this version's own leftovers if an export was interrupted), keeping
-     * only the canonical farm_crash.log. Best-effort; rows the app does not own
-     * are simply left alone.
+     * Delete older crash documents the app previously published to Downloads:
+     * legacy per-pid / per-timestamp files, FlashForgeFarm_crash_* files, and
+     * farm_crash_<hash>.log files from OTHER builds — keeping only this
+     * build's document plus the legacy canonical farm_crash.log (harmless
+     * history from before per-build naming). Best-effort; rows the app does
+     * not own are simply left alone.
      */
     public static void pruneStaleCrashFiles() {
         try {
+            String keep = crashDownloadsName();
             android.net.Uri base = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI;
             android.database.Cursor c = null;
             java.util.ArrayList<android.net.Uri> stale = new java.util.ArrayList<>();
             try {
                 c = INSTANCE.getContentResolver().query(base,
-                        new String[]{android.provider.MediaStore.MediaColumns._ID},
+                        new String[]{android.provider.MediaStore.MediaColumns._ID,
+                                android.provider.MediaStore.MediaColumns.DISPLAY_NAME},
                         "(" + android.provider.MediaStore.MediaColumns.DISPLAY_NAME + " LIKE 'farm_crash_%' OR "
-                                + android.provider.MediaStore.MediaColumns.DISPLAY_NAME + " LIKE 'FlashForgeFarm_crash_%') AND "
-                                + android.provider.MediaStore.MediaColumns.DISPLAY_NAME + " <> 'farm_crash.log'",
+                                + android.provider.MediaStore.MediaColumns.DISPLAY_NAME + " LIKE 'FlashForgeFarm_crash_%')",
                         null, null);
                 if (c != null) {
-                    while (c.moveToNext()) stale.add(android.content.ContentUris.withAppendedId(base, c.getLong(0)));
+                    int nameIdx = c.getColumnIndex(android.provider.MediaStore.MediaColumns.DISPLAY_NAME);
+                    while (c.moveToNext()) {
+                        String name = nameIdx >= 0 ? c.getString(nameIdx) : "";
+                        long id = c.getLong(0);
+                        if (keep.equals(name) || "farm_crash.log".equals(name)) continue;
+                        stale.add(android.content.ContentUris.withAppendedId(base, id));
+                    }
                 }
             } catch (Exception ignored) {
             } finally {
@@ -503,10 +534,13 @@ public class FarmApp extends Application {
                     } else {
                         String existing = singleObject.values.get(key);
                         if (existing != null) {
-                            singleObject.values.put(key, existing + ";" + val);
+                            // The engine parses multi-extruder vectors from commas (see
+                            // Config::single_sep = ','); ';' only separates coStrings and
+                            // makes every other vector option fail the INI load.
+                            singleObject.values.put(key, existing + "," + val);
                         } else {
                             StringBuilder sb = new StringBuilder();
-                            for (int j = 0; j < i; j++) sb.append(";");
+                            for (int j = 0; j < i; j++) sb.append(",");
                             sb.append(val);
                             singleObject.values.put(key, sb.toString());
                         }

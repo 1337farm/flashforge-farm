@@ -574,6 +574,22 @@ def main():
             "pull_request runs require manual approval)"
         )
 
+    # Per-build log-file guard: each build must append to its own Downloads
+    # document (name carries the build commit) instead of every crash cycle
+    # replacing one shared file; prune must keep the current build's file
+    # while removing legacy/other-build docs.
+    if 'crashDownloadsName()' not in fapp or '"farm_crash_" + c + ".log"' not in fapp:
+        failures.append(
+            "FarmApp must publish per-build Downloads docs via "
+            "crashDownloadsName() (farm_crash_<commit>.log); a single shared "
+            "name gets replaced instead of appended across builds"
+        )
+    if 'keep.equals(name)' not in fapp:
+        failures.append(
+            "pruneStaleCrashFiles must keep the current build's document "
+            "and prune legacy/other-build docs by name comparison"
+        )
+
     if failures:
         print("CI GUARD FAILURES:")
         for f in failures:

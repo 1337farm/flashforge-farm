@@ -43,25 +43,54 @@ fi
 rustup toolchain install stable --profile minimal --no-self-update >/dev/null 2>&1 || true
 rustup target add aarch64-linux-android >/dev/null
 
-# Point cargo at the NDK linker (generated, not checked in: NDK path varies).
-mkdir -p p2p/.cargo
-cat > p2p/.cargo/config.toml <<EOF
-[target.aarch64-linux-android]
-ar = "$TOOLBIN/llvm-ar"
-linker = "$TOOLBIN/aarch64-linux-android23-clang"
-EOF
+# Target config via environment variables, NOT a p2p/.cargo/config.toml:
+# cargo reads config only from the invoking directory's ancestors (or
+# $CARGO_HOME), so a manifest-dir config is silently ignored when building
+# with --manifest-path from the repo root — the host `cc` then links and
+# fails on -llog/-lunwind. Env-var target config binds regardless of CWD.
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TOOLBIN/aarch64-linux-android23-clang"
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_AR="$TOOLBIN/llvm-ar"
+
+# cc-rs (ring, zstd-sys, ...) probes for a bare "aarch64-linux-android-clang"
+# on PATH and on $CC_<target>, but NDK r23 ships only versioned clang
+# (aarch64-linux-android23-clang). Point the target-specific env vars at the
+# versioned binary and put the toolchain bin on PATH; without this the ring
+# build script fails with ToolNotFound ("aarch64-linux-android-clang").
+export CC_aarch64_linux_android="$TOOLBIN/aarch64-linux-android23-clang"
+export CXX_aarch64_linux_android="$TOOLBIN/aarch64-linux-android23-clang++"
+export AR_aarch64_linux_android="$TOOLBIN/llvm-ar"
+export PATH="$TOOLBIN:$PATH"
 
 echo "--- [iroh] building farm-iroh cdylib (arm64-v8a, release) ---"
-cargo build --release --target aarch64-linux-android --manifest-path p2p/Cargo.toml
+# Build from the crate root, not --manifest-path from the repo root: uniffi's
+# build.rs shells out to `cargo metadata`, which resolves against the invoking
+# CWD — with CWD=$ROOT that finds no Cargo.toml ("could not find Cargo.toml").
+# (Target linker/ar come from the env vars above, so the CWD change loses nothing.)
+(
+    cd p2p
+    cargo build --release --target aarch64-linux-android
+)
 
-SO="target/aarch64-linux-android/release/libfarm_iroh.so"
+# With CWD=p2p, cargo places the target dir under the crate root.
+SO="$ROOT/p2p/target/aarch64-linux-android/release/libfarm_iroh.so"
 [ -f "$SO" ] || { echo "ERROR: $SO not built" >&2; exit 1; }
 
 mkdir -p "p2p/output/$ABI"
 cp "$SO" "p2p/output/$ABI/libfarm_iroh.so"
 echo "--- [iroh] generating Kotlin bindings (uniffi) ---"
-cargo install uniffi --version 0.32.0 --features cli --locked --force >/dev/null 2>&1 || true
+# Reinstall only when the pinned CLI is absent/stale: cargo install --force
+# re-downloads and rebuilds every run (~5-10 min), defeating the CI cache.
+if ! uniffi-bindgen --version 2>/dev/null | grep -q '0.32'; then
+    cargo install uniffi --version 0.32.0 --features cli --locked
+fi
 mkdir -p p2p/gen
-uniffi-bindgen generate --library "$SO" --language kotlin --out-dir p2p/gen
+# Run from the crate root too: uniffi-bindgen resolve_paths runs `cargo
+# metadata` against the invoking CWD (it does not pass --manifest-path), so
+# from $ROOT it errors "could not find Cargo.toml" even though the build above
+# succeeded. With CWD=p2p, p2p/Cargo.toml is found; $SO is absolute.
+(
+    cd p2p
+    uniffi-bindgen generate --library "$SO" --language kotlin --out-dir gen
+)
 ls -la "p2p/output/$ABI/" p2p/gen | head -20
 echo "--- [iroh] done ---"

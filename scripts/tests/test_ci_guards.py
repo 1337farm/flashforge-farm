@@ -574,6 +574,51 @@ def main():
             "pull_request runs require manual approval)"
         )
 
+# farm-iroh release-reuse must not stage a stale .so: the cdylib output
+    # depends on BOTH the p2p/ tree AND scripts/build_farm_iroh_android.sh,
+    # so the manifest iroh_src key must cover both; the gate mirrors the
+    # publish quality gate (size/arch/uniffi marker). Cheap to compile, so
+    # reuse only short-circuits a verified-build repeat. (2026-09-07.)
+    iroh = jobs.get("build-iroh", {})
+    irel = next(
+        (
+            s for s in iroh.get("steps", [])
+            if isinstance(s, dict) and s.get("name") == "Restore farm-iroh from release (published build reuse)"
+        ),
+        {},
+    )
+    irel_run = str(irel.get("run", ""))
+    if "iroh_src" not in irel_run or "HEAD:p2p" not in irel_run or "build_farm_iroh_android.sh" not in irel_run:
+        failures.append(
+            "farm-iroh release-reuse step must compare manifest iroh_src "
+            "against HEAD:p2p + scripts/build_farm_iroh_android.sh and rebuild "
+            "on mismatch; the sha/size/marker gate alone reuses a stale .so"
+        )
+    if "AArch64" not in irel_run or "checksum_func_connect" not in irel_run:
+        failures.append(
+            "farm-iroh release-reuse step must run the full quality gate "
+            "(size, AArch64, checksum_func_connect uniffi marker) so a stale "
+            ".so falls through to a fresh build"
+        )
+    ipub = next(
+        (
+            s for s in iroh.get("steps", [])
+            if isinstance(s, dict) and s.get("name") == "Publish farm-iroh release"
+        ),
+        {},
+    )
+    if "iroh_src" not in str(ipub.get("run", "")):
+        failures.append(
+            "Publish farm-iroh release must record iroh_src (HEAD:p2p + build "
+            "script) in iroh-manifest.json, or reuse can never detect source "
+            "changes"
+        )
+    if "refs/heads/main" not in str(ipub.get("if", "")):
+        failures.append(
+            "Publish farm-iroh release must gate on refs/heads/main only "
+            "(rolling release; PR builds upload artifacts instead)"
+        )
+
     # Per-build log-file guard: each build must append to its own Downloads
     # document (name carries the build commit) instead of every crash cycle
     # replacing one shared file; prune must keep the current build's file

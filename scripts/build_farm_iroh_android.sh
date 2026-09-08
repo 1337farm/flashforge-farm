@@ -84,6 +84,13 @@ if ! uniffi-bindgen --version 2>/dev/null | grep -q '0.32'; then
     cargo install uniffi --version 0.32.0 --features cli --locked
 fi
 mkdir -p p2p/gen
-uniffi-bindgen generate --library "$SO" --language kotlin --out-dir p2p/gen
+# Run from the crate root too: uniffi-bindgen resolve_paths runs `cargo
+# metadata` against the invoking CWD (it does not pass --manifest-path), so
+# from $ROOT it errors "could not find Cargo.toml" even though the build above
+# succeeded. With CWD=p2p, p2p/Cargo.toml is found; $SO is absolute.
+(
+    cd p2p
+    uniffi-bindgen generate --library "$SO" --language kotlin --out-dir gen
+)
 ls -la "p2p/output/$ABI/" p2p/gen | head -20
 echo "--- [iroh] done ---"

@@ -1133,26 +1133,30 @@ extern "C" {
     // A class-vs-def mismatch here is exactly the "incompatible type" family
     // of failures; keys missing from the def are flagged too. Best-effort:
     // never let inventory itself mask the original error.
-    static std::string describe_slice_config(DynamicPrintConfig& config)
+    static std::string describe_slice_config(const DynamicPrintConfig& config)
     {
-        std::string out = "-- config inventory (key : def-type / class / value) --\n";
+        std::string out = "-- config inventory (key : def-type / class / size-or-value) --\n";
         try {
             for (const std::string& key : config.keys()) {
                 if (out.size() > 180000) { out += "... (truncated)\n"; break; }
                 const ConfigOption* opt = nullptr;
-                try { opt = config.option(key, false); } catch (...) {}
-                const ConfigOptionDef* def = nullptr;
-                try { def = print_config_def.get(key); } catch (...) {}
-                out += key + " : def=" + std::to_string(def == nullptr ? -1 : (int) def->type);
+                try { opt = config.option(key); } catch (...) {}
+                int deftype = -1;
+                try { if (const ConfigOptionDef* def = print_config_def.get(key)) deftype = (int) def->type; } catch (...) {}
+                out += key + " : def=" + std::to_string(deftype);
                 if (opt == nullptr) { out += " opt=null\n"; continue; }
                 int status = 0;
                 char* dem = abi::__cxa_demangle(typeid(*opt).name(), nullptr, nullptr, &status);
                 out += std::string(" ") + (status == 0 && dem != nullptr ? dem : typeid(*opt).name());
                 if (dem != nullptr) free(dem);
                 try {
-                    std::string s = opt->serialize();
-                    if (s.size() > 96) s = s.substr(0, 96) + "...";
-                    out += " val=" + s;
+                    if (auto* v = dynamic_cast<const ConfigOptionVectorBase*>(opt))
+                        out += " n=" + std::to_string(v->size());
+                    else {
+                        std::string s = opt->serialize();
+                        if (s.size() > 64) s = s.substr(0, 64) + "...";
+                        out += " val=" + s;
+                    }
                 } catch (...) { out += " <unreadable>"; }
                 out += "\n";
             }
@@ -1164,8 +1168,11 @@ extern "C" {
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_model_1slice(JNIEnv* env, jclass, jlong ptr, jstring configPath, jstring path, jobject listener, jint numFilaments, jintArray colorsArr, jint calibMode, jdouble calibStart, jdouble calibEnd, jdouble calibStep) {
         // Hoisted out of try so the catch below can inventory the config that
-        // failed (key -> def-type / actual C++ class / size), which is what
-        // finally identifies "incompatible type" culprits offline.
+        // failed (key -> def-type / actual C++ class / value), which is what
+        // finally identifies "incompatible type" culprits offline (2026-09-08
+        // farm_crash_151585a419 carried no key). Heap-allocated: only the
+        // pointer lives on the JNI thread stack, the ~300-option config
+        // itself stays on the heap (see the farm-slice stack note below).
         auto config = std::make_unique<DynamicPrintConfig>();
         try {
             ModelRef* model = (ModelRef*) (intptr_t) ptr;
@@ -1176,6 +1183,8 @@ extern "C" {
             // thread note in BedFragment); keep them on the heap instead.
             auto print = std::make_unique<Print>();
             const char *chars = env->GetStringUTFChars(configPath, JNI_FALSE);
+            // load() returns substitutions and throws on failure; the outer
+            // catch converts that into Slic3rRuntimeError (no bool to check).
             config->load(std::string(chars), ForwardCompatibilitySubstitutionRule::Disable);
             env->ReleaseStringUTFChars(configPath, chars);
             config->normalize_fdm();
@@ -1517,8 +1526,10 @@ extern "C" {
             // it the message alone is unactionable.
             std::string msg = e.what();
             try {
-                msg += "\n";
-                msg += describe_slice_config(*config);
+                if (config) {
+                    msg += "\n";
+                    msg += describe_slice_config(*config);
+                }
             } catch (...) {}
             env->ThrowNew(env->FindClass("com/flashforge/farm/slic3r/Slic3rRuntimeError"), msg.c_str());
             return 0;

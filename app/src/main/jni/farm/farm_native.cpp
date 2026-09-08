@@ -1135,28 +1135,24 @@ extern "C" {
     // never let inventory itself mask the original error.
     static std::string describe_slice_config(const DynamicPrintConfig& config)
     {
-        std::string out = "-- config inventory (key : def-type / class / size-or-value) --\n";
+        std::string out = "-- config inventory (key : def-type / class / value) --\n";
         try {
             for (const std::string& key : config.keys()) {
                 if (out.size() > 180000) { out += "... (truncated)\n"; break; }
                 const ConfigOption* opt = nullptr;
-                try { opt = config.option(key); } catch (...) {}
-                int deftype = -1;
-                try { if (const ConfigOptionDef* def = print_config_def.get(key)) deftype = (int) def->type; } catch (...) {}
-                out += key + " : def=" + std::to_string(deftype);
+                try { opt = config.option(key, false); } catch (...) {}
+                const ConfigOptionDef* def = nullptr;
+                try { def = print_config_def.get(key); } catch (...) {}
+                out += key + " : def=" + std::to_string(def == nullptr ? -1 : (int) def->type);
                 if (opt == nullptr) { out += " opt=null\n"; continue; }
                 int status = 0;
                 char* dem = abi::__cxa_demangle(typeid(*opt).name(), nullptr, nullptr, &status);
                 out += std::string(" ") + (status == 0 && dem != nullptr ? dem : typeid(*opt).name());
                 if (dem != nullptr) free(dem);
                 try {
-                    if (auto* v = dynamic_cast<const ConfigOptionVectorBase*>(opt))
-                        out += " n=" + std::to_string(v->size());
-                    else {
-                        std::string s = opt->serialize();
-                        if (s.size() > 64) s = s.substr(0, 64) + "...";
-                        out += " val=" + s;
-                    }
+                    std::string s = opt->serialize();
+                    if (s.size() > 96) s = s.substr(0, 96) + "...";
+                    out += " val=" + s;
                 } catch (...) { out += " <unreadable>"; }
                 out += "\n";
             }
@@ -1167,6 +1163,10 @@ extern "C" {
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_model_1slice(JNIEnv* env, jclass, jlong ptr, jstring configPath, jstring path, jobject listener, jint numFilaments, jintArray colorsArr, jint calibMode, jdouble calibStart, jdouble calibEnd, jdouble calibStep) {
+        // Hoisted out of try so the catch below can inventory the config that
+        // failed (key -> def-type / actual C++ class / size), which is what
+        // finally identifies "incompatible type" culprits offline.
+        auto config = std::make_unique<DynamicPrintConfig>();
         try {
             ModelRef* model = (ModelRef*) (intptr_t) ptr;
 
@@ -1175,10 +1175,7 @@ extern "C" {
             // stack that Slic3r's apply() chain also needs (see the farm-slice
             // thread note in BedFragment); keep them on the heap instead.
             auto print = std::make_unique<Print>();
-            auto config = std::make_unique<DynamicPrintConfig>();
             const char *chars = env->GetStringUTFChars(configPath, JNI_FALSE);
-            // load() returns substitutions and throws on failure; the outer
-            // catch converts that into Slic3rRuntimeError (no bool to check).
             config->load(std::string(chars), ForwardCompatibilitySubstitutionRule::Disable);
             env->ReleaseStringUTFChars(configPath, chars);
             config->normalize_fdm();
@@ -1452,7 +1449,7 @@ extern "C" {
                     }
                 }
                 if (enablePA) {
-                    config->set_key_value("enable_pressure_advance", new ConfigOptionBools(1, true));
+                    config->set_key_value("enable_pressure_advance", new ConfigOptionBools(std::vector<bool>(1, true)));
                 }
             }
 
@@ -1515,7 +1512,15 @@ extern "C" {
             return (jlong) (intptr_t) resultRef;
         } catch (const std::exception& e) {
             __android_log_print(ANDROID_LOG_ERROR, "FarmPaint", "slice exception type=%s what=%s", typeid(e).name(), e.what());
-            env->ThrowNew(env->FindClass("com/flashforge/farm/slic3r/Slic3rRuntimeError"), e.what());
+            // Attach the config inventory: with it, an "incompatible type"
+            // failure is diagnosable offline (key -> actual class), without
+            // it the message alone is unactionable.
+            std::string msg = e.what();
+            try {
+                msg += "\n";
+                msg += describe_slice_config(*config);
+            } catch (...) {}
+            env->ThrowNew(env->FindClass("com/flashforge/farm/slic3r/Slic3rRuntimeError"), msg.c_str());
             return 0;
         }
     }

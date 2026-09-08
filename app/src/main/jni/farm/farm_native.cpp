@@ -1133,7 +1133,7 @@ extern "C" {
     // A class-vs-def mismatch here is exactly the "incompatible type" family
     // of failures; keys missing from the def are flagged too. Best-effort:
     // never let inventory itself mask the original error.
-    static std::string describe_slice_config(const DynamicPrintConfig& config)
+    static std::string describe_slice_config(DynamicPrintConfig& config)
     {
         std::string out = "-- config inventory (key : def-type / class / value) --\n";
         try {
@@ -1449,7 +1449,7 @@ extern "C" {
                     }
                 }
                 if (enablePA) {
-                    config->set_key_value("enable_pressure_advance", new ConfigOptionBools(std::vector<bool>(1, true)));
+                    config->set_key_value("enable_pressure_advance", new ConfigOptionBools(1, true));
                 }
             }
 

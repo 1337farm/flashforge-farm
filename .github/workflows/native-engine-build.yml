@@ -85,10 +85,9 @@ jobs:
     # skip-chain re-broken, and the PR can never auto-merge (seen on #28/#21
     # after the #29/#30 fix). This job pulls the current main into the head so
     # a subsequent run evaluates main's (working) workflow against the merged
-    # head. (A push made with GITHUB_TOKEN does not itself re-trigger the
-    # workflow GitHub suppresses it — so the corrected head is picked up on
-    # the next real push/run; sync-head at least guarantees the head FILE
-    # content is current once that happens.)
+    # head. (The push MUST authenticate with SYNC_PAT, not GITHUB_TOKEN:
+    # token pushes run as github-actions[bot], whose pull_request runs GitHub
+    # gates behind manual approval — see the push step for details.)
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.draft == false
     steps:
       - name: Checkout head
@@ -113,10 +112,22 @@ jobs:
           git merge --no-edit origin/main
           AFTER="$(git rev-parse --short=12 HEAD)"
           # Push the merged head back to the PR head ref so the next run uses
-          # main's current workflow. GITHUB_TOKEN pushes are suppressed from
-          # re-triggering the workflow, but the head file content is now
-          # correct, so any subsequent run evaluates the RIGHT workflow.
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
+          # main's current workflow. Authenticate with SYNC_PAT (a classic PAT
+          # with contents:write stored as a repo secret), NOT GITHUB_TOKEN:
+          # pushes made with GITHUB_TOKEN run as github-actions[bot], whose
+          # pull_request runs GitHub gates behind manual approval (0 jobs,
+          # action_required) — while PAT pushes run as a trusted actor and
+          # evaluate normally. PAT pushes also re-trigger the workflow, so
+          # the corrected head is picked up immediately. Falls back to
+          # GITHUB_TOKEN (gated runs, but working sync) until SYNC_PAT exists.
+          if [ -n "${{ secrets.SYNC_PAT }}" ]; then
+            echo "pushing sync with SYNC_PAT (trusted actor)"
+            PUSH_TOKEN="${{ secrets.SYNC_PAT }}"
+          else
+            echo "WARNING: SYNC_PAT secret missing; falling back to GITHUB_TOKEN (runs will need approval)"
+            PUSH_TOKEN="$GH_TOKEN"
+          fi
+          git push "https://x-access-token:${PUSH_TOKEN}@github.com/${{ github.repository }}.git" \
             "HEAD:${{ github.event.pull_request.head.ref }}"
           echo "synced PR head $BEFORE -> $AFTER; pushed corrected head for the next run"
           exit 0

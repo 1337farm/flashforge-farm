@@ -1177,6 +1177,8 @@ extern "C" {
             auto print = std::make_unique<Print>();
             auto config = std::make_unique<DynamicPrintConfig>();
             const char *chars = env->GetStringUTFChars(configPath, JNI_FALSE);
+            // load() returns substitutions and throws on failure; the outer
+            // catch converts that into Slic3rRuntimeError (no bool to check).
             config->load(std::string(chars), ForwardCompatibilitySubstitutionRule::Disable);
             env->ReleaseStringUTFChars(configPath, chars);
             config->normalize_fdm();

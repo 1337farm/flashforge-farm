@@ -536,6 +536,60 @@ def main():
             "breaks same-run consumption"
         )
 
+    # Immediate-export guard: a crash/error report must reach Downloads when
+    # it happens, not on the next app start — writeCrashDump triggers the
+    # export inline (best-effort), so killing + restarting just to read the
+    # log is unnecessary.
+    if "exportPendingCrashesToDownloads()" not in fapp.split("public static void writeCrashDump", 1)[1].split("public static ", 1)[0]:
+        failures.append(
+            "writeCrashDump must trigger exportPendingCrashesToDownloads inline "
+            "so reports persist to Downloads immediately"
+        )
+
+    # model_slice error-surface guard: native slice failures must surface
+    # as Slic3rRuntimeError (outer catch) so BedFragment logs them; a silent
+    # native death would bypass writeCrashDump entirely.
+    farm_native = (REPO / "app/src/main/jni/farm/farm_native.cpp").read_text()
+    if 'Slic3rRuntimeError' not in farm_native:
+        failures.append(
+            "model_slice must surface native failures as Slic3rRuntimeError "
+            "so the Java slice path can log them"
+        )
+
+    # Sync-push auth guard: sync-head must push with SYNC_PAT (trusted actor),
+    # not bare GITHUB_TOKEN — token pushes run as github-actions[bot], whose
+    # pull_request runs GitHub gates behind manual approval (2026-09-07: 0-job
+    # action_required zombie runs on PR62 after every sync push).
+    sync = next(
+        (
+            s for s in jobs.get("sync-head", {}).get("steps", [])
+            if isinstance(s, dict) and "self-heal" in str(s.get("name", ""))
+        ),
+        {},
+    )
+    if "SYNC_PAT" not in str(sync.get("run", "")):
+        failures.append(
+            "sync-head push must authenticate with secrets.SYNC_PAT "
+            "(GITHUB_TOKEN pushes run as github-actions[bot] and their "
+            "pull_request runs require manual approval)"
+        )
+
+    # Per-build log-file guard: each build must append to its own Downloads
+    # document (name carries the build commit) instead of every crash cycle
+    # replacing one shared file; prune must keep the current build's file
+    # while removing legacy/other-build docs.
+    if 'crashDownloadsName()' not in fapp or '"farm_crash_" + c + ".log"' not in fapp:
+        failures.append(
+            "FarmApp must publish per-build Downloads docs via "
+            "crashDownloadsName() (farm_crash_<commit>.log); a single shared "
+            "name gets replaced instead of appended across builds"
+        )
+    if 'keep.equals(name)' not in fapp:
+        failures.append(
+            "pruneStaleCrashFiles must keep the current build's document "
+            "and prune legacy/other-build docs by name comparison"
+        )
+
     if failures:
         print("CI GUARD FAILURES:")
         for f in failures:

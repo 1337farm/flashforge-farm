@@ -132,6 +132,10 @@ public class SettingsFragment extends ProfileListFragment {
                             })
                             .show();
                 })),
+                new OptionElement(new PreferenceItem().setTitle(getContext().getString(R.string.SettingsInterfaceVerboseProgress)).setSubtitle(getContext().getString(R.string.SettingsInterfaceVerboseProgressDescription)).setValueProvider(() -> getContext().getString(Prefs.isVerboseProgress() ? R.string.Yes : R.string.No)).setOnClickListener(v -> {
+                    Prefs.setVerboseProgress(!Prefs.isVerboseProgress());
+                    onUpdateConfigItems();
+                })),
                 new OptionElement(R.drawable.printer_outline_28, getContext().getString(R.string.SettingsAddPrinter)).setOnClick(() -> {
                     Activity act = (Activity) getContext();
                     act.startActivity(new Intent(act, SetupActivity.class).putExtra(SetupActivity.EXTRA_ADD_PRINTER, true));

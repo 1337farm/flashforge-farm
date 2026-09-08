@@ -1167,6 +1167,13 @@ extern "C" {
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_model_1slice(JNIEnv* env, jclass, jlong ptr, jstring configPath, jstring path, jobject listener, jint numFilaments, jintArray colorsArr, jint calibMode, jdouble calibStart, jdouble calibEnd, jdouble calibStep) {
+        // Hoisted out of try so the catch below can inventory the config that
+        // failed (key -> def-type / actual C++ class / value), which is what
+        // finally identifies "incompatible type" culprits offline (2026-09-08
+        // farm_crash_151585a419 carried no key). Heap-allocated: only the
+        // pointer lives on the JNI thread stack, the ~300-option config
+        // itself stays on the heap (see the farm-slice stack note below).
+        auto config = std::make_unique<DynamicPrintConfig>();
         try {
             ModelRef* model = (ModelRef*) (intptr_t) ptr;
 
@@ -1175,7 +1182,6 @@ extern "C" {
             // stack that Slic3r's apply() chain also needs (see the farm-slice
             // thread note in BedFragment); keep them on the heap instead.
             auto print = std::make_unique<Print>();
-            auto config = std::make_unique<DynamicPrintConfig>();
             const char *chars = env->GetStringUTFChars(configPath, JNI_FALSE);
             // load() returns substitutions and throws on failure; the outer
             // catch converts that into Slic3rRuntimeError (no bool to check).
@@ -1515,7 +1521,17 @@ extern "C" {
             return (jlong) (intptr_t) resultRef;
         } catch (const std::exception& e) {
             __android_log_print(ANDROID_LOG_ERROR, "FarmPaint", "slice exception type=%s what=%s", typeid(e).name(), e.what());
-            env->ThrowNew(env->FindClass("com/flashforge/farm/slic3r/Slic3rRuntimeError"), e.what());
+            // Attach the config inventory: with it, an "incompatible type"
+            // failure is diagnosable offline (key -> actual class), without
+            // it the message alone is unactionable.
+            std::string msg = e.what();
+            try {
+                if (config) {
+                    msg += "\n";
+                    msg += describe_slice_config(*config);
+                }
+            } catch (...) {}
+            env->ThrowNew(env->FindClass("com/flashforge/farm/slic3r/Slic3rRuntimeError"), msg.c_str());
             return 0;
         }
     }

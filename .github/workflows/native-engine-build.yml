@@ -1066,6 +1066,22 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
+      - name: Configure GitHub Packages credentials for irohbridge AAR
+        # The P2P transport depends on com.example.irohapp:irohbridge published
+        # to GitHub Packages (1337farm/iroh-android-native); GitHub Packages
+        # requires credentials even for public Maven artifacts. Reuse the
+        # existing classic PAT (SYNC_PAT) which carries read:packages by
+        # definition, with the account name as the username.
+        env:
+          GH_PACKAGES_USER: 1337farm
+          GH_PACKAGES_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          if [ -z "$GH_PACKAGES_TOKEN" ]; then
+            echo "WARNING: SYNC_PAT secret missing; Gradle will fail to resolve the irohbridge AAR"
+          fi
+          echo "GH_PACKAGES_USER=1337farm" >> "$GITHUB_ENV"
+          echo "GH_PACKAGES_TOKEN=$GH_PACKAGES_TOKEN" >> "$GITHUB_ENV"
+
       - name: Verify staged engine .so is genuine
         run: |
           SO=engine/output/arm64-v8a/libslic3r.so

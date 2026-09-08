@@ -43,13 +43,13 @@ fi
 rustup toolchain install stable --profile minimal --no-self-update >/dev/null 2>&1 || true
 rustup target add aarch64-linux-android >/dev/null
 
-# Point cargo at the NDK linker (generated, not checked in: NDK path varies).
-mkdir -p p2p/.cargo
-cat > p2p/.cargo/config.toml <<EOF
-[target.aarch64-linux-android]
-ar = "$TOOLBIN/llvm-ar"
-linker = "$TOOLBIN/aarch64-linux-android23-clang"
-EOF
+# Target config via environment variables, NOT a p2p/.cargo/config.toml:
+# cargo reads config only from the invoking directory's ancestors (or
+# $CARGO_HOME), so a manifest-dir config is silently ignored when building
+# with --manifest-path from the repo root — the host `cc` then links and
+# fails on -llog/-lunwind. Env-var target config binds regardless of CWD.
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TOOLBIN/aarch64-linux-android23-clang"
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_AR="$TOOLBIN/llvm-ar"
 
 # cc-rs (ring, zstd-sys, ...) probes for a bare "aarch64-linux-android-clang"
 # on PATH and on $CC_<target>, but NDK r23 ships only versioned clang

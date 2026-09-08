@@ -51,6 +51,16 @@ ar = "$TOOLBIN/llvm-ar"
 linker = "$TOOLBIN/aarch64-linux-android23-clang"
 EOF
 
+# cc-rs (ring, zstd-sys, ...) probes for a bare "aarch64-linux-android-clang"
+# on PATH and on $CC_<target>, but NDK r23 ships only versioned clang
+# (aarch64-linux-android23-clang). Point the target-specific env vars at the
+# versioned binary and put the toolchain bin on PATH; without this the ring
+# build script fails with ToolNotFound ("aarch64-linux-android-clang").
+export CC_aarch64_linux_android="$TOOLBIN/aarch64-linux-android23-clang"
+export CXX_aarch64_linux_android="$TOOLBIN/aarch64-linux-android23-clang++"
+export AR_aarch64_linux_android="$TOOLBIN/llvm-ar"
+export PATH="$TOOLBIN:$PATH"
+
 echo "--- [iroh] building farm-iroh cdylib (arm64-v8a, release) ---"
 cargo build --release --target aarch64-linux-android --manifest-path p2p/Cargo.toml
 

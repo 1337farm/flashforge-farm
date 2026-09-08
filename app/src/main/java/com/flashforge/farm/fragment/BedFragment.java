@@ -694,11 +694,7 @@ public class BedFragment extends Fragment {
 
                                 ViewUtils.postOnMainThread(()->{
                                     Bus.SLICING_PROGRESS.postValue(new SlicingProgressEvent(100, ""));
-                                    new FarmAlertDialogBuilder(ctx)
-                                            .setTitle(R.string.SliceFailed)
-                                            .setMessage(e.getMessage())
-                                            .setPositiveButton(android.R.string.ok, null)
-                                            .show();
+                                    FarmAlertDialogBuilder.showError(ctx, R.string.SliceFailed, e.getMessage());
                                 });
                             }
 
@@ -726,19 +722,12 @@ public class BedFragment extends Fragment {
                             });
                         } catch (Exception e) {
                             Log.e("BedFragment", "Slice failed", e);
-                            Runtime rt = Runtime.getRuntime();
-                            String sliceCtx = "cfg=" + cfg.getAbsolutePath() + " gcode=" + gcode.getAbsolutePath()
-                                    + " thread=" + Thread.currentThread().getName()
-                                    + " mem=" + (rt.totalMemory() - rt.freeMemory()) / 1048576 + "/"
-                                    + rt.maxMemory() / 1048576 + "MB";
-                            FarmApp.writeCrashDump("slice", sliceCtx + "\nslice: " + e + "\n" + Log.getStackTraceString(e));
+                            FarmApp.writeCrashDump("slice", "cfg=" + cfg.getAbsolutePath() + " gcode=" + gcode.getAbsolutePath()
+                                    + " thread=" + Thread.currentThread().getName() + " mem=" + Runtime.getRuntime().freeMemory() / 1048576 + "/" + Runtime.getRuntime().maxMemory() / 1048576 + "MB"
+                                    + "\nslice: " + e + "\n" + Log.getStackTraceString(e));
                             ViewUtils.postOnMainThread(()->{
                                 Bus.SLICING_PROGRESS.postValue(new SlicingProgressEvent(100, ""));
-                                new FarmAlertDialogBuilder(ctx)
-                                        .setTitle(R.string.SliceFailed)
-                                        .setMessage(e.getMessage())
-                                        .setPositiveButton(android.R.string.ok, null)
-                                        .show();
+                                FarmAlertDialogBuilder.showError(ctx, R.string.SliceFailed, e.getMessage());
                             });
                         }
                     }, "farm-slice", 8 * 1024 * 1024).start();

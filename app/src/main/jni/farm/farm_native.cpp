@@ -1140,9 +1140,9 @@ extern "C" {
             for (const std::string& key : config.keys()) {
                 if (out.size() > 180000) { out += "... (truncated)\n"; break; }
                 const ConfigOption* opt = nullptr;
-                try { opt = config.option(key, false); } catch (...) {}
+                try { opt = config.option(key); } catch (...) {}
                 int deftype = -1;
-                try { deftype = (int) print_config_def.get(key).type; } catch (...) {}
+                try { if (const ConfigOptionDef* def = print_config_def.get(key)) deftype = (int) def->type; } catch (...) {}
                 out += key + " : def=" + std::to_string(deftype);
                 if (opt == nullptr) { out += " opt=null\n"; continue; }
                 int status = 0;
@@ -1452,7 +1452,7 @@ extern "C" {
                     }
                 }
                 if (enablePA) {
-                    config->set_key_value("enable_pressure_advance", new ConfigOptionBools(std::vector<bool>(1, true)));
+                    config->set_key_value("enable_pressure_advance", new ConfigOptionBools(1, true));
                 }
             }
 

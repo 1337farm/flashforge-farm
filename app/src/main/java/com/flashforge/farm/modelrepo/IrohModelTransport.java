@@ -1,7 +1,9 @@
 package com.flashforge.farm.modelrepo;
 
-import android.content.Context;
 import android.util.Log;
+
+import com.example.irohapp.IrohBridge;
+import com.example.irohapp.IrohTransferListener;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -9,272 +11,298 @@ import org.json.JSONObject;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-import uniffi.farm_iroh.FarmEndpoint;
-import uniffi.farm_iroh.FarmException;
-import uniffi.farm_iroh.Farm_irohKt;
-
+/**
+ * P2P transport backed by the shared iroh-android-native engine
+ * (com.example.irohapp:irohbridge AAR; native libnative_iroh_engine.so via
+ * GitHub Packages). Replaces the in-repo farm-iroh UniFFI crate.
+ */
 public class IrohModelTransport implements ModelTransport {
     private static final String TAG = "IrohModelTransport";
-    private static final long POLL_MS = 300;
-    private static final int MAX_POLLS = 1200;
 
-    private FarmEndpoint endpoint;
+    private boolean initialized;
 
     public IrohModelTransport() {
     }
 
     public synchronized void initialize(byte[] secretKey, String dataDir) throws UnavailableException {
-        if (endpoint != null) {
+        if (initialized) {
             return;
         }
         try {
-            System.loadLibrary("farm_iroh");
+            byte[] sk = (secretKey != null && secretKey.length == 32) ? secretKey : null;
+            if (!IrohBridge.INSTANCE.initialize(dataDir, sk)) {
+                throw new UnavailableException("Iroh init returned false");
+            }
+            initialized = true;
+            Log.i(TAG, "Iroh endpoint initialized: " + bytesToHex(IrohBridge.INSTANCE.endpointId()));
         } catch (UnsatisfiedLinkError e) {
-            Log.e(TAG, "Native libfarm_iroh.so missing", e);
+            Log.e(TAG, "Native libnative_iroh_engine.so missing", e);
             throw new UnavailableException("P2P native library missing in this build");
-        }
-        try {
-            byte[] sk = (secretKey != null && secretKey.length == 32) ? secretKey : new byte[0];
-            endpoint = Farm_irohKt.connect(sk, dataDir);
-            Log.i(TAG, "Iroh endpoint initialized: " + bytesToHex(endpoint.endpointId()));
-        } catch (FarmException e) {
+        } catch (RuntimeException e) {
             Log.e(TAG, "Failed to initialize Iroh endpoint", e);
             throw new UnavailableException("Iroh init failed: " + e.getMessage());
-        } catch (UnsatisfiedLinkError | ExceptionInInitializerError e) {
-            Log.e(TAG, "Native binding failed", e);
-            throw new UnavailableException("P2P native binding failed");
         }
     }
 
     public synchronized void shutdown() {
-        if (endpoint != null) {
+        if (initialized) {
             try {
-                endpoint.shutdown();
+                IrohBridge.INSTANCE.shutdown();
             } catch (Exception ignored) {
             }
-            endpoint = null;
+            initialized = false;
         }
     }
 
     public synchronized boolean isReady() {
-        return endpoint != null;
-    }
-
-    private FarmEndpoint ep() throws UnavailableException {
-        if (endpoint == null) {
-            throw new UnavailableException("Not initialized");
-        }
-        return endpoint;
+        return initialized;
     }
 
     @Override
     public void fetch(String ticket, File dir, Listener listener) throws UnavailableException {
-        final FarmEndpoint e = ep();
+        if (!initialized) {
+            throw new UnavailableException("Not initialized");
+        }
         final String t = ticket;
         final File d = dir;
         final Listener l = listener;
         new Thread(() -> {
-            long handle = -1;
-            try {
-                d.mkdirs();
-                handle = e.fetchStart(t, d.getAbsolutePath());
-                String pendingMeta = null;
-                for (int i = 0; i < MAX_POLLS; i++) {
-                    String poll;
-                    try {
-                        poll = e.fetchPoll(handle);
-                    } catch (FarmException fe) {
-                        l.onError(t, fe.getMessage());
+            AtomicBoolean finished = new AtomicBoolean(false);
+            IrohTransferListener cb = new IrohTransferListener() {
+                @Override
+                public void onTransferProgress(int statusCode, int progressPct, long downloadedBytes, long totalBytes, String message) {
+                    if (finished.get()) {
                         return;
                     }
-                    JSONObject o = new JSONObject(poll);
-                    String state = o.optString("state", "");
-                    if (state.equals("metadata")) {
-                        pendingMeta = o.optString("model_json", "{}");
-                        List<Entry> entries = entriesFrom(o, pendingMeta);
-                        ModelMetadata meta = ModelMetadata.parse(pendingMeta);
-                        l.onMetadata(t, meta, entries);
-                    } else if (state.equals("progress")) {
-                        l.onProgress(t, o.optLong("downloaded", 0), o.optLong("total", -1));
-                    } else if (state.equals("done")) {
-                        l.onComplete(t, new File(o.optString("dir", d.getAbsolutePath())));
-                        return;
-                    } else if (state.equals("error")) {
-                        l.onError(t, o.optString("msg", "fetch failed"));
-                        return;
-                    }
-                    try {
-                        Thread.sleep(POLL_MS);
-                    } catch (InterruptedException ie) {
-                        l.onError(t, "interrupted");
-                        return;
+                    if (statusCode < 0) {
+                        finished.set(true);
+                        l.onError(t, (message == null || message.isEmpty())
+                                ? "fetch failed (status " + statusCode + ")" : message);
+                    } else if (statusCode == 4) {
+                        l.onProgress(t, downloadedBytes, totalBytes);
+                    } else if (statusCode == 5) {
+                        finish();
                     }
                 }
-                l.onError(t, "fetch timed out");
-            } catch (UnavailableException ue) {
-                l.onError(t, ue.getMessage());
+
+                @Override
+                public void onModelMetadata(String modelJson, String fileNamesJson) {
+                    if (finished.get()) {
+                        return;
+                    }
+                    ModelMetadata meta = ModelMetadata.parse(modelJson);
+                    l.onMetadata(t, meta, entriesFrom(fileNamesJson, modelJson));
+                }
+
+                @Override
+                public void onFetchComplete(String dir) {
+                    finish();
+                }
+
+                private void finish() {
+                    if (finished.compareAndSet(false, true)) {
+                        l.onComplete(t, d);
+                    }
+                }
+            };
+            try {
+                d.mkdirs();
+                IrohBridge.INSTANCE.modelFetch(t, d.getAbsolutePath(), cb);
             } catch (Throwable ex) {
+                if (!finished.compareAndSet(false, true)) {
+                    return;
+                }
                 Log.e(TAG, "Fetch failed for " + t, ex);
                 String msg = ex.getMessage();
                 l.onError(t, msg == null ? "fetch failed" : msg);
-            } finally {
-                if (handle >= 0) {
-                    try {
-                        e.fetchStop(handle);
-                    } catch (Exception ignored) {
-                    }
-                }
             }
         }, "iroh-fetch").start();
     }
 
     @Override
     public void stop(String ticket) {
-    }
-
-    public void stopHandle(long handle) throws UnavailableException {
-        ep().fetchStop(handle);
-    }
-
-    private static List<Entry> entriesFrom(JSONObject o, String modelJson) throws Exception {
-        JSONArray names = o.optJSONArray("names");
-        List<Entry> out = new ArrayList<>();
-        if (names == null) {
-            return out;
-        }
-        JSONArray sizes = null;
         try {
-            sizes = new JSONObject(modelJson).optJSONArray("sizes");
+            IrohBridge.INSTANCE.cancelFetch();
         } catch (Exception ignored) {
         }
-        for (int i = 0; i < names.length(); i++) {
-            long size = (sizes != null) ? sizes.optLong(i, 0) : 0;
-            out.add(new Entry(names.optString(i, "file"), size));
+    }
+
+    private static List<Entry> entriesFrom(String namesJson, String modelJson) {
+        List<Entry> out = new ArrayList<>();
+        if (namesJson == null) {
+            return out;
+        }
+        try {
+            JSONArray names = new JSONArray(namesJson);
+            JSONArray sizes = null;
+            try {
+                sizes = new JSONObject(modelJson).optJSONArray("sizes");
+            } catch (Exception ignored) {
+            }
+            for (int i = 0; i < names.length(); i++) {
+                long size = (sizes != null) ? sizes.optLong(i, 0) : 0;
+                out.add(new Entry(names.optString(i, "file"), size));
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Bad file names json", e);
         }
         return out;
     }
 
     public List<String> searchAll(String keyword) throws UnavailableException {
         try {
-            return new ArrayList<>(ep().searchQuery(keyword));
-        } catch (FarmException e) {
+            String[] hits = IrohBridge.INSTANCE.searchQuery(keyword);
+            return hits == null ? new ArrayList<>() : new ArrayList<>(java.util.Arrays.asList(hits));
+        } catch (RuntimeException e) {
             throw new UnavailableException("Search failed: " + e.getMessage());
         }
     }
 
     public String getMetadata(String modelHashHex) throws UnavailableException {
         try {
-            return ep().searchGetMetadata(modelHashHex);
-        } catch (FarmException e) {
+            String meta = IrohBridge.INSTANCE.searchGetMetadata(modelHashHex);
+            if (meta == null) throw new UnavailableException("Get metadata returned no data");
+            return meta;
+        } catch (UnavailableException e) {
+            throw e;
+        } catch (RuntimeException e) {
             throw new UnavailableException("Get metadata failed: " + e.getMessage());
         }
     }
 
     public String publishModel(String modelJson, List<byte[]> fileDatas) throws UnavailableException {
         try {
-            return ep().modelPublish(modelJson, fileDatas);
-        } catch (FarmException e) {
+            String ticket = IrohBridge.INSTANCE.modelPublish(modelJson, fileDatas.toArray(new byte[0][]));
+            if (ticket == null) throw new UnavailableException("Publish returned no ticket (see logcat)");
+            return ticket;
+        } catch (UnavailableException e) {
+            throw e;
+        } catch (RuntimeException e) {
             throw new UnavailableException("Publish failed: " + e.getMessage());
         }
     }
 
     public byte[] storeBlob(byte[] data) throws UnavailableException {
         try {
-            return ep().blobAdd(data);
-        } catch (FarmException e) {
+            byte[] hash = IrohBridge.INSTANCE.blobAdd(data);
+            if (hash == null) throw new UnavailableException("Store blob returned no hash");
+            return hash;
+        } catch (UnavailableException e) {
+            throw e;
+        } catch (RuntimeException e) {
             throw new UnavailableException("Store blob failed: " + e.getMessage());
         }
     }
 
     public byte[] getBlob(byte[] hash) throws UnavailableException {
         try {
-            return ep().blobGet(hash);
-        } catch (FarmException e) {
+            byte[] data = IrohBridge.INSTANCE.blobGet(hash);
+            if (data == null) throw new UnavailableException("Get blob returned no data");
+            return data;
+        } catch (UnavailableException e) {
+            throw e;
+        } catch (RuntimeException e) {
             throw new UnavailableException("Get blob failed: " + e.getMessage());
         }
     }
 
     public boolean hasBlob(byte[] hash) throws UnavailableException {
         try {
-            return ep().blobHas(hash);
-        } catch (FarmException e) {
+            return IrohBridge.INSTANCE.blobHas(hash);
+        } catch (RuntimeException e) {
             throw new UnavailableException("Has blob failed: " + e.getMessage());
         }
     }
 
     public void removeBlob(byte[] hash) throws UnavailableException {
-        try {
-            ep().blobRemove(hash);
-        } catch (FarmException e) {
-            throw new UnavailableException("Remove blob failed: " + e.getMessage());
-        }
+        throw new UnavailableException("removeBlob is not supported by the irohbridge engine");
     }
 
     public String shareTicket(byte[] hash) throws UnavailableException {
         try {
-            return ep().ticketFor(hash);
-        } catch (FarmException e) {
+            String ticket = IrohBridge.INSTANCE.ticketFor(hash);
+            if (ticket == null) throw new UnavailableException("Ticket returned no data");
+            return ticket;
+        } catch (UnavailableException e) {
+            throw e;
+        } catch (RuntimeException e) {
             throw new UnavailableException("Ticket failed: " + e.getMessage());
         }
     }
 
     public String ticketInfo(String ticket) throws UnavailableException {
         try {
-            return ep().ticketInfo(ticket);
-        } catch (FarmException e) {
+            String info = IrohBridge.INSTANCE.ticketInfo(ticket);
+            if (info == null) throw new UnavailableException("Ticket info returned no data");
+            return info;
+        } catch (UnavailableException e) {
+            throw e;
+        } catch (RuntimeException e) {
             throw new UnavailableException("Ticket info failed: " + e.getMessage());
         }
     }
 
     public String syncAnnounce() throws UnavailableException {
-        return syncAnnounce("");
-    }
-
-    public String syncAnnounce(String profileTicket) throws UnavailableException {
         try {
-            return ep().syncAnnounce(profileTicket == null ? "" : profileTicket);
-        } catch (FarmException e) {
+            String ticket = IrohBridge.INSTANCE.syncAnnounce();
+            if (ticket == null) throw new UnavailableException("Announce returned no ticket");
+            return ticket;
+        } catch (UnavailableException e) {
+            throw e;
+        } catch (RuntimeException e) {
             throw new UnavailableException("Announce failed: " + e.getMessage());
         }
     }
 
     public byte[] blobFetch(String ticket) throws UnavailableException {
         try {
-            return ep().blobFetch(ticket);
-        } catch (FarmException e) {
+            byte[] raw = IrohBridge.INSTANCE.blobFetch(ticket);
+            if (raw == null) {
+                throw new UnavailableException("Blob fetch returned no data (see logcat)");
+            }
+            return raw;
+        } catch (UnavailableException e) {
+            throw e;
+        } catch (RuntimeException e) {
             throw new UnavailableException("Blob fetch failed: " + e.getMessage());
         }
     }
 
     public String syncMerge(String ticket) throws UnavailableException {
         try {
-            return ep().syncMerge(ticket);
-        } catch (FarmException e) {
+            String merged = IrohBridge.INSTANCE.syncMerge(ticket);
+            if (merged == null) throw new UnavailableException("Merge returned no data");
+            return merged;
+        } catch (UnavailableException e) {
+            throw e;
+        } catch (RuntimeException e) {
             throw new UnavailableException("Merge failed: " + e.getMessage());
         }
     }
 
     public List<String> knownPeers() throws UnavailableException {
         try {
-            return new ArrayList<>(ep().knownPeers());
-        } catch (Exception e) {
+            String[] peers = IrohBridge.INSTANCE.knownPeers();
+            return peers == null ? new ArrayList<>() : new ArrayList<>(java.util.Arrays.asList(peers));
+        } catch (RuntimeException e) {
             throw new UnavailableException("Peers failed: " + e.getMessage());
         }
     }
 
     public String getEndpointId() {
         try {
-            return bytesToHex(ep().endpointId());
-        } catch (UnavailableException e) {
+            return bytesToHex(IrohBridge.INSTANCE.endpointId());
+        } catch (RuntimeException e) {
             return "";
         }
     }
 
     public byte[] getSecretKey() {
         try {
-            return ep().secretKeyBytes();
-        } catch (UnavailableException e) {
+            return IrohBridge.INSTANCE.secretKey();
+        } catch (RuntimeException e) {
             return new byte[0];
         }
     }

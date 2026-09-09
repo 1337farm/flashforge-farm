@@ -15,6 +15,25 @@ allprojects {
         google()
         mavenCentral()
         maven { url 'https://jitpack.io' }
+        // Shared P2P engine AAR (com.example.irohapp:irohbridge) published to
+        // GitHub Packages from 1337farm/iroh-android-native on engine-v* tags.
+        // GitHub Packages requires credentials even for public Maven packages:
+        // GH_PACKAGES_USER / GH_PACKAGES_TOKEN (PAT with read:packages) are set
+        // in CI via repo secrets and locally via env/gradle.properties.
+        maven {
+            name = "GitHubPackages"
+            url = 'https://maven.pkg.github.com/1337farm/iroh-android-native'
+            def user = System.getenv('GH_PACKAGES_USER') ?: project.findProperty('ghPackagesUser')
+            def token = System.getenv('GH_PACKAGES_TOKEN') ?: project.findProperty('ghPackagesToken')
+            if (user && token) {
+                credentials {
+                    username user
+                    password token
+                }
+            } else {
+                println "WARN: GH_PACKAGES_USER/GH_PACKAGES_TOKEN not set; resolving irohbridge may fail"
+            }
+        }
     }
 }
 

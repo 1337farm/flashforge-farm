@@ -123,6 +123,10 @@ public class Native {
     }
 
     public static long model_read_from_file(String path, String baseName) throws Slic3rRuntimeError {
+        return model_read_from_file(path, baseName, 0);
+    }
+
+    public static long model_read_from_file(String path, String baseName, int plateId) throws Slic3rRuntimeError {
         long ptr = nextPtr++;
         MockModel model = new MockModel();
         models.put(ptr, model);
@@ -279,12 +283,29 @@ public class Native {
         }
     }
 
+    // Multi-color painting (mmu segmentation) — slice() queries these to decide
+    // the filament count; default to "no paint".
+    public static boolean model_has_paint(long modelPtr, int objIdx) { return false; }
+    public static int model_paint_max_filament(long modelPtr, int objIdx) { return 0; }
+
     public static long model_slice(long ptr, String configPath, String path, SliceListener listener) throws Slic3rRuntimeError {
-        // Notify listener to simulate real slicing progress
+        return model_slice(ptr, configPath, path, listener, 1, null, 0, 0, 0, 0);
+    }
+
+    // Records every slice call so tests can assert the config flow actually ran.
+    public static final List<String[]> sliceCalls = new ArrayList<>();
+
+    public static long model_slice(long ptr, String configPath, String path, SliceListener listener,
+                                  int numFilaments, int[] filamentColors, int calibMode,
+                                  double calibStart, double calibEnd, double calibStep) throws Slic3rRuntimeError {
+        if (configPath != null && new java.io.File(configPath).exists()) {
+            sliceCalls.add(new String[]{ configPath, path });
+        }
+        // Notify listener to simulate real slicing progress.
         if (listener != null) {
-            listener.onSliceProgress(10);
-            listener.onSliceProgress(50);
-            listener.onSliceProgress(100);
+            listener.onProgress(10, "slicing");
+            listener.onProgress(50, "slicing");
+            listener.onProgress(100, "slicing");
         }
         return 5000L; // Mock gcoderesult pointer
     }

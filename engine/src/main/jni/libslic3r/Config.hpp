@@ -2152,7 +2152,7 @@ public:
         else if (auto *ints = dynamic_cast<const ConfigOptionInts *>(rhs))
             this->values = ints->values;
         else
-            throw ConfigurationError("ConfigOptionEnumGeneric: Assigning an incompatible type");
+            throw ConfigurationError(std::string("ConfigOptionEnumGeneric: Assigning an incompatible type") + config_type_pair_msg(this, rhs));
     }
 
     std::string serialize() const override

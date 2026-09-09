@@ -30,6 +30,9 @@ ENGINE_LIBS_DIR="$(bash "$REPO/scripts/tests/engine_repro/build_harness.sh" "$EN
 
 echo "engine under test: $ENGINE_LIBS_DIR/libslic3r.so"
 sha256sum "$ENGINE_LIBS_DIR/libslic3r.so" 2>/dev/null | awk '{print "engine sha256:", $1}'
+if [ -f "$ENGINE_LIBS_DIR/.engine_src" ]; then
+    echo "engine src: $(cat "$ENGINE_LIBS_DIR/.engine_src") (want $(git -C "$REPO" rev-parse HEAD:engine 2>/dev/null || echo ?))"
+fi
 
 run() {
     local name="$1" expect="$2"; shift 2
@@ -66,10 +69,19 @@ run "vector_semicolon_join_broken.ini (legacy editor output)" 2 "$REG/vector_sem
 # 4) Reported 3D-Benchy STL slice on the Flashforge AD5M profile
 #    (0.20mm Standard, Generic PLA, prime tower, auto_brim, Cool Plate)
 #    threw bare ConfigOptionEnumGeneric incompatible-type on a pre-#42
-#    engine. Fixture covers the reported a-i inventory values over engine
-#    defaults; extend it with the i-z tail from the crash file if the
-#    trigger is identified there. Must apply+validate clean.
+#    engine. Fixture now carries the runtime machine-limit vectors from
+#    farm_crash_c92115550c. Must apply+validate clean.
 run "user_benchy_ad5m.ini (reported slice config)" 0 "$REG/user_benchy_ad5m.ini" || fails=$((fails+1))
+
+# 5) Same reported Benchy config against the real STL with paint-relevant
+#    filament counts. The app only resizes per-filament vectors when painting
+#    or palette state requests N > 1; exercise that branch explicitly because
+#    a mismatch there would surface later than config load.
+for benchy_filaments in 1 2 8; do
+  run "user_benchy_ad5m.ini + 3DBenchy.stl filaments=$benchy_filaments" 0 \
+    "$REG/user_benchy_ad5m.ini" "/sdcard/Download/3DBenchy.stl" "$benchy_filaments" \
+    || fails=$((fails+1))
+done
 
 echo
 if [ "$fails" -gt 0 ]; then

@@ -42,4 +42,16 @@ if [ ! -x "$HARNESS" ]; then
 fi
 
 sha256sum "$SO" | awk '{print $1}' >"$PIN"
+# Fail closed on a stale staged engine: the .so must match the current
+# engine/ tree (see engine/output/<ABI>/.engine_src, written by
+# fetch-native-deps.sh). A sha-only pin cannot see source changes.
+if [ -f "$REPO/engine/output/arm64-v8a/.engine_src" ] || [ -f "$(dirname "$SO")/.engine_src" ]; then
+    STAGED_SRC="$(cat "$(dirname "$SO")/.engine_src" 2>/dev/null || true)"
+    WANT_SRC="$(git -C "$REPO" rev-parse HEAD:engine 2>/dev/null || true)"
+    if [ -n "$WANT_SRC" ] && [ -n "$STAGED_SRC" ] && [ "$WANT_SRC" != "$STAGED_SRC" ]; then
+        echo "build_harness.sh: STALE engine .so (staged from engine_src=$STAGED_SRC, HEAD:engine=$WANT_SRC)" >&2
+        echo "build_harness.sh: run scripts/fetch-native-deps.sh --engine to refresh, then retry" >&2
+        exit 2
+    fi
+fi
 echo "$(dirname "$SO")"

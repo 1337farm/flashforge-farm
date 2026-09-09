@@ -67,6 +67,26 @@ public final class UserProfile {
         return new UserProfile(pubkey, name, bio, avatar.toLowerCase(), links, updated);
     }
 
+    public static byte[] toJson(String pubkeyHex, String name, String bio,
+            String avatarHash, List<String> links, long updated) {
+        JsonObject o = new JsonObject();
+        o.addProperty("pubkey", pubkeyHex == null ? "" : pubkeyHex.trim().toLowerCase());
+        o.addProperty("name", name == null ? "" : name);
+        o.addProperty("bio", bio == null ? "" : bio);
+        o.addProperty("avatar", avatarHash == null ? "" : avatarHash.trim().toLowerCase());
+        JsonArray arr = new JsonArray();
+        if (links != null) {
+            for (String l : links) {
+                if (l != null) {
+                    arr.add(l);
+                }
+            }
+        }
+        o.add("links", arr);
+        o.addProperty("updated", updated);
+        return o.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+
     public static String displayLabel(UserProfile p, String pubkeyHex) {
         String k = pubkeyHex == null ? "" : pubkeyHex.trim().toLowerCase();
         String shortKey = k.length() <= 12 ? k : k.substring(0, 8) + "…" + k.substring(k.length() - 4);

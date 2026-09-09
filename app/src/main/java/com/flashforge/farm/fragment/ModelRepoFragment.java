@@ -380,7 +380,20 @@ public class ModelRepoFragment extends Fragment {
         setStatus("Building share ticket...");
         new Thread(() -> {
             try {
-                final String ann = irohTransport.syncAnnounce();
+                final String ann;
+                if (searchClient != null) {
+                    String pt = searchClient.ownProfileTicket();
+                    if (pt == null) {
+                        try {
+                            pt = searchClient.publishLocalProfile("", "");
+                        } catch (Exception ignored) {
+                            pt = null;
+                        }
+                    }
+                    ann = searchClient.announceWithProfile(pt);
+                } else {
+                    ann = irohTransport.syncAnnounce();
+                }
                 ViewUtils.postOnMainThread(() -> {
                     ticketInput.setText(ann);
                     setStatus("Share this ticket: " + ann);

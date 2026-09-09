@@ -636,6 +636,14 @@ def main():
         failures.append("scripts/build_farm_iroh_android.sh must be deleted (no source cdylib build)")
     if (REPO / "app/src/main/kotlin/com/flashforge/farm/iroh/IrohSpike.kt").exists():
         failures.append("IrohSpike.kt must be deleted (computer.iroh spike removed)")
+    sc = (REPO / "app/src/main/java/com/flashforge/farm/modelrepo/SearchClient.java").read_text()
+    for needle in ("announceWithProfile", "parseAnnounce", "publishLocalProfile"):
+        if needle not in sc:
+            failures.append(
+                f"SearchClient must implement {needle} (profile tickets ride the "
+                "announce envelope; the engine carries models only)"
+            )
+            break
 
     # Per-build log-file guard: each build must append to its own Downloads
     # document (name carries the build commit) instead of every crash cycle

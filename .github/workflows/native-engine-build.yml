@@ -901,6 +901,7 @@ jobs:
     timeout-minutes: 120
     permissions:
       contents: write
+      packages: read
     steps:
       - name: Checkout repository
         run: |
@@ -1075,19 +1076,10 @@ jobs:
             || { echo "ERROR: staged engine .so failed marker check"; exit 1; }
 
       - name: Configure GitHub Packages credentials for irohbridge AAR
-        # The P2P transport depends on com.example.irohapp:irohbridge published
-        # to GitHub Packages (1337farm/iroh-android-native); GitHub Packages
-        # requires credentials even for public Maven artifacts. Reuse the
-        # existing classic PAT (SYNC_PAT) which carries read:packages by
-        # definition, with the account name as the username.
         env:
-          GH_PACKAGES_USER: 1337farm
-          GH_PACKAGES_TOKEN: ${{ secrets.SYNC_PAT }}
+          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ -z "$GH_PACKAGES_TOKEN" ]; then
-            echo "WARNING: SYNC_PAT secret missing; Gradle will fail to resolve the irohbridge AAR"
-          fi
-          echo "GH_PACKAGES_USER=1337farm" >> "$GITHUB_ENV"
+          echo "GH_PACKAGES_USER=${{ github.actor }}" >> "$GITHUB_ENV"
           echo "GH_PACKAGES_TOKEN=$GH_PACKAGES_TOKEN" >> "$GITHUB_ENV"
 
       - name: Run Android unit tests

@@ -607,11 +607,17 @@ def main():
             "1337farm/iroh-android-native with GH_PACKAGES_USER/GH_PACKAGES_TOKEN credentials"
         )
     apk_steps = [st for st in apk_job.get("steps", []) if isinstance(st, dict)]
-    ghcred = next((st for st in apk_steps if str(st.get("name", "")) == "Configure GitHub Packages credentials for irohbridge AAR"), {})
-    if "SYNC_PAT" not in str(ghcred.get("run", "")) + str(ghcred.get("env", "")):
+    if apk_job.get("permissions", {}).get("packages") != "read":
         failures.append(
-            "package-apk must configure GitHub Packages credentials from secrets.SYNC_PAT "
-            "before Gradle so the irohbridge AAR resolves"
+            "package-apk must grant packages: read (GITHUB_TOKEN needs it "
+            "to resolve the irohbridge AAR from GitHub Packages)"
+        )
+    ghcred = next((st for st in apk_steps if str(st.get("name", "")) == "Configure GitHub Packages credentials for irohbridge AAR"), {})
+    ghcred_text = str(ghcred.get("run", "")) + str(ghcred.get("env", ""))
+    if "secrets.GITHUB_TOKEN" not in ghcred_text:
+        failures.append(
+            "package-apk must configure GitHub Packages credentials from "
+            "secrets.GITHUB_TOKEN before Gradle so the irohbridge AAR resolves"
         )
     transport = (REPO / "app/src/main/java/com/flashforge/farm/modelrepo/IrohModelTransport.java").read_text()
     if "IrohBridge" not in transport:

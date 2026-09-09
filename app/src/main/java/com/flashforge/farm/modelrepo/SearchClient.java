@@ -2,6 +2,7 @@ package com.flashforge.farm.modelrepo;
 
 import android.util.Log;
 
+import com.flashforge.farm.modelrepo.ModelTransport.UnavailableException;
 import com.flashforge.farm.modelrepo.profile.UserProfile;
 
 import java.util.ArrayList;
@@ -19,6 +20,7 @@ public class SearchClient {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Map<String, List<SearchResult>> queryCache = new ConcurrentHashMap<>();
     private final Map<String, UserProfile> profileCache = new ConcurrentHashMap<>();
+    private volatile String ownProfileTicket;
     private final List<SearchListener> listeners = new CopyOnWriteArrayList<>();
 
     public interface SearchListener {
@@ -131,10 +133,49 @@ public class SearchClient {
         return transport.syncAnnounce();
     }
 
+    public String publishLocalProfile(String name, String bio) throws Exception {
+        String pubkey = transport.getEndpointId();
+        if (pubkey == null || pubkey.isEmpty()) {
+            throw new UnavailableException("no local endpoint id");
+        }
+        byte[] raw = UserProfile.toJson(pubkey, name, bio, "", null,
+                System.currentTimeMillis() / 1000L);
+        UserProfile self = UserProfile.parse(raw, pubkey);
+        byte[] hash = transport.storeBlob(raw);
+        String ticket = transport.shareTicket(hash);
+        profileCache.put(pubkey.toLowerCase(), self);
+        ownProfileTicket = ticket;
+        return ticket;
+    }
+
+    public String ownProfileTicket() {
+        return ownProfileTicket;
+    }
+
+    public String announceWithProfile(String profileTicket) throws Exception {
+        String ann = transport.syncAnnounce();
+        if (profileTicket == null || profileTicket.trim().isEmpty()) {
+            return ann;
+        }
+        return SyncResult.announceEnvelope(ann, profileTicket);
+    }
+
     public SyncResult syncMerge(String ticket) throws Exception {
-        String res = transport.syncMerge(ticket);
+        SyncResult.AnnouncePayload payload = SyncResult.parseAnnounce(ticket);
+        String engineTicket = payload.enveloped ? payload.announceTicket : ticket;
+        if (engineTicket == null || engineTicket.trim().isEmpty()) {
+            throw new UnavailableException("empty announce ticket");
+        }
+        String res = transport.syncMerge(engineTicket.trim());
         queryCache.clear();
         SyncResult parsed = SyncResult.parse(res);
+        if (payload.enveloped && payload.profileTicket != null
+                && !payload.profileTicket.trim().isEmpty()) {
+            resolveProfileTicket(payload.profileTicket.trim());
+            List<String> extra = new ArrayList<>();
+            extra.add(payload.profileTicket.trim());
+            return parsed.includingProfiles(extra);
+        }
         for (String pt : parsed.profileTickets) {
             resolveProfileTicket(pt);
         }

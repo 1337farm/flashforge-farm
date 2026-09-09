@@ -19,6 +19,67 @@ public final class SyncResult {
         this.profileTickets = profileTickets;
     }
 
+    public static final class AnnouncePayload {
+        public final boolean enveloped;
+        public final String announceTicket;
+        public final String profileTicket;
+
+        private AnnouncePayload(boolean enveloped, String announceTicket, String profileTicket) {
+            this.enveloped = enveloped;
+            this.announceTicket = announceTicket;
+            this.profileTicket = profileTicket;
+        }
+    }
+
+    public static String announceEnvelope(String announceTicket, String profileTicket) {
+        JsonObject o = new JsonObject();
+        o.addProperty("v", 1);
+        o.addProperty("announce", announceTicket == null ? "" : announceTicket.trim());
+        o.addProperty("profile", profileTicket == null ? "" : profileTicket.trim());
+        return o.toString();
+    }
+
+    public static AnnouncePayload parseAnnounce(String ticket) {
+        if (ticket != null) {
+            String t = ticket.trim();
+            if (t.startsWith("{")) {
+                try {
+                    JsonObject o = JsonParser.parseString(t).getAsJsonObject();
+                    if (o.has("announce")) {
+                        String ann = o.has("announce") ? optText(o, "announce") : "";
+                        String prof = o.has("profile") ? optText(o, "profile") : "";
+                        return new AnnouncePayload(true, ann, prof);
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return new AnnouncePayload(false, ticket, "");
+    }
+
+    public SyncResult includingProfiles(List<String> extra) {
+        List<String> merged = new ArrayList<>(profileTickets);
+        if (extra != null) {
+            for (String s : extra) {
+                if (s != null && !s.trim().isEmpty() && !merged.contains(s.trim())) {
+                    merged.add(s.trim());
+                }
+            }
+        }
+        return new SyncResult(newModels, modelTickets, merged);
+    }
+
+    private static String optText(JsonObject o, String key) {
+        try {
+            if (o.has(key) && o.get(key).isJsonPrimitive()
+                    && o.get(key).getAsJsonPrimitive().isString()) {
+                return o.get(key).getAsString();
+            }
+        } catch (Exception ignored) {
+        }
+        return "";
+    }
+
     public static SyncResult parse(String json) {
         List<String> models = new ArrayList<>();
         List<String> profiles = new ArrayList<>();

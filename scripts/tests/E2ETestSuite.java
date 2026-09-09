@@ -1170,6 +1170,23 @@ public class E2ETestSuite {
     // TIER 4: REAL-WORLD APPLICATION SCENARIOS (Tests 89-93)
     // =========================================================================
 
+    public static void testSliceFlowReachesNativeModelSlice() {
+        resetEnvironment();
+        setupMockConfig();
+        int before = Native.sliceCalls.size();
+        try {
+            FarmApp.genCurrentConfig();
+            Model model = new Model();
+            File gcode = new File(FarmApp.INSTANCE.getFilesDir(), "out.gcode");
+            model.slice(FarmApp.getCurrentConfigFile().getAbsolutePath(), gcode.getAbsolutePath(), null);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        assertEquals(before + 1, Native.sliceCalls.size(), "slice() must reach native model_slice via the full config flow");
+        assertTrue(Native.sliceCalls.get(before)[0].endsWith("slic3r_current.ini"),
+                "slice must pass the generated slic3r_current.ini path");
+    }
+
     public static void testEndToEndSlicingWorkflow() {
         resetEnvironment();
         

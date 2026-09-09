@@ -725,9 +725,16 @@ public class BedFragment extends Fragment {
                             FarmApp.writeCrashDump("slice", "cfg=" + cfg.getAbsolutePath() + " gcode=" + gcode.getAbsolutePath()
                                     + " thread=" + Thread.currentThread().getName() + " mem=" + Runtime.getRuntime().freeMemory() / 1048576 + "/" + Runtime.getRuntime().maxMemory() / 1048576 + "MB"
                                     + "\nslice: " + e + "\n" + Log.getStackTraceString(e));
+                            String buildTag = "";
+                            try {
+                                buildTag = "\n\nbuild " + com.flashforge.farm.BuildConfig.COMMIT
+                                        + " (full log: Downloads/farm_crash_" + com.flashforge.farm.BuildConfig.COMMIT + ".log)";
+                            } catch (Exception ignored) {
+                            }
+                            final String errText = String.valueOf(e.getMessage()) + buildTag;
                             ViewUtils.postOnMainThread(()->{
                                 Bus.SLICING_PROGRESS.postValue(new SlicingProgressEvent(100, ""));
-                                FarmAlertDialogBuilder.showError(ctx, R.string.SliceFailed, e.getMessage());
+                                FarmAlertDialogBuilder.showError(ctx, R.string.SliceFailed, errText);
                             });
                         }
                     }, "farm-slice", 8 * 1024 * 1024).start();

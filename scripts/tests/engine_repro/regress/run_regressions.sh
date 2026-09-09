@@ -80,6 +80,14 @@ run "vector_semicolon_join_broken.ini (legacy editor output)" 2 "$REG/vector_sem
 #    farm_crash_c92115550c. Must apply+validate clean.
 run "user_benchy_ad5m.ini (reported slice config)" 0 "$REG/user_benchy_ad5m.ini" || fails=$((fails+1))
 
+# 5) ConfigOptionEnumsGenericTempl::set() copy semantics, direct. The on-device
+#    "Assigning an incompatible type" (2026-09-09) fires because the coEnums
+#    copy used dynamic_cast, which fails across the libfarm/libslic3r DSO
+#    boundary (duplicated template typeinfo). The fix copies via static_cast on
+#    the shared ConfigOptionInts base; this case guards the copy (incl. the
+#    Templ<true>/<false> cross-variant path) and the type-mismatch throw.
+run "enum-set-check (RTTI-free coEnums copy)" 0 --enum-set-check || fails=$((fails+1))
+
 # 5) Same reported Benchy config against the real STL with paint-relevant
 #    filament counts. The app only resizes per-filament vectors when painting
 #    or palette state requests N > 1; exercise that branch explicitly because

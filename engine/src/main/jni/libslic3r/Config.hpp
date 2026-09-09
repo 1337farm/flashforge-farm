@@ -2142,17 +2142,18 @@ public:
         if (rhs->type() != this->type())
             throw ConfigurationError(std::string("ConfigOptionEnumGeneric: Assigning an incompatible type") + config_type_pair_msg(this, rhs));
         // rhs is guaranteed coEnums here, but it may be the other nullability
-        // instantiation: Templ<true> and Templ<false> are distinct C++ classes,
-        // so a direct dynamic_cast across variants yields nullptr and the
-        // values read faults at +8 (2026-09-07 farm-slice SIGSEGV, fault 0x8).
-        // All coEnums reporters share the ConfigOptionInts base, so copy via
-        // that instead of crashing.
-        if (auto *same = dynamic_cast<const ConfigOptionEnumsGenericTempl *>(rhs))
-            this->values = same->values;
-        else if (auto *ints = dynamic_cast<const ConfigOptionInts *>(rhs))
-            this->values = ints->values;
-        else
-            throw ConfigurationError(std::string("ConfigOptionEnumGeneric: Assigning an incompatible type") + config_type_pair_msg(this, rhs));
+        // instantiation: Templ<true> and Templ<false> are distinct C++ classes.
+        // dynamic_cast is unusable for this copy: the app links libfarm.so and
+        // libslic3r.so separately, so each DSO compiles its OWN typeinfo and
+        // vtable for this header template, and a cast across that boundary
+        // returns nullptr even when typeid(*rhs).name() matches exactly (device
+        // slice crash 2026-09-09: "(dst N6Slic3r29ConfigOptionEnumsGenericTempl
+        // ILb0EEE <- src ... ILb0EEE)" yet the throw fired). static_cast needs
+        // no RTTI and the object is known-good: type() == coEnums guarantees a
+        // ConfigOptionInts (the shared base of both variants), and the vector
+        // layout is identical in every DSO compiling this header (2026-09-07
+        // farm-slice SIGSEGV fix: reading values cross-variant faulted at +8).
+        this->values = static_cast<const ConfigOptionInts*>(rhs)->values;
     }
 
     std::string serialize() const override

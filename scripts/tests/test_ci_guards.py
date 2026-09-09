@@ -415,17 +415,28 @@ def main():
             "to clean up pre-consolidation pile-ups"
         )
 
-    # coEnums cross-variant guard: ConfigOptionEnumsGenericTempl<true> and
-    # <false> are distinct C++ classes sharing the coEnums tag, so set() must
-    # not dynamic_cast across variants (nullptr->values faults at +8;
-    # 2026-09-07 farm-slice SIGSEGV, fault 0x8, in Templ<false>::set <-
-    # apply_only <- Print::apply). Copy via the shared ConfigOptionInts base.
+    # coEnums copy guard: ConfigOptionEnumsGenericTempl<true> and <false> are
+    # distinct C++ classes sharing the coEnums tag, so set() must not
+    # dynamic_cast across variants (nullptr->values faults at +8; 2026-09-07
+    # farm-slice SIGSEGV, fault 0x8, in Templ<false>::set <- apply_only <-
+    # Print::apply). dynamic_cast is ALSO unusable across the libfarm.so/
+    # libslic3r.so DSO boundary: each compiles its own typeinfo for the
+    # template, so a cast returns nullptr even for identical typeid names
+    # (device slice crash 2026-09-09). Enforce the RTTI-free copy via the
+    # shared ConfigOptionInts base, and reject any template-typed dynamic_cast
+    # in this method.
     cfg = (REPO / "engine/src/main/jni/libslic3r/Config.hpp").read_text()
-    if "dynamic_cast<const ConfigOptionInts *>(rhs)" not in cfg:
+    if "static_cast<const ConfigOptionInts*>(rhs)" not in cfg:
         failures.append(
-            "ConfigOptionEnumsGenericTempl::set must copy via the shared "
-            "ConfigOptionInts base (cross-variant Templ<true>/<false> "
-            "dynamic_cast yields nullptr and faults at +8)"
+            "ConfigOptionEnumsGenericTempl::set must copy via static_cast on "
+            "the shared ConfigOptionInts base (RTTI-free: cross-variant and "
+            "cross-DSO dynamic_cast both yield nullptr)"
+        )
+    if re.search(r"dynamic_cast<const ConfigOptionEnumsGenericTempl", cfg):
+        failures.append(
+            "ConfigOptionEnumsGenericTempl::set must not dynamic_cast to the "
+            "template type (duplicated typeinfo across DSOs returns nullptr "
+            "even for identical typeid names)"
         )
 
     # Crash-log append guard: the Downloads document must accumulate across

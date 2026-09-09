@@ -63,6 +63,14 @@ run "vector_comma_join_fixed.ini (fixed editor output)" 0 "$REG/vector_comma_joi
 #    separator contract so an old/mismatched editor cannot silently load).
 run "vector_semicolon_join_broken.ini (legacy editor output)" 2 "$REG/vector_semicolon_join_broken.ini" || fails=$((fails+1))
 
+# 4) Reported 3D-Benchy STL slice on the Flashforge AD5M profile
+#    (0.20mm Standard, Generic PLA, prime tower, auto_brim, Cool Plate)
+#    threw bare ConfigOptionEnumGeneric incompatible-type on a pre-#42
+#    engine. Fixture covers the reported a-i inventory values over engine
+#    defaults; extend it with the i-z tail from the crash file if the
+#    trigger is identified there. Must apply+validate clean.
+run "user_benchy_ad5m.ini (reported slice config)" 0 "$REG/user_benchy_ad5m.ini" || fails=$((fails+1))
+
 echo
 if [ "$fails" -gt 0 ]; then
     echo "REGRESSION: $fails case(s) FAILED (engine .so still unpatched?)"

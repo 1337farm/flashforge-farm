@@ -574,50 +574,68 @@ def main():
             "pull_request runs require manual approval)"
         )
 
-# farm-iroh release-reuse must not stage a stale .so: the cdylib output
-    # depends on BOTH the p2p/ tree AND scripts/build_farm_iroh_android.sh,
-    # so the manifest iroh_src key must cover both; the gate mirrors the
-    # publish quality gate (size/arch/uniffi marker). Cheap to compile, so
-    # reuse only short-circuits a verified-build repeat. (2026-09-07.)
-    iroh = jobs.get("build-iroh", {})
-    irel = next(
-        (
-            s for s in iroh.get("steps", [])
-            if isinstance(s, dict) and s.get("name") == "Restore farm-iroh from release (published build reuse)"
-        ),
-        {},
-    )
-    irel_run = str(irel.get("run", ""))
-    if "iroh_src" not in irel_run or "HEAD:p2p" not in irel_run or "build_farm_iroh_android.sh" not in irel_run:
+    irohbridge_aar = "com.example.irohapp:irohbridge"
+    if "build-iroh" in jobs:
         failures.append(
-            "farm-iroh release-reuse step must compare manifest iroh_src "
-            "against HEAD:p2p + scripts/build_farm_iroh_android.sh and rebuild "
-            "on mismatch; the sha/size/marker gate alone reuses a stale .so"
+            "workflow must not define a build-iroh job (farm-iroh UniFFI crate "
+            "was replaced by the shared irohbridge AAR; a stale job referencing "
+            "p2p/ or scripts/build_farm_iroh_android.sh fails CI)"
         )
-    if "AArch64" not in irel_run or "checksum_func_connect" not in irel_run:
+    wf_text = WORKFLOW.read_text()
+    for needle in ("farm-iroh", "libfarm_iroh", "build_farm_iroh", "HEAD:p2p", "p2p/output", "iroh_src", "checksum_func_connect"):
+        if needle in wf_text:
+            failures.append(
+                f"workflow must not reference {needle!r} (farm-iroh crate removed; "
+                "P2P transport ships as the irohbridge AAR)"
+            )
+            break
+    if irohbridge_aar not in gradle:
         failures.append(
-            "farm-iroh release-reuse step must run the full quality gate "
-            "(size, AArch64, checksum_func_connect uniffi marker) so a stale "
-            ".so falls through to a fresh build"
+            "app/build.gradle must depend on com.example.irohapp:irohbridge "
+            "(shared P2P engine AAR from GitHub Packages)"
         )
-    ipub = next(
-        (
-            s for s in iroh.get("steps", [])
-            if isinstance(s, dict) and s.get("name") == "Publish farm-iroh release"
-        ),
-        {},
-    )
-    if "iroh_src" not in str(ipub.get("run", "")):
+    for needle in ("computer.iroh", "net.java.dev.jna", "p2p/output", "p2p/gen"):
+        if needle in gradle:
+            failures.append(
+                f"app/build.gradle must not reference {needle!r} (farm-iroh/computer.iroh removed)"
+            )
+            break
+    root_gradle = (REPO / "build.gradle").read_text()
+    if "iroh-android-native" not in root_gradle or "GH_PACKAGES_TOKEN" not in root_gradle:
         failures.append(
-            "Publish farm-iroh release must record iroh_src (HEAD:p2p + build "
-            "script) in iroh-manifest.json, or reuse can never detect source "
-            "changes"
+            "root build.gradle must declare the GitHub Packages maven repo for "
+            "1337farm/iroh-android-native with GH_PACKAGES_USER/GH_PACKAGES_TOKEN credentials"
         )
-    if "refs/heads/main" not in str(ipub.get("if", "")):
+    apk_steps = [st for st in apk_job.get("steps", []) if isinstance(st, dict)]
+    if apk_job.get("permissions", {}).get("packages") != "read":
         failures.append(
-            "Publish farm-iroh release must gate on refs/heads/main only "
-            "(rolling release; PR builds upload artifacts instead)"
+            "package-apk must grant packages: read (GITHUB_TOKEN needs it "
+            "to resolve the irohbridge AAR from GitHub Packages)"
         )
+    ghcred = next((st for st in apk_steps if str(st.get("name", "")) == "Configure GitHub Packages credentials for irohbridge AAR"), {})
+    ghcred_text = str(ghcred.get("run", "")) + str(ghcred.get("env", ""))
+    if "secrets.GITHUB_TOKEN" not in ghcred_text:
+        failures.append(
+            "package-apk must configure GitHub Packages credentials from "
+            "secrets.GITHUB_TOKEN before Gradle so the irohbridge AAR resolves"
+        )
+    transport = (REPO / "app/src/main/java/com/flashforge/farm/modelrepo/IrohModelTransport.java").read_text()
+    if "IrohBridge" not in transport:
+        failures.append(
+            "IrohModelTransport must be backed by com.example.irohapp.IrohBridge (irohbridge AAR)"
+        )
+    for needle in ("uniffi.farm_iroh", "libfarm_iroh", "Farm_irohKt", "FarmEndpoint"):
+        if needle in transport:
+            failures.append(
+                f"IrohModelTransport must not reference {needle!r} (farm-iroh UniFFI binding removed)"
+            )
+            break
+    if (REPO / "p2p").exists():
+        failures.append("p2p/ crate must be deleted (replaced by the irohbridge AAR)")
+    if (REPO / "scripts/build_farm_iroh_android.sh").exists():
+        failures.append("scripts/build_farm_iroh_android.sh must be deleted (no source cdylib build)")
+    if (REPO / "app/src/main/kotlin/com/flashforge/farm/iroh/IrohSpike.kt").exists():
+        failures.append("IrohSpike.kt must be deleted (computer.iroh spike removed)")
 
     # Per-build log-file guard: each build must append to its own Downloads
     # document (name carries the build commit) instead of every crash cycle

@@ -34,10 +34,17 @@ if [ -f "$ENGINE_LIBS_DIR/.engine_src" ]; then
     echo "engine src: $(cat "$ENGINE_LIBS_DIR/.engine_src") (want $(git -C "$REPO" rev-parse HEAD:engine 2>/dev/null || echo ?))"
 fi
 
+# libslic3r.so links libgmp/libgmpxx/libmpfr which are staged next to the
+# engine's jniLibs (engine/src/main/jniLibs/<ABI>), not next to the engine
+# output. Include both so the harness links without manual LD setup.
+DEPS_LIBS_DIR="$REPO/engine/src/main/jniLibs/$(basename "$ENGINE_LIBS_DIR")"
+HARNESS_LD_PATH="$ENGINE_LIBS_DIR${DEPS_LIBS_DIR:+:$DEPS_LIBS_DIR}"
+[ -d "$DEPS_LIBS_DIR" ] || HARNESS_LD_PATH="$ENGINE_LIBS_DIR"
+
 run() {
     local name="$1" expect="$2"; shift 2
     local log="$REG/.run.log"
-    LD_LIBRARY_PATH="$ENGINE_LIBS_DIR" "$HARNESS" "$@" >"$log" 2>&1
+    LD_LIBRARY_PATH="$HARNESS_LD_PATH" "$HARNESS" "$@" >"$log" 2>&1
     local rc=$?
     if [ "$rc" -eq "$expect" ]; then
         echo "PASS  $name (exit $rc)"

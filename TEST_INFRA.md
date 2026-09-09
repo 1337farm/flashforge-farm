@@ -100,6 +100,11 @@ Three layers guard the open-file → slice flow that produced the enum-type cras
 diagnosable offline. Changing Config.hpp requires an **engine rebuild and
 re-publish** before the on-device error changes shape — the binding rule in §6
 is what prevents shipping the old-instrumentation `.so`.
+Note: `ConfigOptionEnumsGenericTempl::set` copies via `static_cast` on the
+shared `ConfigOptionInts` base, **not** `dynamic_cast` — the app loads
+`libfarm.so` and `libslic3r.so` as separate DSOs, each compiling its own
+typeinfo/vtable for the header template, so a cross-boundary `dynamic_cast`
+returns null even when `typeid().name()` matches (device crash 2026-09-09).
 
 ### Bool→enum value-semantics hazard
 Any `ConfigObject.KEY_MIGRATION` entry that maps a legacy *bool* key to an

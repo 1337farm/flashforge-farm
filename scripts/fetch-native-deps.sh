@@ -78,10 +78,29 @@ if [ "$FORCE_SOURCE" -eq 0 ] && command -v gh >/dev/null 2>&1; then
           --pattern 'libslic3r.so' --pattern 'engine-manifest.json' \
           --dir "$DL" --clobber >/dev/null 2>&1 \
      && verify_manifest "$DL" engine-manifest.json libslic3r.so; then
-    echo "[fetch] engine release verified; staging libslic3r.so"
-    mkdir -p "engine/output/$ABI"
-    cp "$DL/libslic3r.so" "engine/output/$ABI/libslic3r.so"
-    ENGINE_OK=1
+    # Source-freshness: the release .so must have been built from the CURRENT
+    # engine/ tree. A sha-only check cannot see source changes, so a Config.hpp
+    # fix can sit unreleased while tests/APKs keep running the stale .so.
+    # Old manifests lack engine_src and therefore always rebuild once.
+    WANT_SRC="$(git rev-parse HEAD:engine 2>/dev/null || true)"
+    GOT_SRC="$(python3 -c "import json;print(json.load(open('$DL/engine-manifest.json')).get('engine_src',''))" 2>/dev/null || true)"
+    if [ -z "$WANT_SRC" ]; then
+      echo "[fetch] WARNING: cannot resolve HEAD:engine; refusing release .so (will build from source)" >&2
+      ENGINE_OK=0
+    elif [ -z "$GOT_SRC" ] || [ "$WANT_SRC" != "$GOT_SRC" ]; then
+      echo "[fetch] engine sources changed since release (HEAD:engine=$WANT_SRC manifest=$GOT_SRC); ignoring release and rebuilding from source" >&2
+      ENGINE_OK=0
+    else
+      echo "[fetch] engine release verified (sha + engine_src=$GOT_SRC); staging libslic3r.so"
+      mkdir -p "engine/output/$ABI"
+      cp "$DL/libslic3r.so" "engine/output/$ABI/libslic3r.so"
+      echo "$GOT_SRC" > "engine/output/$ABI/.engine_src"
+      ENGINE_OK=1
+    fi
+    if [ "$ENGINE_OK" != "1" ]; then
+      echo "[fetch] engine release unavailable/invalid/stale; will build from source"
+      ENGINE_OK=0
+    fi
   else
     echo "[fetch] engine release unavailable/invalid; will build from source"
     ENGINE_OK=0
@@ -143,6 +162,7 @@ SO="$(find engine/build -name 'libslic3r.so' 2>/dev/null | head -1)"
 [ -n "$SO" ] || { echo "[fetch] ERROR: libslic3r.so not built" >&2; exit 1; }
 mkdir -p "engine/output/$ABI"
 cp "$SO" "engine/output/$ABI/libslic3r.so"
+git rev-parse HEAD:engine > "engine/output/$ABI/.engine_src" 2>/dev/null || true
 chmod +x scripts/strip-so.sh
 scripts/strip-so.sh "engine/output/$ABI/libslic3r.so" >/dev/null
 echo "[fetch] done. libslic3r.so at engine/output/$ABI/libslic3r.so (OCCT statically linked)"

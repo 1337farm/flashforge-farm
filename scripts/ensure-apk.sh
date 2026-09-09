@@ -126,8 +126,14 @@ if [ "$BUILD_ONLY" -eq 0 ] && [ -z "$(find "$DL_CACHE" -name 'FlashForgeFarm_*.a
     if gh run download "$RUN_ID" -n "$APK_ARTIFACT" -D "$DL_CACHE" 2>"$DL_CACHE/.dl.err"; then
       APK="$(find "$DL_CACHE" -name 'FlashForgeFarm_*.apk' | head -1)"
       if [ -n "$APK" ]; then
-        publish_apk "$APK"
-        exit 0
+        # The bundle name carries the builder commit; refuse a mismatched APK
+        # instead of installing a wrong-engine build as good.
+        if [[ "$(basename "$APK")" != *"$LOCAL_SHA"* ]]; then
+          err "bundle APK $(basename "$APK") is not built from $LOCAL_SHA; ignoring (will build locally)"
+        else
+          publish_apk "$APK"
+          exit 0
+        fi
       fi
     else
       cat "$DL_CACHE/.dl.err" >&2
@@ -151,14 +157,12 @@ if [ "$BUILD_ONLY" -eq 0 ] && [ -z "$(find "$DL_CACHE" -name 'FlashForgeFarm_*.a
       WANT="$(python3 -c "import json,glob,os; m=json.load(open('$MAN')); n=[k for k in m['files'] if k.endswith('.apk')][0]; print(m['files'][n])" 2>/dev/null || true)"
       GOT="$(sha256sum "$APK" | cut -d' ' -f1)"
       BUILT="$(python3 -c "import json; print(json.load(open('$MAN')).get('commit','?'))" 2>/dev/null || echo ?)"
-      if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
-        if [ "$BUILT" = "$LOCAL_SHA" ]; then
-          log "release APK verified, built for this commit ($BUILT)"
-        else
-          log "WARNING: release APK is for commit $BUILT, not $LOCAL_SHA; using it (assert still enforced)"
-        fi
+      if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ] && [ "$BUILT" = "$LOCAL_SHA" ]; then
+        log "release APK verified, built for this commit ($BUILT)"
         publish_apk "$APK"
         exit 0
+      elif [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
+        log "release APK is for commit $BUILT, not $LOCAL_SHA; ignoring (will build locally)"
       else
         err "release APK sha mismatch; ignoring"
       fi

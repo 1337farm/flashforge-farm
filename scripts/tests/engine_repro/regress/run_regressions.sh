@@ -30,6 +30,9 @@ ENGINE_LIBS_DIR="$(bash "$REPO/scripts/tests/engine_repro/build_harness.sh" "$EN
 
 echo "engine under test: $ENGINE_LIBS_DIR/libslic3r.so"
 sha256sum "$ENGINE_LIBS_DIR/libslic3r.so" 2>/dev/null | awk '{print "engine sha256:", $1}'
+if [ -f "$ENGINE_LIBS_DIR/.engine_src" ]; then
+    echo "engine src: $(cat "$ENGINE_LIBS_DIR/.engine_src") (want $(git -C "$REPO" rev-parse HEAD:engine 2>/dev/null || echo ?))"
+fi
 
 run() {
     local name="$1" expect="$2"; shift 2

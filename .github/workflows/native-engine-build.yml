@@ -58,8 +58,12 @@ name: native
 #   released by the next green run.
 #
 # Caching: heavy builds write their outputs both to a primary output cache and
-# to ccache. On re-runs, if the primary cache hits (inputs unchanged) the heavy
-# build step is SKIPPED entirely, keeping re-runs fast.
+# to a compiler cache. The engine compile uses sccache with the distributed GHA
+# backend (forgerig-style): content-addressed, shared across every run, so it
+# hits even after source changes churn the primary cache key. build-dep uses
+# local ccache (its sources are version-pinned, low churn). On re-runs, if the
+# primary cache hits (inputs unchanged) the heavy build step is SKIPPED
+# entirely, keeping re-runs fast.
 on:
   workflow_dispatch:
   push:
@@ -476,7 +480,14 @@ jobs:
       actions: write
     env:
       ABI: arm64-v8a
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      # Distributed compiler cache (GHA backend). The engine cache key churns on
+      # every engine/ change (hashFiles inputs), so a local ccache that only
+      # survives between runs via actions/cache misses whenever sources move —
+      # sccache is content-addressed and shared repo-wide across ALL runs, so
+      # incremental rebuilds hit objects compiled under earlier revisions
+      # (forgerig-style). Requires this job to keep actions: write above.
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_CACHE_SIZE: "4G"
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/23.1.7779620
     outputs:
@@ -631,27 +642,17 @@ jobs:
           "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android23-clang" --version \
             || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
 
-      - name: Install ccache
+      - name: Setup sccache (distributed compiler cache)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ccache
-
-      - name: Restore ccache
-        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
-        uses: actions/cache@v5
+        uses: mozilla-actions/sccache-action@v0.0.11
         with:
-          path: ${{ env.CCACHE_DIR }}
-          key: engine-ccache-${{ runner.os }}-${{ steps.engine-key.outputs.key }}
-          restore-keys: |
-            engine-ccache-${{ runner.os }}-
+          cache-prefix: engine
 
-      - name: Initialize ccache
+      - name: Write sccache marker env for build step
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |
-          ccache -M 6G
-          ccache -z
-          ccache --version | head -1
+          sccache --version | head -1
+          echo "sccache ready (GHA backend)"
 
       - name: Restore Boost from release (build needs)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
@@ -806,15 +807,14 @@ jobs:
       - name: Build native engine .so from source (standalone CMake)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |
-          export PATH="/usr/lib/ccache:$PATH"
           cmake -S engine -B engine/build \
             -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_STL=c++_shared \
             -DANDROID_PLATFORM=android-23 \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
             "-DSLIC3R_VERSION=\"0.4.6\"" \
             "-DSLIC3R_BUILD_ID=\"4\""
           cmake --build engine/build --target slic3r -j"$(nproc)"
@@ -827,9 +827,14 @@ jobs:
           echo "so_artifact=$SO" >> "$GITHUB_OUTPUT"
           test -n "$SO" || { echo "FAILED: libslic3r.so not found"; exit 1; }
 
-      - name: Show ccache stats
-        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
-        run: ccache -s
+      - name: Show sccache stats
+        if: always()
+        run: |
+          sccache --show-stats || true
+          # Flush the server's pending Puts to the GHA backend so a single run
+          # that was skipped (release/artifact reuse) or interrupted still
+          # publishes what it produced.
+          sccache --stop-server 2>/dev/null || true
 
       - name: Upload libslic3r.so artifact
         uses: actions/upload-artifact@v6
@@ -902,6 +907,15 @@ jobs:
     permissions:
       contents: write
       packages: read
+      # sccache (bridge compile cache, GHA backend) needs actions cache write.
+      actions: write
+    env:
+      # Gradle gating flag for app/build.gradle: when set, the JNI bridge
+      # compile is wrapped in sccache (distributed GHA backend) so libfarm.so
+      # TU compiles hit across APK jobs.
+      FARM_NATIVE_CACHE: sccache
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_CACHE_SIZE: "2G"
     steps:
       - name: Checkout repository
         run: |
@@ -911,15 +925,15 @@ jobs:
           git checkout "${{ github.sha }}"
           git submodule update --init --recursive
 
-      - name: Set up JDK 17
-        run: |
-          curl -fsSL -o /tmp/temurin17.tar.gz "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse"
-          rm -rf /tmp/jdk17 && mkdir -p /tmp/jdk17
-          tar -xzf /tmp/temurin17.tar.gz -C /tmp/jdk17 --strip-components=1
-          rm -f /tmp/temurin17.tar.gz
-          /tmp/jdk17/bin/java -version 2>&1 | head -1
-          echo "JAVA_HOME=/tmp/jdk17" >> "$GITHUB_ENV"
-          echo "/tmp/jdk17/bin" >> "$GITHUB_PATH"
+      - name: Set up JDK 17 (+ gradle cache)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          # Reuses the gradle wrapper distribution + dependency + build caches
+          # across APK jobs (two gradle invocations below; forgerig-style), so
+          # re-runs skip re-downloading deps and re-resolving configuration.
+          cache: gradle
 
       - name: Set up Android SDK / NDK
         run: |
@@ -1064,6 +1078,11 @@ jobs:
           fi
           echo "OK: OCCT statically linked into libslic3r.so; no libTK runtime staged"
 
+      - name: Setup sccache (bridge compile cache)
+        uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          cache-prefix: apk
+
       - name: Grant execute permission
         run: chmod +x gradlew
 
@@ -1095,6 +1114,12 @@ jobs:
           name: FlashForgeFarm-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 7
+
+      - name: Show sccache stats
+        if: always()
+        run: |
+          sccache --show-stats || true
+          sccache --stop-server 2>/dev/null || true
 
       - name: Publish APK release
         if: github.ref == 'refs/heads/main'

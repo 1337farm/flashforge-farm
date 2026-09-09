@@ -34,12 +34,20 @@ android {
         manifestPlaceholders = [fileProviderAuthority: "${applicationId}.provider"]
 
         if (!skipNativeRebuild) {
+            // CI-only compiler cache: when FARM_NATIVE_CACHE=sccache the JNI
+            // bridge TUs are wrapped in sccache (distributed GHA backend), so
+            // libfarm.so compile hits across APK jobs. Local builds are
+            // unaffected (env var unset).
             externalNativeBuild {
                 cmake {
                     arguments '-DANDROID_STL=c++_shared', '-DANDROID_PLATFORM=23',
                             '-DCMAKE_BUILD_TYPE=Release', // Disabling this results in drastically degradation of slicing times on debug builds
                             "-DSLIC3R_VERSION=\"${defaultConfig.versionName}\"",
                             "-DSLIC3R_BUILD_ID=\"${defaultConfig.versionCode}\""
+                    if (System.getenv('FARM_NATIVE_CACHE') == 'sccache') {
+                        arguments.add('-DCMAKE_C_COMPILER_LAUNCHER=sccache')
+                        arguments.add('-DCMAKE_CXX_COMPILER_LAUNCHER=sccache')
+                    }
                 }
             }
         }

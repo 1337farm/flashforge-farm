@@ -56,6 +56,7 @@ import com.flashforge.farm.navigation.Fragment;
 import com.flashforge.farm.slic3r.Bed3D;
 import com.flashforge.farm.slic3r.GCodeProcessorResult;
 import com.flashforge.farm.slic3r.Model;
+import com.flashforge.farm.slic3r.SandboxSlice;
 import com.flashforge.farm.slic3r.Slic3rRuntimeError;
 import com.flashforge.farm.theme.ThemesRepo;
 import com.flashforge.farm.utils.Vec3d;
@@ -1159,7 +1160,7 @@ public class BedFragment extends Fragment {
             final boolean haveFileBed = readProjectBedSize(f, fileBed);
             for (int i = 0; i < plateCount; i++) {
                 try {
-                    platesModels.set(i, new Model(f, i + 1));
+                    platesModels.set(i, SandboxSlice.openModel(f, i + 1));
                 } catch (Exception e) {
                     android.util.Log.e("BedFragment", "Failed to load plate " + (i + 1), e);
                     platesModels.set(i, new Model());
@@ -1213,7 +1214,7 @@ public class BedFragment extends Fragment {
 
     private void loadModelInternal(File f, boolean preserveProjectLayout, ModelLoadCallback callback) throws Slic3rRuntimeError {
         // Wait, if it's a 3mf project, it already passed plate count, so currentPlateIndex is correct.
-        Model m = new Model(f, currentPlateIndex + 1); // 1-based in JNI for specific plate, or 0 for default
+        Model m = SandboxSlice.openModel(f, currentPlateIndex + 1); // 1-based in JNI for specific plate, or 0 for default
         Model currentModel = getCurrentModel();
         if (currentModel != null && currentModel.getObjectsCount() > 0) {
             glView.queueEvent(new Runnable() {

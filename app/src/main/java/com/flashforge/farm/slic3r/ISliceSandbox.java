@@ -20,9 +20,19 @@ import android.os.RemoteException;
 public interface ISliceSandbox extends IInterface {
     String DESCRIPTOR = "com.flashforge.farm.slic3r.ISliceSandbox";
     int TRANSACTION_slice = IBinder.FIRST_CALL_TRANSACTION;
+    int TRANSACTION_read = IBinder.FIRST_CALL_TRANSACTION + 1;
 
     Bundle slice(ParcelFileDescriptor modelFd, ParcelFileDescriptor configFd,
             ParcelFileDescriptor outFd, Bundle params, ISliceCallback callback)
+            throws RemoteException;
+
+    /**
+     * Parse a model FD in the sandbox and export the normalized 3MF to outFd.
+     * Used for import-time parsing of untrusted files; params carry
+     * KEY_BASENAME (String) and KEY_PLATE_ID (int).
+     */
+    Bundle read(ParcelFileDescriptor modelFd, ParcelFileDescriptor configFd,
+            ParcelFileDescriptor outFd, Bundle params)
             throws RemoteException;
 
     abstract class Stub extends Binder implements ISliceSandbox {
@@ -66,6 +76,17 @@ public interface ISliceSandbox extends IInterface {
                 reply.writeBundle(result);
                 return true;
             }
+            if (code == TRANSACTION_read) {
+                data.enforceInterface(DESCRIPTOR);
+                ParcelFileDescriptor modelFd = data.readFileDescriptor();
+                ParcelFileDescriptor configFd = data.readFileDescriptor();
+                ParcelFileDescriptor outFd = data.readFileDescriptor();
+                Bundle params = data.readBundle(Bundle.class.getClassLoader());
+                Bundle result = read(modelFd, configFd, outFd, params);
+                reply.writeNoException();
+                reply.writeBundle(result);
+                return true;
+            }
             return super.onTransact(code, data, reply, flags);
         }
 
@@ -95,6 +116,27 @@ public interface ISliceSandbox extends IInterface {
                     data.writeBundle(params);
                     data.writeStrongBinder(callback == null ? null : callback.asBinder());
                     remote.transact(TRANSACTION_slice, data, reply, 0);
+                    reply.readException();
+                    return reply.readBundle(Bundle.class.getClassLoader());
+                } finally {
+                    reply.recycle();
+                    data.recycle();
+                }
+            }
+
+            @Override
+            public Bundle read(ParcelFileDescriptor modelFd, ParcelFileDescriptor configFd,
+                    ParcelFileDescriptor outFd, Bundle params)
+                    throws RemoteException {
+                Parcel data = Parcel.obtain();
+                Parcel reply = Parcel.obtain();
+                try {
+                    data.writeInterfaceToken(DESCRIPTOR);
+                    data.writeFileDescriptor(modelFd.getFileDescriptor());
+                    data.writeFileDescriptor(configFd.getFileDescriptor());
+                    data.writeFileDescriptor(outFd.getFileDescriptor());
+                    data.writeBundle(params);
+                    remote.transact(TRANSACTION_read, data, reply, 0);
                     reply.readException();
                     return reply.readBundle(Bundle.class.getClassLoader());
                 } finally {

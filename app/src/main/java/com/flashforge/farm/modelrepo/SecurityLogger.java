@@ -5,7 +5,7 @@ import android.util.Log;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent CopyOnWriteArrayList;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Centralized security event logging facility.

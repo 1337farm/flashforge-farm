@@ -125,12 +125,15 @@ public class LabelAggregator {
         double personalScore = 0.0;
         if (personal != null) {
             TrustStore.Level level = personal.level(pubkeyHex);
-            personalScore = switch (level) {
-                case TRUSTED -> 1.0;
-                case SEEN -> 0.5;
-                case UNVERIFIED -> 0.0;
-                case BLOCKED -> -1.0;
-            };
+            if (level == TrustStore.Level.TRUSTED) {
+                personalScore = 1.0;
+            } else if (level == TrustStore.Level.SEEN) {
+                personalScore = 0.5;
+            } else if (level == TrustStore.Level.UNVERIFIED) {
+                personalScore = 0.0;
+            } else if (level == TrustStore.Level.BLOCKED) {
+                personalScore = -1.0;
+            }
         }
         
         // Get community trust score

@@ -122,9 +122,9 @@ public class RateLimiter {
                 }
                 
                 long oldest = timestamps.peekFirst();
-                long waitTime = (oldest + windowSizeMs) - System.currentTimeMillis();
+                long waitTimeVal = (oldest + windowSizeMs) - System.currentTimeMillis();
                 
-                if (waitTime <= 0) {
+                if (waitTimeVal <= 0) {
                     // Oldest has expired, cleanup and retry
                     cleanupOldEntries();
                     continue;
@@ -141,8 +141,9 @@ public class RateLimiter {
             
             // Wait for the calculated time or a notification
             try {
-                long wait = Math.min(waitTime, timeoutMs > 0 ? 
-                    (start + timeoutMs) - System.currentTimeMillis() : waitTime);
+                long waitTimeVal2 = waitTimeVal;
+                long wait = Math.min(waitTimeVal2, timeoutMs > 0 ? 
+                    (start + timeoutMs) - System.currentTimeMillis() : waitTimeVal2);
                 if (wait > 0) {
                     synchronized (lock) {
                         lock.wait(wait);

@@ -109,7 +109,7 @@ public class ModelPublisher {
                 
                 // Compute verification hash for the primary model file
                 if (!datas.isEmpty()) {
-                    String primaryHash = ModelSafety.sha256Stream(new java.io.ByteArrayInputStream(datas.get(0)), datas.get(0).length);
+                    String primaryHash = ModelSafety.sha256Stream(new java.io.ByteArrayInputStream(datas.get(0)));
                     metadata.verification = primaryHash;
                 }
                 

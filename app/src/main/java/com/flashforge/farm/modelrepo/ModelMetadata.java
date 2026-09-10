@@ -1,5 +1,6 @@
 package com.flashforge.farm.modelrepo;
 
+import com.flashforge.farm.modelrepo.safety.SafetyPolicy;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 

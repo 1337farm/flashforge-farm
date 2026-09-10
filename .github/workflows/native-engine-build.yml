@@ -412,7 +412,7 @@ jobs:
           name: dep-build-log-${{ matrix.dep }}
           path: /tmp/build_android_deps_${{ matrix.dep }}.log
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 30
 
       - name: Stage complete OCCT headers
         if: steps.validate.outputs.need == '1' && matrix.dep == 'occt'
@@ -482,7 +482,7 @@ jobs:
       # incremental rebuilds hit objects compiled under earlier revisions
       # (forgerig-style). Requires this job to keep actions: write above.
       SCCACHE_GHA_ENABLED: "true"
-      SCCACHE_CACHE_SIZE: "4G"
+      SCCACHE_CACHE_SIZE: "6G"
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/23.1.7779620
     outputs:
@@ -606,6 +606,41 @@ jobs:
           done < "$DL/cands.txt"
           echo "art_hit=$ART" >> "$GITHUB_OUTPUT"
 
+      - name: Restore GMP from release (published build reuse)
+        id: gmp-rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          HIT=0
+          DL="$RUNNER_TEMP/rel-gmp"; mkdir -p "$DL"
+          if gh release download dep-gmp-latest --pattern 'gmp-deps.tar.gz' --pattern 'gmp-manifest.json' \
+               --dir "$DL" --clobber >/dev/null 2>&1; then
+            WANT="$(python3 -c "import json;print(json.load(open('$DL/gmp-manifest.json'))['files']['gmp-deps.tar.gz'])" 2>/dev/null || true)"
+            GOT="$(sha256sum "$DL/gmp-deps.tar.gz" 2>/dev/null | cut -d' ' -f1)"
+            if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
+              tar -xzf "$DL/gmp-deps.tar.gz"
+              HIT=1
+              echo "gmp release verified and staged (already published, no republish)"
+            else
+              echo "gmp release sha mismatch; ignoring"
+            fi
+          else
+            echo "no usable dep-gmp-latest release; continuing"
+          fi
+          echo "hit=$HIT" >> "$GITHUB_OUTPUT"
+
+      - name: Compute native build need (engine and/or GMP)
+        id: build-needed
+        run: |
+          NEED=0
+          if [ "${{ steps.engine-rel.outputs.hit }}" != "1" ] && [ "${{ steps.engine-art.outputs.art_hit }}" != "1" ]; then
+            NEED=1
+          fi
+          if [ "${{ steps.gmp-rel.outputs.hit }}" != "1" ]; then
+            NEED=1
+          fi
+          echo "needed=$NEED" >> "$GITHUB_OUTPUT"
+
       - name: Set up JDK 17
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         uses: 1337farm/actions/setup-jdk@v1
@@ -613,17 +648,21 @@ jobs:
           java-version: '17'
 
       - name: Set up Android SDK env
+        if: steps.build-needed.outputs.needed == '1'
         uses: 1337farm/actions/setup-android-env@v1
       - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.build-needed.outputs.needed == '1'
         uses: 1337farm/actions/setup-android-ndk@v1
         with:
           ndk-version: ${{ env.NDK_VERSION }}
       - name: Install Android platform / CMake
+        if: steps.build-needed.outputs.needed == '1'
         run: |
           sdkmanager "platforms;android-37.0" "cmake;3.22.1"
           # API 37 ships as android-37.0 only; builds resolve android-37.
           ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
       - name: Smoke-test NDK compiler
+        if: steps.build-needed.outputs.needed == '1'
         run: |
           "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android23-clang" --version \
             || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
@@ -715,29 +754,6 @@ jobs:
           }
           echo "all restored deps pass exact-file checks"
 
-      - name: Restore GMP from release (published build reuse)
-        id: gmp-rel
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          HIT=0
-          DL="$RUNNER_TEMP/rel-gmp"; mkdir -p "$DL"
-          if gh release download dep-gmp-latest --pattern 'gmp-deps.tar.gz' --pattern 'gmp-manifest.json' \
-               --dir "$DL" --clobber >/dev/null 2>&1; then
-            WANT="$(python3 -c "import json;print(json.load(open('$DL/gmp-manifest.json'))['files']['gmp-deps.tar.gz'])" 2>/dev/null || true)"
-            GOT="$(sha256sum "$DL/gmp-deps.tar.gz" 2>/dev/null | cut -d' ' -f1)"
-            if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
-              tar -xzf "$DL/gmp-deps.tar.gz"
-              HIT=1
-              echo "gmp release verified and staged (already published, no republish)"
-            else
-              echo "gmp release sha mismatch; ignoring"
-            fi
-          else
-            echo "no usable dep-gmp-latest release; continuing"
-          fi
-          echo "hit=$HIT" >> "$GITHUB_OUTPUT"
-
       - name: Build GMP/MPFR fresh (uncached, ~4 min)
         if: steps.gmp-rel.outputs.hit != '1'
         run: |
@@ -767,10 +783,19 @@ jobs:
         with:
           name: gmp-trees
           path: /tmp/gmp-deps.tar.gz
-          retention-days: 7
+          # 30-day retention: native-PR APK jobs reuse this artifact, and the
+          # post-merge main run's gmp-trees artifact restores from it instead
+          # of rebuilding GMP (protects the merge-time reuse window).
+          retention-days: 30
 
       - name: Publish GMP release
-        if: github.ref == 'refs/heads/main' && steps.gmp-rel.outputs.hit != '1'
+        # Published whenever a fresh build verifies, on ANY branch (like the
+        # build-dep matrix): PR runs that had to rebuild GMP backfill the
+        # rolling tag so later PRs and the post-merge main run restore instead
+        # of paying the ~4min build. Poison-proof: a restored release never
+        # republishes (rel hit => this step skips), and fresh builds pass the
+        # exact-file checks above before anything touches the tag.
+        if: steps.gmp-rel.outputs.hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -829,7 +854,10 @@ jobs:
           # via the build-engine job outputs.
           name: libslic3r-${{ steps.engine-src.outputs.src }}
           path: ${{ steps.find-so.outputs.so_artifact }}
-          retention-days: 7
+          # 30-day retention protects the post-merge reuse window: a native PR
+          # that sat open past 7 days otherwise loses its artifact, forcing the
+          # merge-time main run to recompile (or fall back to sccache-only).
+          retention-days: 30
 
       - name: Publish engine release
         if: github.ref == 'refs/heads/main' && steps.engine-rel.outputs.hit != '1'
@@ -899,7 +927,7 @@ jobs:
       # TU compiles hit across APK jobs.
       FARM_NATIVE_CACHE: sccache
       SCCACHE_GHA_ENABLED: "true"
-      SCCACHE_CACHE_SIZE: "2G"
+      SCCACHE_CACHE_SIZE: "4G"
     steps:
       - name: Checkout repository
         run: |
@@ -1089,7 +1117,7 @@ jobs:
         with:
           name: FlashForgeFarm-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
-          retention-days: 7
+          retention-days: 30
 
       - name: Show sccache stats
         if: always()

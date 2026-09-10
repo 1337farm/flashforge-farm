@@ -134,14 +134,10 @@ public class IrohModelTransport implements ModelTransport {
                         } else {
                             // No hash and no metadata, complete directly (legacy support)
                             Log.w(TAG, "Completing fetch without verification for " + t);
-                            finish();
+                            if (finished.compareAndSet(false, true)) {
+                                l.onComplete(t, d);
+                            }
                         }
-                    }
-                }
-
-                private void finish() {
-                    if (finished.compareAndSet(false, true)) {
-                        l.onComplete(t, d);
                     }
                 }
             };

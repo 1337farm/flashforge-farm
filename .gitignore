@@ -62,3 +62,8 @@ app/screen.png
 
 scripts/tests/engine_repro/regress/.run.log
 scripts/tests/engine_repro/regress/.engine_pin
+
+# Local APK extraction scratch (unzipped .apk trees)
+/.apk-cache/
+/.apk-libs/
+/.cache/

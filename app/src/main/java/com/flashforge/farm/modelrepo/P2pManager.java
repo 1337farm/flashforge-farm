@@ -58,6 +58,12 @@ public final class P2pManager {
             saveSecret(t.getSecretKey());
         }
         transport = t;
+        // Issue #87: verify transport encryption once the endpoint is ready.
+        // Observational only (logs via SecurityLogger); never blocks startup.
+        TransportSecurity.EncryptionStatus enc = TransportSecurity.verifyEncryption(t);
+        if (enc != TransportSecurity.EncryptionStatus.ENABLED) {
+            Log.w(TAG, "transport encryption not verified: " + enc);
+        }
         return transport;
     }
 

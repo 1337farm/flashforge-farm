@@ -146,6 +146,7 @@ public class ModelSafetyTest {
     public void testMetadataRoundTrip() {
         ModelMetadata m = new ModelMetadata();
         m.title = "Benchy";
+        m.designer = new ModelMetadata.Designer();
         m.designer.name = "Alice";
         m.designer.pubkey = "abc123";
         m.tags = Arrays.asList("calibration", "test");

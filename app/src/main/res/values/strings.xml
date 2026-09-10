@@ -46,24 +46,7 @@
     <string name="ModelContextSelectedAll">All models selected.</string>
     <string name="ModelContextDeleteAll">Delete all</string>
     <string name="ModelContextDeletedAll">All models deleted.</string>
-    <string name="MenuFileAIGenerator">Model\nfrom photo</string>
-    <string name="MenuFileAIGeneratorPleaseWaitSetup">Please wait…</string>
-    <string name="MenuFileAIGeneratorErrorNotLoadedUserAccount">Error: user info not fetched yet.</string>
-    <string name="MenuFileAIGeneratorFromCamera">Take a photo</string>
-    <string name="MenuFileAIGeneratorFromGallery">Choose from gallery</string>
-    <string name="MenuFileAIGeneratorRemaining">Remaining: %1$d / %2$d generations</string>
-    <string name="MenuFileAIGeneratorUploading">Uploading image…</string>
-    <string name="MenuFileAIGeneratorProcessing">Processing image…</string>
-    <string name="MenuFileAIGeneratorDownloading">Downloading model…</string>
-    <string name="MenuFileAIGeneratorError">Failed to generate model</string>
-    <string name="MenuFileAIGeneratorSavedAs">Saved model as %s.</string>
-    <string name="MenuFileAIGeneratorNoGenerationsLeft">No generations left.</string>
-    <string name="MenuFileAIGeneratorAlreadyGenerating">Already generating another model.</string>
     <string name="MenuFileCalibrations">Calibrat.</string>
-    <string name="MenuFileCalibrationsLA">K3D Linear Advance</string>
-    <string name="MenuFileCalibrationsLADescription">Linear/Pressure Advance Calibration</string>
-    <string name="MenuFileCalibrationsRetract">K3D Retractions</string>
-    <string name="MenuFileCalibrationsRetractDescription">Retraction distance and speed calibration</string>
     <string name="MenuFileCalibrationsModels">Handy Models</string>
     <string name="MenuFileCalibrationsModelsDescription">Handy models library</string>
     <string-array name="pa_presets">
@@ -71,14 +54,6 @@
         <item>Bowden (0-0.5, step 0.05)</item>
     </string-array>
     <string name="MenuFileCalibrationsModels3DBenchy" translatable="false">3D Benchy</string>
-    <string name="MenuFileCalibrationsModelsXYZCube">Calibration cube</string>
-    <string name="MenuFileCalibrationsModelsBunny">Bunny</string>
-    <string name="MenuFileCalibrationsModelsFox">Fox</string>
-    <string name="MenuFileCalibrationsModelsBox">Box</string>
-    <string name="MenuFileCalibrationsModelsCone">Cone</string>
-    <string name="MenuFileCalibrationsModelsCylinder">Cylinder</string>
-    <string name="MenuFileCalibrationsModelsPyramid">Pyramid</string>
-    <string name="MenuFileCalibrationsModelsSphere">Sphere</string>
     <string name="MenuFileImportProfiles">Import profiles</string>
     <string name="MenuFileImportProfilesFailed">Import failed</string>
     <string name="MenuFileImportProfilesFailedBaseProfileNotFound">Parent profile not found: %s</string>
@@ -106,7 +81,6 @@
     <string name="MenuCameraControlModeOne">One finger - rotation, two fingers - movement</string>
     <string name="MenuCameraControlModeTwo">One finger - movement, two fingers - rotation</string>
     <string name="MenuCameraControlModeThree">Only movement</string>
-    <string name="MenuOrientation">Orientation</string>
     <string name="MenuOrientationArrange">Arrange models</string>
     <string name="MenuOrientationArrangeFinished">Models arranged.</string>
     <string name="MenuOrientationFlatten">On face</string>
@@ -128,7 +102,6 @@
     <string name="MenuOrientationRotationZValue">Z = %.2f°</string>
     <string name="MenuOrientationRotationApply">Apply</string>
     <string name="MenuOrientationPositionBack">Back</string>
-    <string name="MenuTransform">Transform</string>
     <string name="MenuToolbar">Toolbar</string>
     <string name="MenuToolbarNotImplemented">%1$s isn\'t available yet.</string>
     <string name="MenuToolbarSplit">Split</string>
@@ -149,12 +122,7 @@
     <string name="MenuTransformScaleYValue">Y = %1$.2f %% | %2$.2f mm</string>
     <string name="MenuTransformScaleZValue">Z = %1$.2f %% | %2$.2f mm</string>
     <string name="MenuTransformScaleMM">Input in mm</string>
-    <string name="MenuTransformMirror">Mirror</string>
     <string name="MenuTransformCut">Cut (Half)</string>
-    <string name="MenuTransformPaint">Paint Mode</string>
-    <string name="MenuTransformMirrorX">Mirror X</string>
-    <string name="MenuTransformMirrorY">Mirror Y</string>
-    <string name="MenuTransformMirrorZ">Mirror Z</string>
     <string name="MenuModifiers">Modifiers</string>
     <string name="MenuSlice">Slice</string>
     <string name="MenuSliceInfo">Print\ninfo</string>
@@ -168,9 +136,6 @@
     <string name="MenuSliceExportToFile">Export to file</string>
     <string name="MenuSliceShare">Share</string>
     <string name="MenuSlicePerformance">Performance</string>
-    <string name="MenuSliceFilamentView">Filament view</string>
-    <string name="MenuSliceSendToPrinter">Send to printer</string>
-    <string name="MenuSliceSendToPrinterAndPrint">Send and print</string>
     <string name="MenuSliceSendToPrinterLoading">Uploading…</string>
     <string name="MenuSliceSendToPrinterOK">File sent to queue.</string>
     <string name="MenuSliceSendToPrinterPrintStarted">File sent, starting print…</string>
@@ -179,16 +144,10 @@
     <string name="SliceFailedNoModels">No visible objects</string>
     <string name="SliceInProgress">Slicing…</string>
     <string name="IntroStart">Start</string>
-    <string name="IntroLetStartWithColor">Let\'s start with your favorite color.</string>
     <string name="IntroFailedToLoadRepos">Failed to load repositories from network!</string>
-    <string name="IntroSelectRepos">Select repositories to fetch profiles.</string>
-    <string name="IntroImportOr">Or</string>
-    <string name="IntroCustomProfile">Use custom profile</string>
     <string name="IntroCustomProfileHeader">Custom</string>
     <string name="IntroCustomProfileName">Custom profile</string>
     <string name="IntroCustomProfileFilamentName">Generic PLA</string>
-    <string name="IntroNoRepos">No repositories configured</string>
-    <string name="IntroNoReposDescription">You must configure repositories or use a custom profile.</string>
     <string name="IntroNoProfiles">No profiles configured</string>
     <string name="IntroNoProfilesDescription">You must select at least one profile.</string>
     <string name="IntroNext">Next</string>
@@ -205,8 +164,6 @@
     <string name="SettingsResetProfileDescription">This action can not be undone.</string>
     <string name="SettingsSave">Save</string>
     <string name="SettingsSaveTitle">Save profile?</string>
-    <string name="SettingsTelegram">Developer\'s Telegram</string>
-    <string name="SettingsK3D">K3D Chat</string>
     <string name="SettingsInterface">Interface</string>
     <string name="SettingsInterfaceTheme">Theme</string>
     <string name="SettingsInterfaceThemeSystem">System</string>
@@ -223,7 +180,6 @@
     <string name="SettingsCloneProfile">Clone current</string>
     <string name="SettingsDeleteProfile">Delete current</string>
     <string name="Changelog">Changelog</string>
-    <string name="ChangelogNext">Next</string>
     <string name="ChangelogOK">OK</string>
     <string name="OrcaConversionPleaseWait">Converting profiles, please wait…</string>
     <string name="OrcaConversionNotAConfigBundle">Not a config bundle</string>
@@ -263,7 +219,6 @@
     <string name="ModelRepoBlockedType">Blocked file type: %1$s</string>
     <string name="ModelRepoBlockedPublisher">Publisher is blocked</string>
     <string name="FleetAddPrinter">Add Printer</string>
-    <string name="FleetPrinterIP">Printer IP/URL</string>
     <string name="FleetPrinterName">Printer Name</string>
     <string name="FleetNozzleSize">Nozzle Size (mm)</string>
     <string name="FleetFilamentType">Filament Type (e.g. PLA)</string>
@@ -273,28 +228,19 @@
     <string name="FleetSaveTargetUsb">USB Drive</string>
     <string name="FleetSaveTargetFile">File Folder</string>
     <string name="FleetSaveTargetShare">Share</string>
-    <string name="FleetSaveTargetUsbPrompt">Save to USB Drive (auto-detects connected drives)</string>
-    <string name="FleetSaveTargetFilePrompt">Save to a FAT32 folder (pick with file picker)</string>
-    <string name="FleetSaveTargetSharePrompt">Save via cloud (pick with share intent)</string>
     <string-array name="FleetSaveTargets">
         <item>@string/FleetSaveTargetUsb</item>
         <item>@string/FleetSaveTargetFile</item>
         <item>@string/FleetSaveTargetShare</item>
     </string-array>
     <string name="FleetProvisionViaUsb">Provision via USB</string>
-    <string name="FleetProvisionViaUsbDesc">Write the p2p module (Iroh binary, identity key &amp; scripts) to a FAT32 USB drive to bootstrap the printer.</string>
-    <string name="FleetUninstallModule">Remove p2p module</string>
     <string name="FleetProvisionMode">Mode</string>
     <string name="FleetProvisionModeRam">RAM (volatile, zero footprint)</string>
     <string name="FleetProvisionModeInstall">Persistent (autostart on boot)</string>
     <string name="FleetProvisionConnect">Connect via p2p</string>
     <string name="FleetUniqueCode">Unique code</string>
-    <string name="FleetUniqueCodeDesc">This printer\'s stable p2p identity / access code.</string>
     <string name="FleetP2pNotReady">P2P dial not yet available: no Iroh node is bundled on-device. The USB module is written; import its public key to dial over the overlay.</string>
     <string name="FleetProvisioningDone">Provisioning finished.</string>
-    <string name="FleetNoAsset">Deployment scripts not bundled; install from a build that includes flashforge_init.sh / uninstall.sh assets.</string>
     <string name="FleetNoUsbDetected">No USB drive detected. Plug in a FAT32 drive, or pick a folder instead.</string>
-    <string name="FleetMultipleUsbDetected">Multiple USB drives detected. Pick one.</string>
-
     <string name="MenuSliceEnqueuePrint">Add to Print Queue</string>
 </resources>

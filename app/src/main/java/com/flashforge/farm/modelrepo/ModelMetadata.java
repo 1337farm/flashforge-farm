@@ -1,5 +1,6 @@
 package com.flashforge.farm.modelrepo;
 
+import com.flashforge.farm.modelrepo.safety.SafetyPolicy;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 
@@ -34,6 +35,18 @@ public class ModelMetadata {
     public RemixRef remixOf;
     @SerializedName("verification")
     public String verification = "";
+    @SerializedName("signature")
+    public String signature = "";
+    @SerializedName("signedBy")
+    public String signedBy = "";
+    @SerializedName("reputation")
+    public Reputation reputation = new Reputation();
+    @SerializedName("createdAt")
+    public long createdAt = 0;
+    @SerializedName("updatedAt")
+    public long updatedAt = 0;
+    @SerializedName("version")
+    public String version = "";
 
     public static class Designer {
         @SerializedName("name")
@@ -66,6 +79,76 @@ public class ModelMetadata {
         @SerializedName("title")
         public String title = "";
     }
+    
+    /**
+     * Reputation tracking for models.
+     */
+    public static class Reputation {
+        @SerializedName("downloadCount")
+        public long downloadCount = 0;
+        
+        @SerializedName("rating")
+        public double rating = 0.0;
+        
+        @SerializedName("ratingCount")
+        public int ratingCount = 0;
+        
+        @SerializedName("flagCount")
+        public int flagCount = 0;
+        
+        @SerializedName("lastRated")
+        public long lastRated = 0;
+        
+        @SerializedName("lastDownloaded")
+        public long lastDownloaded = 0;
+        
+        public void addRating(double rating) {
+            if (rating < 0 || rating > 5) {
+                throw new IllegalArgumentException("Rating must be between 0 and 5");
+            }
+            if (this.ratingCount == 0) {
+                this.rating = rating;
+            } else {
+                this.rating = ((this.rating * this.ratingCount) + rating) / (this.ratingCount + 1);
+            }
+            this.ratingCount++;
+            this.lastRated = System.currentTimeMillis() / 1000;
+        }
+        
+        public void incrementDownload() {
+            this.downloadCount++;
+            this.lastDownloaded = System.currentTimeMillis() / 1000;
+        }
+        
+        public void flag() {
+            this.flagCount++;
+        }
+        
+        public double getAverageRating() {
+            return ratingCount > 0 ? rating : 0.0;
+        }
+        
+        public boolean hasRatings() {
+            return ratingCount > 0;
+        }
+        
+        public boolean isFlagged() {
+            return flagCount > 0;
+        }
+        
+        public double getPopularityScore() {
+            return downloadCount * 0.7 + ratingCount * 0.3;
+        }
+        
+        public void reset() {
+            this.downloadCount = 0;
+            this.rating = 0.0;
+            this.ratingCount = 0;
+            this.flagCount = 0;
+            this.lastRated = 0;
+            this.lastDownloaded = 0;
+        }
+    }
 
     public static ModelMetadata parse(String json) {
         ModelMetadata m = GSON.fromJson(json, ModelMetadata.class);
@@ -78,6 +161,10 @@ public class ModelMetadata {
         if (m.designer == null) m.designer = new Designer();
         if (m.license == null) m.license = new License();
         if (m.printSettings == null) m.printSettings = new PrintSettings();
+        
+        // Validate all fields
+        m.validate();
+        
         return m;
     }
 
@@ -87,5 +174,170 @@ public class ModelMetadata {
 
     public boolean isRemix() {
         return remixOf != null && remixOf.contentHash != null && !remixOf.contentHash.isEmpty();
+    }
+    
+    /**
+     * Sign this metadata with the given seed.
+     */
+    public void sign(byte[] seed) throws Exception {
+        String json = this.toJson();
+        byte[] sig = Identity.sign(seed, json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        this.signature = Identity.hex(sig);
+        this.signedBy = Identity.hex(Identity.publicKey(seed));
+    }
+    
+    /**
+     * Verify the signature on this metadata.
+     * Returns true if the signature is valid and matches the signedBy public key.
+     */
+    public boolean verifySignature() {
+        if (signature == null || signature.isEmpty() || signedBy == null || signedBy.isEmpty()) {
+            return false;
+        }
+        try {
+            String json = this.toJson();
+            byte[] sig = Identity.unhex(signature);
+            byte[] pubkey = Identity.unhex(signedBy);
+            return Identity.verify(pubkey, json.getBytes(java.nio.charset.StandardCharsets.UTF_8), sig);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    /**
+     * Verify the signature matches the expected public key.
+     */
+    public boolean verifySignature(String expectedPubkeyHex) {
+        if (signature == null || signature.isEmpty()) {
+            return false;
+        }
+        if (expectedPubkeyHex == null || expectedPubkeyHex.isEmpty()) {
+            return false;
+        }
+        try {
+            String json = this.toJson();
+            byte[] sig = Identity.unhex(signature);
+            byte[] pubkey = Identity.unhex(expectedPubkeyHex);
+            return Identity.verify(pubkey, json.getBytes(java.nio.charset.StandardCharsets.UTF_8), sig);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    /**
+     * Validate all fields in this metadata against safety policy.
+     */
+    public void validate() {
+        if (schema != SCHEMA) {
+            throw new IllegalArgumentException("unsupported schema version: " + schema);
+        }
+        
+        if (title == null) {
+            title = "";
+        }
+        if (title.length() > SafetyPolicy.MAX_TITLE_LEN) {
+            throw new IllegalArgumentException("title too long: " + title.length() + " > " + SafetyPolicy.MAX_TITLE_LEN);
+        }
+        
+        if (description == null) {
+            description = "";
+        }
+        if (description.length() > SafetyPolicy.MAX_DESC_LEN) {
+            throw new IllegalArgumentException("description too long: " + description.length() + " > " + SafetyPolicy.MAX_DESC_LEN);
+        }
+        
+        if (category == null) {
+            category = "";
+        }
+        if (category.length() > 100) {
+            throw new IllegalArgumentException("category too long");
+        }
+        
+        if (designer == null) {
+            designer = new Designer();
+        }
+        if (designer.name != null && designer.name.length() > SafetyPolicy.MAX_PROFILE_NAME) {
+            throw new IllegalArgumentException("designer name too long");
+        }
+        if (designer.pubkey != null) {
+            if (designer.pubkey.length() > 64) {
+                throw new IllegalArgumentException("designer pubkey too long");
+            }
+            if (!designer.pubkey.isEmpty() && !designer.pubkey.matches("[0-9a-fA-F]{64}")) {
+                throw new IllegalArgumentException("invalid designer pubkey format");
+            }
+        }
+        
+        if (license == null) {
+            license = new License();
+        }
+        
+        if (tags == null) {
+            tags = new ArrayList<>();
+        }
+        if (tags.size() > 50) {
+            throw new IllegalArgumentException("too many tags: " + tags.size());
+        }
+        for (String tag : tags) {
+            if (tag != null && tag.length() > 64) {
+                throw new IllegalArgumentException("tag too long: " + tag);
+            }
+        }
+        
+        if (files == null) {
+            files = new ArrayList<>();
+        }
+        if (files.size() > SafetyPolicy.MAX_FILE_COUNT) {
+            throw new IllegalArgumentException("too many files: " + files.size() + " > " + SafetyPolicy.MAX_FILE_COUNT);
+        }
+        for (String file : files) {
+            if (file != null) {
+                if (file.length() > SafetyPolicy.MAX_FILENAME_LEN) {
+                    throw new IllegalArgumentException("filename too long: " + file);
+                }
+                if (!ModelSafety.isAllowedName(file)) {
+                    throw new IllegalArgumentException("invalid filename: " + file);
+                }
+            }
+        }
+        
+        if (images == null) {
+            images = new ArrayList<>();
+        }
+        if (images.size() > 20) {
+            throw new IllegalArgumentException("too many images");
+        }
+        
+        if (printSettings == null) {
+            printSettings = new PrintSettings();
+        }
+        
+        if (remixOf != null) {
+            if (remixOf.contentHash != null && remixOf.contentHash.length() > 64) {
+                throw new IllegalArgumentException("remix hash too long");
+            }
+            if (remixOf.title != null && remixOf.title.length() > SafetyPolicy.MAX_TITLE_LEN) {
+                throw new IllegalArgumentException("remix title too long: " + remixOf.title.length() + " > " + SafetyPolicy.MAX_TITLE_LEN);
+            }
+        }
+        
+        if (verification != null && verification.length() > 64) {
+            throw new IllegalArgumentException("verification hash too long");
+        }
+        
+        if (signature != null && signature.length() > 128) {
+            throw new IllegalArgumentException("signature too long");
+        }
+        
+        if (signedBy != null && signedBy.length() > 64) {
+            throw new IllegalArgumentException("signedBy pubkey too long");
+        }
+        
+        if (reputation == null) {
+            reputation = new Reputation();
+        }
+        if (version != null && version.length() > 32) {
+            throw new IllegalArgumentException("version too long");
+        }
     }
 }

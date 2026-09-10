@@ -9,6 +9,7 @@ import com.flashforge.farm.modelrepo.SecurityLogger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -21,6 +22,10 @@ public class SearchClient {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Map<String, CacheEntry> queryCache = new ConcurrentHashMap<>();
     private final Map<String, UserProfile> profileCache = new ConcurrentHashMap<>();
+    // Pubkeys whose cached profile passed signature verification (#48).
+    // The cache may hold unverified entries for display fallback, but only
+    // keys in this set earn the "verified" mark in profileLabel().
+    private final Set<String> verifiedProfiles = ConcurrentHashMap.newKeySet();
     private volatile String ownProfileTicket;
     
     // Cache settings
@@ -304,6 +309,7 @@ public class SearchClient {
         byte[] hash = transport.storeBlob(raw);
         String ticket = transport.shareTicket(hash);
         profileCache.put(pubkey.toLowerCase(), self);
+        verifiedProfiles.add(pubkey.toLowerCase()); // just signed with our seed
         ownProfileTicket = ticket;
         return ticket;
     }
@@ -355,6 +361,11 @@ public class SearchClient {
             byte[] raw = transport.blobFetch(profileTicket);
             UserProfile p = UserProfile.parse(raw, pubkeyHex);
             profileCache.put(key, p);
+            if (p.verifySignature()) {
+                verifiedProfiles.add(key);
+            } else {
+                verifiedProfiles.remove(key);
+            }
             return p;
         } catch (Exception e) {
             Log.w(TAG, "No profile for " + key, e);
@@ -367,17 +378,21 @@ public class SearchClient {
             byte[] raw = transport.blobFetch(profileTicket);
             UserProfile probe = UserProfile.parse(raw, null);
             if (probe != null && probe.pubkey != null && !probe.pubkey.isEmpty()) {
-                // Verify profile signature if present
+                // Verify profile signature if present (#48: only verified
+                // keys earn the "verified" mark; unverified entries stay
+                // cached for display fallback under "unverified").
                 if (probe.verifySignature()) {
                     SecurityLogger.log(SecurityLogger.Severity.INFO, SecurityLogger.Category.SIGNATURE,
                             "Profile signature verified",
                             "Pubkey: " + SecurityLogger.truncateKey(probe.pubkey));
                     profileCache.put(probe.pubkey.toLowerCase(), probe);
+                    verifiedProfiles.add(probe.pubkey.toLowerCase());
                 } else {
                     Log.w(TAG, "Profile signature verification failed for " + profileTicket);
                     SecurityLogger.logSignatureVerificationFailure(probe.pubkey, "Profile signature verification failed");
                     // Still cache it but mark as unverified
                     profileCache.put(probe.pubkey.toLowerCase(), probe);
+                    verifiedProfiles.remove(probe.pubkey.toLowerCase());
                 }
             }
         } catch (Exception ignored) {
@@ -390,12 +405,18 @@ public class SearchClient {
 
     public String profileLabel(String designerName, String pubkeyHex) {
         String k = pubkeyHex == null ? "" : pubkeyHex.trim().toLowerCase();
-        UserProfile verified = profileCache.get(k);
+        UserProfile cached = profileCache.get(k);
         String name;
+        // #48: "verified" requires a passed signature check, not mere cache
+        // presence — otherwise any peer can self-assert any designer name.
         String mark;
-        if (verified != null && verified.name != null && !verified.name.isEmpty()) {
-            name = verified.name;
+        if (verifiedProfiles.contains(k) && cached != null
+                && cached.name != null && !cached.name.isEmpty()) {
+            name = cached.name;
             mark = "verified";
+        } else if (cached != null && cached.name != null && !cached.name.isEmpty()) {
+            name = cached.name;
+            mark = "unverified";
         } else {
             name = (designerName == null || designerName.isEmpty()) ? "anon" : designerName;
             mark = "unverified";

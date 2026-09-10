@@ -64,6 +64,56 @@ public class TrustStore {
             }
         }
     }
+    
+    /**
+     * Create a TrustStore with persistent SharedPreferences storage.
+     * This is the recommended constructor for production use.
+     */
+    public static TrustStore withPersistentStorage(Context context) {
+        return new TrustStore(new TrustStoreSharedPrefs(context));
+    }
+    
+    /**
+     * Create a TrustStore with persistent storage and trusted roots.
+     */
+    public static TrustStore withPersistentStorage(Context context, Set<String> trustedRoots) {
+        return new TrustStore(new TrustStoreSharedPrefs(context), trustedRoots);
+    }
+    
+    /**
+     * Check if this TrustStore uses persistent storage.
+     */
+    public boolean isPersistent() {
+        return storage instanceof TrustStoreSharedPrefs;
+    }
+    
+    /**
+     * Get the underlying storage if it's a TrustStoreSharedPrefs.
+     */
+    public TrustStoreSharedPrefs getPersistentStorage() {
+        return storage instanceof TrustStoreSharedPrefs ? (TrustStoreSharedPrefs) storage : null;
+    }
+    
+    /**
+     * Export all trust data to a portable format.
+     * Only works if using persistent storage.
+     */
+    public String exportTrustData() {
+        if (storage instanceof TrustStoreSharedPrefs) {
+            return ((TrustStoreSharedPrefs) storage).exportTrustData();
+        }
+        return "{}";
+    }
+    
+    /**
+     * Import trust data from exported format.
+     * Only works if using persistent storage.
+     */
+    public void importTrustData(String json) {
+        if (storage instanceof TrustStoreSharedPrefs) {
+            ((TrustStoreSharedPrefs) storage).importTrustData(json);
+        }
+    }
 
     private static String key(String pubkey) {
         return pubkey == null ? "" : pubkey.trim().toLowerCase();

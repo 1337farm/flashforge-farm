@@ -22,6 +22,12 @@ public class SearchClient {
     private final Map<String, UserProfile> profileCache = new ConcurrentHashMap<>();
     private volatile String ownProfileTicket;
     private final List<SearchListener> listeners = new CopyOnWriteArrayList<>();
+    
+    // Rate limiter for search queries
+    private final RateLimiter searchRateLimiter;
+    
+    // Rate limiter for profile operations
+    private final RateLimiter profileRateLimiter;
 
     public interface SearchListener {
         void onResults(String query, List<SearchResult> results);
@@ -60,6 +66,20 @@ public class SearchClient {
             throw new IllegalArgumentException("transport required");
         }
         this.transport = transport;
+        this.searchRateLimiter = RateLimiter.forSearch();
+        this.profileRateLimiter = RateLimiter.perMinute(5);
+    }
+    
+    /**
+     * Create a SearchClient with custom rate limiters.
+     */
+    public SearchClient(IrohModelTransport transport, RateLimiter searchRateLimiter, RateLimiter profileRateLimiter) {
+        if (transport == null) {
+            throw new IllegalArgumentException("transport required");
+        }
+        this.transport = transport;
+        this.searchRateLimiter = searchRateLimiter != null ? searchRateLimiter : RateLimiter.forSearch();
+        this.profileRateLimiter = profileRateLimiter != null ? profileRateLimiter : RateLimiter.perMinute(5);
     }
 
     public void addListener(SearchListener listener) {
@@ -71,6 +91,20 @@ public class SearchClient {
     }
 
     public void searchAsync(String keyword, SearchCallback callback) {
+        // Check rate limit before executing search
+        if (!searchRateLimiter.tryAcquire()) {
+            long waitTimeMs = searchRateLimiter.getWaitTimeMs();
+            String errorMsg = "Rate limit exceeded. Please wait " + (waitTimeMs / 1000) + " seconds.";
+            Log.w(TAG, "Search rate limit exceeded for: " + keyword);
+            if (callback != null) {
+                callback.onError(errorMsg);
+            }
+            for (SearchListener l : listeners) {
+                l.onError(keyword, errorMsg);
+            }
+            return;
+        }
+        
         executor.execute(() -> {
             try {
                 List<SearchResult> results = search(keyword);
@@ -102,6 +136,12 @@ public class SearchClient {
         if (queryCache.containsKey(cacheKey)) {
             return queryCache.get(cacheKey);
         }
+        
+        // Check rate limit (synchronous path)
+        if (!searchRateLimiter.tryAcquire()) {
+            throw new UnavailableException("Search rate limit exceeded");
+        }
+        
         List<String> hashes = transport.searchAll(keyword);
         List<SearchResult> results = new ArrayList<>();
         for (String hash : hashes) {
@@ -142,6 +182,11 @@ public class SearchClient {
      * If seed is provided, the profile will be signed with it.
      */
     public String publishLocalProfile(String name, String bio, byte[] seed) throws Exception {
+        // Check profile rate limit
+        if (!profileRateLimiter.tryAcquire()) {
+            throw new UnavailableException("Profile publish rate limit exceeded");
+        }
+        
         String pubkey = transport.getEndpointId();
         if (pubkey == null || pubkey.isEmpty()) {
             throw new UnavailableException("no local endpoint id");
@@ -275,6 +320,38 @@ public class SearchClient {
         } catch (InterruptedException e) {
             executor.shutdownNow();
         }
+        
+        // Reset rate limiters on shutdown
+        searchRateLimiter.reset();
+        profileRateLimiter.reset();
+    }
+    
+    /**
+     * Get the current search rate limiter for monitoring/debugging.
+     */
+    public RateLimiter getSearchRateLimiter() {
+        return searchRateLimiter;
+    }
+    
+    /**
+     * Get the current profile rate limiter for monitoring/debugging.
+     */
+    public RateLimiter getProfileRateLimiter() {
+        return profileRateLimiter;
+    }
+    
+    /**
+     * Reset the search rate limiter.
+     */
+    public void resetSearchRateLimit() {
+        searchRateLimiter.reset();
+    }
+    
+    /**
+     * Reset the profile rate limiter.
+     */
+    public void resetProfileRateLimit() {
+        profileRateLimiter.reset();
     }
 
     private SearchResult parseSearchResult(String modelHash, String metadataJson) {

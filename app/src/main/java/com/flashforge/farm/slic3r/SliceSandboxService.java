@@ -47,6 +47,81 @@ public class SliceSandboxService extends Service {
 
     private final ISliceSandbox.Stub binder = new ISliceSandbox.Stub() {
         @Override
+        public Bundle read(ParcelFileDescriptor modelFd, ParcelFileDescriptor configFd,
+                ParcelFileDescriptor outFd, Bundle params) {
+            if (modelFd == null || configFd == null || outFd == null || params == null) {
+                return result(SandboxProto.STATUS_ERROR_INFRA, "missing fds or params");
+            }
+            int rawModel = -1;
+            int rawConfig = -1;
+            int rawOut = -1;
+            try {
+                long modelSize = modelFd.getStatSize();
+                if (modelSize < 0) {
+                    return result(SandboxProto.STATUS_ERROR_INFRA,
+                            "model stat failed");
+                }
+                if (modelSize == 0 || modelSize > SafetyPolicy.MAX_PARSE_BYTES) {
+                    return result(SandboxProto.STATUS_ERROR_CONTENT,
+                            "model size out of bounds: " + modelSize);
+                }
+                rawModel = modelFd.detachFd();
+                rawConfig = configFd.detachFd();
+                rawOut = outFd.detachFd();
+                String baseName = params.getString(SandboxProto.KEY_BASENAME, "sandbox.3mf");
+                int plateId = params.getInt(SandboxProto.KEY_PLATE_ID, 0);
+                synchronized (SLICE_LOCK) {
+                    long modelPtr;
+                    try {
+                        modelPtr = Native.model_read_from_file(
+                                SandboxProto.fdPath(rawModel), baseName, plateId);
+                    } catch (LinkageError e) {
+                        Log.e(TAG, "native libs unavailable in sandbox", e);
+                        return result(SandboxProto.STATUS_ERROR_INFRA,
+                                "native link failed: " + e.getMessage());
+                    } catch (Slic3rRuntimeError e) {
+                        return result(SandboxProto.STATUS_ERROR_CONTENT,
+                                "sandbox read failed: " + e.getMessage());
+                    }
+                    try {
+                        Native.model_export_3mf(modelPtr,
+                                SandboxProto.fdPath(rawConfig),
+                                SandboxProto.fdPath(rawOut));
+                    } catch (Slic3rRuntimeError e) {
+                        return result(SandboxProto.STATUS_ERROR_CONTENT,
+                                "sandbox export failed: " + e.getMessage());
+                    } finally {
+                        try {
+                            Native.model_release(modelPtr);
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                }
+                return result(SandboxProto.STATUS_OK, "ok");
+            } catch (Exception e) {
+                Log.e(TAG, "sandbox read job failed", e);
+                return result(SandboxProto.STATUS_ERROR_CONTENT,
+                        "sandbox error: " + e.getMessage());
+            } finally {
+                closeFd(rawModel);
+                closeFd(rawConfig);
+                closeFd(rawOut);
+                try {
+                    modelFd.close();
+                } catch (Exception ignored) {
+                }
+                try {
+                    configFd.close();
+                } catch (Exception ignored) {
+                }
+                try {
+                    outFd.close();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
+        @Override
         public Bundle slice(ParcelFileDescriptor modelFd, ParcelFileDescriptor configFd,
                 ParcelFileDescriptor outFd, Bundle params, final ISliceCallback callback) {
             if (modelFd == null || configFd == null || outFd == null || params == null) {

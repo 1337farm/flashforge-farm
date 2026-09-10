@@ -17,6 +17,13 @@ public class SandboxProtoTest {
     }
 
     @Test
+    public void bundleKeysAreStable() {
+        assertEquals("status", SandboxProto.KEY_STATUS);
+        assertEquals("baseName", SandboxProto.KEY_BASENAME);
+        assertEquals("plateId", SandboxProto.KEY_PLATE_ID);
+    }
+
+    @Test
     public void fdPathShape() {
         assertEquals("/proc/self/fd/0", SandboxProto.fdPath(0));
         assertEquals("/proc/self/fd/42", SandboxProto.fdPath(42));

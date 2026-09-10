@@ -20,6 +20,8 @@ public final class SandboxProto {
     public static final String KEY_CALIB_START = "calibStart";
     public static final String KEY_CALIB_END = "calibEnd";
     public static final String KEY_CALIB_STEP = "calibStep";
+    public static final String KEY_BASENAME = "baseName";
+    public static final String KEY_PLATE_ID = "plateId";
 
     /**
      * Path through which the sandbox opens an FD it received over Binder.

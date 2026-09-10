@@ -291,7 +291,9 @@ public class IrohModelTransport implements ModelTransport {
                 }
             }
             
-            finish();
+            if (finished.compareAndSet(false, true)) {
+                listener.onComplete(ticket, outputDir);
+            }
             
         } catch (Exception e) {
             Log.e(TAG, "Hash verification error for " + ticket, e);

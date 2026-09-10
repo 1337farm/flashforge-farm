@@ -69,5 +69,4 @@ class ModelMigrator(private val context: Context, private val transport: IrohMod
         @Deprecated("Use SeedModels.getAll() for signed seed models")
         private val MODELS = listOf<String>()
     }
-    }
 }

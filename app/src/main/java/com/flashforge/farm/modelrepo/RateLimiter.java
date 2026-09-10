@@ -107,6 +107,7 @@ public class RateLimiter {
         long start = System.currentTimeMillis();
         
         while (true) {
+            long waitTimeVal = 0;
             synchronized (lock) {
                 cleanupOldEntries();
                 if (timestamps.size() < maxRequests) {
@@ -122,7 +123,7 @@ public class RateLimiter {
                 }
                 
                 long oldest = timestamps.peekFirst();
-                long waitTimeVal = (oldest + windowSizeMs) - System.currentTimeMillis();
+                waitTimeVal = (oldest + windowSizeMs) - System.currentTimeMillis();
                 
                 if (waitTimeVal <= 0) {
                     // Oldest has expired, cleanup and retry

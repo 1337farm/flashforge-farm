@@ -53,6 +53,7 @@ set_target_properties(slic3r PROPERTIES IMPORTED_LOCATION
 add_library(farm SHARED
         src/main/jni/farm/farm_native.cpp
         src/main/jni/farm/farm_crashdump.cpp
+        src/main/jni/farm/farm_progress.cpp
         ${ENGINE_JNI}/render/GLModel.cpp
         ${ENGINE_JNI}/render/GLShader.cpp)
 

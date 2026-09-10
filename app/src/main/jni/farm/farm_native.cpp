@@ -44,6 +44,8 @@
 #include <igl/unproject.h>
 #include <GLES3/gl3.h>
 
+#include "farm_progress.hpp"
+
 using namespace Slic3r;
 using namespace Slic3r::GUI;
 
@@ -1485,26 +1487,13 @@ extern "C" {
                 return 0;
             }
 
-            std::thread::id id = std::this_thread::get_id();
+            farm::ScopedProgress progress(env, staticVM, listener);
 
-            print->set_status_callback([&id, &listener](const Slic3r::PrintBase::SlicingStatus &s) {
-                bool needAttach = id != std::this_thread::get_id();
-
-                JNIEnv* e;
-                if (staticVM->GetEnv(reinterpret_cast<void **>(&e), JNI_VERSION_1_6) != JNI_OK) {
-                    return;
-                }
-                if (needAttach) {
-                    JavaVMAttachArgs args;
-                    args.name = nullptr;
-                    args.group = nullptr;
-                    args.version = JNI_VERSION_1_6;
-                    staticVM->AttachCurrentThread(&e, &args);
-                }
-                e->CallVoidMethod(listener, sliceListenerOnProgress, s.percent, e->NewStringUTF(s.text.c_str()));
-                if (needAttach) {
-                    staticVM->DetachCurrentThread();
-                }
+            // Status callbacks fire from arbitrary oneTBB worker threads. Route
+            // them through the progress mailbox (single pump thread, one JVM
+            // attach per slice) instead of AttachCurrentThread-per-callback.
+            print->set_status_callback([](const Slic3r::PrintBase::SlicingStatus &s) {
+                farm::progress_set(s.percent, s.text.c_str());
             });
             __android_log_print(ANDROID_LOG_WARN, "FarmPaint", "step: print.process");
             print->process();

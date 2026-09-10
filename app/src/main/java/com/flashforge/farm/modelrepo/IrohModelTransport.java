@@ -84,8 +84,8 @@ public class IrohModelTransport implements ModelTransport {
         final Listener l = listener;
         new Thread(() -> {
             AtomicBoolean finished = new AtomicBoolean(false);
-            ModelMetadata metadata = null;
-            String expectedHash = null;
+            final ModelMetadata[] metadataHolder = new ModelMetadata[1];
+            final String[] expectedHashHolder = new String[1];
             
             IrohTransferListener cb = new IrohTransferListener() {
                 @Override
@@ -110,16 +110,17 @@ public class IrohModelTransport implements ModelTransport {
                         return;
                     }
                     try {
-                        metadata = ModelMetadata.parse(modelJson);
-                        l.onMetadata(t, metadata, entriesFrom(fileNamesJson, modelJson));
+                        ModelMetadata parsedMetadata = ModelMetadata.parse(modelJson);
+                        metadataHolder[0] = parsedMetadata;
+                        l.onMetadata(t, parsedMetadata, entriesFrom(fileNamesJson, modelJson));
                         
                         // Extract expected hash from metadata verification field
-                        if (metadata.verification != null && !metadata.verification.isEmpty()) {
-                            expectedHash = metadata.verification.toLowerCase();
-                            Log.d(TAG, "Expected hash for " + t + ": " + expectedHash);
+                        if (parsedMetadata.verification != null && !parsedMetadata.verification.isEmpty()) {
+                            expectedHashHolder[0] = parsedMetadata.verification.toLowerCase();
+                            Log.d(TAG, "Expected hash for " + t + ": " + expectedHashHolder[0]);
                             SecurityLogger.log(SecurityLogger.Severity.DEBUG, SecurityLogger.Category.VERIFICATION,
                                     "Expected hash extracted from metadata", 
-                                    "Ticket: " + t + ", Hash: " + expectedHash);
+                                    "Ticket: " + t + ", Hash: " + expectedHashHolder[0]);
                         } else {
                             Log.w(TAG, "No verification hash in metadata for " + t);
                             SecurityLogger.log(SecurityLogger.Severity.WARNING, SecurityLogger.Category.VERIFICATION,
@@ -144,12 +145,12 @@ public class IrohModelTransport implements ModelTransport {
                     }
                     
                     // Verify hash before completing
-                    if (expectedHash != null && !expectedHash.isEmpty()) {
-                        verifyAndComplete(dir, expectedHash, t, d, l, finished, metadata);
+                    if (expectedHashHolder[0] != null && !expectedHashHolder[0].isEmpty()) {
+                        verifyAndComplete(dir, expectedHashHolder[0], t, d, l, finished, metadataHolder[0]);
                     } else {
                         // No hash to verify, but still run model verification if we have metadata
-                        if (metadata != null) {
-                            verifyAndComplete(dir, "", t, d, l, finished, metadata);
+                        if (metadataHolder[0] != null) {
+                            verifyAndComplete(dir, "", t, d, l, finished, metadataHolder[0]);
                         } else {
                             // No hash and no metadata, complete directly (legacy support)
                             Log.w(TAG, "Completing fetch without verification for " + t);

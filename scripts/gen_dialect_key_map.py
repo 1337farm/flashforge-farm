@@ -246,10 +246,14 @@ def emit_java(dialects: dict, source: str) -> str:
         lines.append("        Map<String, Map<String, String>> m = new HashMap<>();")
         for src, row in table.items():
             if row.get("values"):
-                lines.append(f"        m.put({jstr(src)}, new HashMap<String, String>() {{")
+                # Plain strings (not f-strings): a f-string `{{` collapses to a
+                # single literal `{`, which turns the double-brace initializer
+                # `new HashMap<>() {{ ... }}` into a plain class body and breaks
+                # compilation (illegal-start-of-type).
+                lines.append('        m.put(' + jstr(src) + ', new HashMap<String, String>() {{')
                 for v0, v1 in row["values"].items():
-                    lines.append(f"            put({jstr(v0)}, {jstr(v1)});")
-                lines.append("        }});")
+                    lines.append('            put(' + jstr(v0) + ', ' + jstr(v1) + ');')
+                lines.append('        }});')
         lines.append("        return m;")
         lines.append("    }")
         # removed set

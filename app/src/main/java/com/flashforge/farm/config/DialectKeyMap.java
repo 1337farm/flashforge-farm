@@ -153,12 +153,12 @@ public final class DialectKeyMap {
     }
     private static Map<String, Map<String, String>> orcaValues() {
         Map<String, Map<String, String>> m = new HashMap<>();
-        m.put("gap_fill_target", new HashMap<String, String>() {
+        m.put("gap_fill_target", new HashMap<String, String>() {{
             put("everywhere", "1");
             put("topbottom", "1");
             put("nowhere", "0");
         }});
-        m.put("wall_sequence", new HashMap<String, String>() {
+        m.put("wall_sequence", new HashMap<String, String>() {{
             put("inner wall/outer wall", "0");
             put("inner/outer wall", "0");
             put("inner/outer", "0");
@@ -166,13 +166,13 @@ public final class DialectKeyMap {
             put("outer/inner wall", "1");
             put("outer/inner", "1");
         }});
-        m.put("print_sequence", new HashMap<String, String>() {
+        m.put("print_sequence", new HashMap<String, String>() {{
             put("by layer", "0");
             put("by object", "1");
             put("by_layer", "0");
             put("by_object", "1");
         }});
-        m.put("ironing_type", new HashMap<String, String>() {
+        m.put("ironing_type", new HashMap<String, String>() {{
             put("no ironing", "0");
             put("no_ironing", "0");
             put("all top surfaces", "1");
@@ -346,12 +346,12 @@ public final class DialectKeyMap {
     }
     private static Map<String, Map<String, String>> bambuValues() {
         Map<String, Map<String, String>> m = new HashMap<>();
-        m.put("gap_fill_target", new HashMap<String, String>() {
+        m.put("gap_fill_target", new HashMap<String, String>() {{
             put("everywhere", "1");
             put("topbottom", "1");
             put("nowhere", "0");
         }});
-        m.put("wall_sequence", new HashMap<String, String>() {
+        m.put("wall_sequence", new HashMap<String, String>() {{
             put("inner wall/outer wall", "0");
             put("inner/outer wall", "0");
             put("inner/outer", "0");
@@ -359,13 +359,13 @@ public final class DialectKeyMap {
             put("outer/inner wall", "1");
             put("outer/inner", "1");
         }});
-        m.put("print_sequence", new HashMap<String, String>() {
+        m.put("print_sequence", new HashMap<String, String>() {{
             put("by layer", "0");
             put("by object", "1");
             put("by_layer", "0");
             put("by_object", "1");
         }});
-        m.put("ironing_type", new HashMap<String, String>() {
+        m.put("ironing_type", new HashMap<String, String>() {{
             put("no ironing", "0");
             put("no_ironing", "0");
             put("all top surfaces", "1");

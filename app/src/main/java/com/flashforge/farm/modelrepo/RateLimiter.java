@@ -141,9 +141,8 @@ public class RateLimiter {
             
             // Wait for the calculated time or a notification
             try {
-                long waitTimeVal2 = waitTimeVal;
-                long wait = Math.min(waitTimeVal2, timeoutMs > 0 ? 
-                    (start + timeoutMs) - System.currentTimeMillis() : waitTimeVal2);
+                long wait = Math.min(waitTimeVal, timeoutMs > 0 ? 
+                    (start + timeoutMs) - System.currentTimeMillis() : waitTimeVal);
                 if (wait > 0) {
                     synchronized (lock) {
                         lock.wait(wait);

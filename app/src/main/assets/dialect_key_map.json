@@ -1,0 +1,3618 @@
+{
+  "dialects": {
+    "bambu": {
+      "before_layer_change_gcode": {
+        "key": "before_layer_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "bottom_shell_layers": {
+        "key": "bottom_solid_layers",
+        "kind": "rename",
+        "note": ""
+      },
+      "bottom_shell_thickness": {
+        "key": "bottom_solid_min_thickness",
+        "kind": "rename",
+        "note": ""
+      },
+      "bottom_surface_pattern": {
+        "key": "bottom_fill_pattern",
+        "kind": "rename",
+        "note": ""
+      },
+      "bridge_flow": {
+        "key": "bridge_flow_ratio",
+        "kind": "rename",
+        "note": ""
+      },
+      "bridge_no_support": {
+        "key": "dont_support_bridges",
+        "kind": "rename",
+        "note": ""
+      },
+      "brim_object_gap": {
+        "key": "brim_separation",
+        "kind": "rename",
+        "note": ""
+      },
+      "change_filament_gcode": {
+        "key": "toolchange_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "close_fan_the_first_x_layers": {
+        "key": "disable_fan_first_layers",
+        "kind": "rename",
+        "note": ""
+      },
+      "cool_plate_temp": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "cool_plate_temp_initial_layer": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "curr_bed_type": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca bed-slot selector enum"
+      },
+      "deretraction_speed": {
+        "key": "deretract_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "detect_overhang_wall": {
+        "key": "overhangs",
+        "kind": "rename",
+        "note": ""
+      },
+      "detect_thin_wall": {
+        "key": "thin_walls",
+        "kind": "rename",
+        "note": ""
+      },
+      "enable_arc_fitting": {
+        "key": "arc_fitting",
+        "kind": "rename",
+        "note": ""
+      },
+      "enable_prime_tower": {
+        "key": "wipe_tower",
+        "kind": "rename",
+        "note": ""
+      },
+      "enable_support": {
+        "key": "support_material",
+        "kind": "rename",
+        "note": ""
+      },
+      "enforce_support_layers": {
+        "key": "support_material_enforce_layers",
+        "kind": "rename",
+        "note": ""
+      },
+      "eng_plate_temp": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "eng_plate_temp_initial_layer": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "extra_perimeters_on_overhangs": {
+        "key": "extra_perimeters",
+        "kind": "rename",
+        "note": ""
+      },
+      "extruder_clearance_height_to_rod": {
+        "key": "extruder_clearance_height",
+        "kind": "rename",
+        "note": ""
+      },
+      "fan_cooling_layer_time": {
+        "key": "fan_below_layer_time",
+        "kind": "rename",
+        "note": ""
+      },
+      "fan_max_speed": {
+        "key": "max_fan_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "fan_min_speed": {
+        "key": "min_fan_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_deretraction_speed": {
+        "key": "filament_deretract_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_end_gcode": {
+        "key": "end_filament_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_flow_ratio": {
+        "key": "extrusion_multiplier",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_map": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca virtual->physical filament map"
+      },
+      "filament_retract_when_changing_layer": {
+        "key": "filament_retract_layer_change",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_retraction_length": {
+        "key": "filament_retract_length",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_retraction_minimum_travel": {
+        "key": "filament_retract_before_travel",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_retraction_speed": {
+        "key": "filament_retract_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_start_gcode": {
+        "key": "start_filament_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_z_hop": {
+        "key": "filament_retract_lift",
+        "kind": "rename",
+        "note": ""
+      },
+      "filename_format": {
+        "key": "output_filename_format",
+        "kind": "rename",
+        "note": ""
+      },
+      "flush_multiplier": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca purge multiplier"
+      },
+      "flush_volumes_matrix": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca purge-matrix layout only"
+      },
+      "flush_volumes_vector": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca purge vector"
+      },
+      "fuzzy_skin_point_distance": {
+        "key": "fuzzy_skin_point_dist",
+        "kind": "rename",
+        "note": ""
+      },
+      "gap_fill_target": {
+        "key": "gap_fill_enabled",
+        "kind": "enum_remap",
+        "note": "Orca enum -> legacy bool gap_fill_enabled",
+        "values": {
+          "everywhere": "1",
+          "nowhere": "0",
+          "topbottom": "1"
+        }
+      },
+      "gap_infill_speed": {
+        "key": "gap_fill_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "hot_plate_temp": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "hot_plate_temp_initial_layer": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "infill_combination": {
+        "key": "infill_every_layers",
+        "kind": "rename",
+        "note": ""
+      },
+      "infill_direction": {
+        "key": "fill_angle",
+        "kind": "rename",
+        "note": ""
+      },
+      "infill_wall_overlap": {
+        "key": "infill_overlap",
+        "kind": "rename",
+        "note": ""
+      },
+      "initial_layer_acceleration": {
+        "key": "first_layer_acceleration",
+        "kind": "rename",
+        "note": ""
+      },
+      "initial_layer_line_width": {
+        "key": "first_layer_extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "initial_layer_print_height": {
+        "key": "first_layer_height",
+        "kind": "rename",
+        "note": ""
+      },
+      "initial_layer_speed": {
+        "key": "first_layer_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "inner_wall_line_width": {
+        "key": "perimeter_extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "inner_wall_speed": {
+        "key": "perimeter_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "internal_solid_infill_acceleration": {
+        "key": "solid_infill_acceleration",
+        "kind": "rename",
+        "note": ""
+      },
+      "internal_solid_infill_line_width": {
+        "key": "solid_infill_extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "internal_solid_infill_speed": {
+        "key": "solid_infill_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "ironing_flow": {
+        "key": "ironing_flowrate",
+        "kind": "rename",
+        "note": ""
+      },
+      "ironing_type": {
+        "key": "ironing",
+        "kind": "enum_remap",
+        "note": "Orca ironing_type enum -> Prusa ironing bool",
+        "values": {
+          "all solid layers": "1",
+          "all top surfaces": "1",
+          "all_solid_layers": "1",
+          "all_top_surfaces": "1",
+          "no ironing": "0",
+          "no_ironing": "0",
+          "topmost surface": "1",
+          "topmost_surface": "1"
+        }
+      },
+      "is_infill_first": {
+        "key": "infill_first",
+        "kind": "rename",
+        "note": ""
+      },
+      "layer_change_gcode": {
+        "key": "layer_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "line_width": {
+        "key": "extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "machine_end_gcode": {
+        "key": "end_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "machine_max_speed_e": {
+        "key": "machine_max_feedrate_e",
+        "kind": "rename",
+        "note": ""
+      },
+      "machine_max_speed_x": {
+        "key": "machine_max_feedrate_x",
+        "kind": "rename",
+        "note": ""
+      },
+      "machine_max_speed_y": {
+        "key": "machine_max_feedrate_y",
+        "kind": "rename",
+        "note": ""
+      },
+      "machine_max_speed_z": {
+        "key": "machine_max_feedrate_z",
+        "kind": "rename",
+        "note": ""
+      },
+      "machine_pause_gcode": {
+        "key": "pause_print_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "machine_start_gcode": {
+        "key": "start_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "max_travel_detour_distance": {
+        "key": "avoid_crossing_perimeters_max_detour",
+        "kind": "rename",
+        "note": ""
+      },
+      "max_volumetric_extrusion_rate_slope": {
+        "key": "max_volumetric_extrusion_rate_slope_positive",
+        "kind": "rename",
+        "note": ""
+      },
+      "minimum_sparse_infill_area": {
+        "key": "solid_infill_below_area",
+        "kind": "rename",
+        "note": ""
+      },
+      "nozzle_temperature": {
+        "key": "temperature",
+        "kind": "rename",
+        "note": ""
+      },
+      "nozzle_temperature_initial_layer": {
+        "key": "first_layer_temperature",
+        "kind": "rename",
+        "note": ""
+      },
+      "only_one_wall_first_layer": {
+        "key": "only_one_perimeter_first_layer",
+        "kind": "rename",
+        "note": ""
+      },
+      "outer_wall_acceleration": {
+        "key": "external_perimeter_acceleration",
+        "kind": "rename",
+        "note": ""
+      },
+      "outer_wall_line_width": {
+        "key": "external_perimeter_extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "outer_wall_speed": {
+        "key": "external_perimeter_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "overhang_1_4_speed": {
+        "key": "overhang_speed_0",
+        "kind": "rename",
+        "note": ""
+      },
+      "overhang_2_4_speed": {
+        "key": "overhang_speed_1",
+        "kind": "rename",
+        "note": ""
+      },
+      "overhang_3_4_speed": {
+        "key": "overhang_speed_2",
+        "kind": "rename",
+        "note": ""
+      },
+      "overhang_4_4_speed": {
+        "key": "overhang_speed_3",
+        "kind": "rename",
+        "note": ""
+      },
+      "overhang_fan_speed": {
+        "key": "bridge_fan_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "prime_tower_brim_width": {
+        "key": "wipe_tower_brim_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "prime_tower_width": {
+        "key": "wipe_tower_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "print_sequence": {
+        "key": null,
+        "kind": "enum_remap",
+        "note": "Orca print_sequence enum -> Prusa complete_objects bool",
+        "values": {
+          "by layer": "0",
+          "by object": "1",
+          "by_layer": "0",
+          "by_object": "1"
+        }
+      },
+      "printable_area": {
+        "key": "bed_shape",
+        "kind": "rename",
+        "note": ""
+      },
+      "printable_height": {
+        "key": "max_print_height",
+        "kind": "rename",
+        "note": ""
+      },
+      "reduce_crossing_wall": {
+        "key": "avoid_crossing_perimeters",
+        "kind": "rename",
+        "note": ""
+      },
+      "reduce_fan_stop_start_freq": {
+        "key": "fan_always_on",
+        "kind": "rename",
+        "note": ""
+      },
+      "reduce_infill_retraction": {
+        "key": "only_retract_when_crossing_perimeters",
+        "kind": "rename",
+        "note": ""
+      },
+      "retract_when_changing_layer": {
+        "key": "retract_layer_change",
+        "kind": "rename",
+        "note": ""
+      },
+      "retraction_length": {
+        "key": "retract_length",
+        "kind": "rename",
+        "note": ""
+      },
+      "retraction_minimum_travel": {
+        "key": "retract_before_travel",
+        "kind": "rename",
+        "note": ""
+      },
+      "retraction_speed": {
+        "key": "retract_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "single_extruder_multi_material": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca SEMM toggle; no native equivalent"
+      },
+      "skirt_loops": {
+        "key": "skirts",
+        "kind": "rename",
+        "note": ""
+      },
+      "slow_down_for_layer_cooling": {
+        "key": "cooling",
+        "kind": "rename",
+        "note": ""
+      },
+      "slow_down_layer_time": {
+        "key": "slowdown_below_layer_time",
+        "kind": "rename",
+        "note": ""
+      },
+      "slow_down_min_speed": {
+        "key": "min_print_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "solid_infill_filament": {
+        "key": "solid_infill_extruder",
+        "kind": "rename",
+        "note": ""
+      },
+      "sparse_infill_acceleration": {
+        "key": "infill_acceleration",
+        "kind": "rename",
+        "note": ""
+      },
+      "sparse_infill_density": {
+        "key": "fill_density",
+        "kind": "rename",
+        "note": ""
+      },
+      "sparse_infill_filament": {
+        "key": "infill_extruder",
+        "kind": "rename",
+        "note": ""
+      },
+      "sparse_infill_line_width": {
+        "key": "infill_extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "sparse_infill_pattern": {
+        "key": "fill_pattern",
+        "kind": "rename",
+        "note": ""
+      },
+      "sparse_infill_speed": {
+        "key": "infill_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "spiral_mode": {
+        "key": "spiral_vase",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_angle": {
+        "key": "support_material_angle",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_base_pattern": {
+        "key": "support_material_pattern",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_base_pattern_spacing": {
+        "key": "support_material_spacing",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_bottom_z_distance": {
+        "key": "support_material_bottom_contact_distance",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_filament": {
+        "key": "support_material_extruder",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_interface_bottom_layers": {
+        "key": "support_material_bottom_interface_layers",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_interface_filament": {
+        "key": "support_material_interface_extruder",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_interface_loop_pattern": {
+        "key": "support_material_interface_contact_loops",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_interface_pattern": {
+        "key": "support_material_interface_pattern",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_interface_spacing": {
+        "key": "support_material_interface_spacing",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_interface_speed": {
+        "key": "support_material_interface_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_interface_top_layers": {
+        "key": "support_material_interface_layers",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_line_width": {
+        "key": "support_material_extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_object_xy_distance": {
+        "key": "support_material_xy_spacing",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_on_build_plate_only": {
+        "key": "support_material_buildplate_only",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_speed": {
+        "key": "support_material_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_style": {
+        "key": "support_material_style",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_threshold_angle": {
+        "key": "support_material_threshold",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_top_z_distance": {
+        "key": "support_material_contact_distance",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_type": {
+        "key": null,
+        "kind": "type_changed",
+        "note": "Orca normal/tree(auto) enum -> Prusa support_style (snug/organic)",
+        "transform": "support_type"
+      },
+      "textured_plate_temp": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "textured_plate_temp_initial_layer": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "top_one_wall_type": {
+        "key": "top_one_perimeter_type",
+        "kind": "rename",
+        "note": ""
+      },
+      "top_shell_layers": {
+        "key": "top_solid_layers",
+        "kind": "rename",
+        "note": ""
+      },
+      "top_shell_thickness": {
+        "key": "top_solid_min_thickness",
+        "kind": "rename",
+        "note": ""
+      },
+      "top_surface_acceleration": {
+        "key": "top_solid_infill_acceleration",
+        "kind": "rename",
+        "note": ""
+      },
+      "top_surface_line_width": {
+        "key": "top_infill_extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "top_surface_pattern": {
+        "key": "top_fill_pattern",
+        "kind": "rename",
+        "note": ""
+      },
+      "top_surface_speed": {
+        "key": "top_solid_infill_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "tree_support_angle_slow": {
+        "key": "support_tree_angle_slow",
+        "kind": "rename",
+        "note": ""
+      },
+      "tree_support_branch_angle": {
+        "key": "support_tree_angle",
+        "kind": "rename",
+        "note": ""
+      },
+      "tree_support_branch_diameter": {
+        "key": "support_tree_branch_diameter",
+        "kind": "rename",
+        "note": ""
+      },
+      "tree_support_branch_diameter_angle": {
+        "key": "support_tree_branch_diameter_angle",
+        "kind": "rename",
+        "note": ""
+      },
+      "tree_support_branch_distance": {
+        "key": "support_tree_branch_distance",
+        "kind": "rename",
+        "note": ""
+      },
+      "tree_support_tip_diameter": {
+        "key": "support_tree_tip_diameter",
+        "kind": "rename",
+        "note": ""
+      },
+      "tree_support_top_rate": {
+        "key": "support_tree_top_rate",
+        "kind": "rename",
+        "note": ""
+      },
+      "wall_filament": {
+        "key": "perimeter_extruder",
+        "kind": "rename",
+        "note": ""
+      },
+      "wall_generator": {
+        "key": "perimeter_generator",
+        "kind": "rename",
+        "note": ""
+      },
+      "wall_loops": {
+        "key": "perimeters",
+        "kind": "rename",
+        "note": ""
+      },
+      "wall_sequence": {
+        "key": "external_perimeters_first",
+        "kind": "enum_remap",
+        "note": "Orca wall_sequence enum -> Prusa external_perimeters_first bool",
+        "values": {
+          "inner wall/outer wall": "0",
+          "inner/outer": "0",
+          "inner/outer wall": "0",
+          "outer wall/inner wall": "1",
+          "outer/inner": "1",
+          "outer/inner wall": "1"
+        }
+      },
+      "wipe_tower_filament": {
+        "key": "wipe_tower_extruder",
+        "kind": "rename",
+        "note": ""
+      },
+      "xy_contour_compensation": {
+        "key": "xy_size_compensation",
+        "kind": "rename",
+        "note": ""
+      },
+      "z_hop": {
+        "key": "retract_lift",
+        "kind": "rename",
+        "note": ""
+      }
+    },
+    "orca": {
+      "before_layer_change_gcode": {
+        "key": "before_layer_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "bottom_shell_layers": {
+        "key": "bottom_solid_layers",
+        "kind": "rename",
+        "note": ""
+      },
+      "bottom_shell_thickness": {
+        "key": "bottom_solid_min_thickness",
+        "kind": "rename",
+        "note": ""
+      },
+      "bottom_surface_pattern": {
+        "key": "bottom_fill_pattern",
+        "kind": "rename",
+        "note": ""
+      },
+      "bridge_flow": {
+        "key": "bridge_flow_ratio",
+        "kind": "rename",
+        "note": ""
+      },
+      "bridge_no_support": {
+        "key": "dont_support_bridges",
+        "kind": "rename",
+        "note": ""
+      },
+      "brim_object_gap": {
+        "key": "brim_separation",
+        "kind": "rename",
+        "note": ""
+      },
+      "change_filament_gcode": {
+        "key": "toolchange_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "close_fan_the_first_x_layers": {
+        "key": "disable_fan_first_layers",
+        "kind": "rename",
+        "note": ""
+      },
+      "cool_plate_temp": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "cool_plate_temp_initial_layer": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "curr_bed_type": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca bed-slot selector enum"
+      },
+      "deretraction_speed": {
+        "key": "deretract_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "detect_overhang_wall": {
+        "key": "overhangs",
+        "kind": "rename",
+        "note": ""
+      },
+      "detect_thin_wall": {
+        "key": "thin_walls",
+        "kind": "rename",
+        "note": ""
+      },
+      "enable_arc_fitting": {
+        "key": "arc_fitting",
+        "kind": "rename",
+        "note": ""
+      },
+      "enable_prime_tower": {
+        "key": "wipe_tower",
+        "kind": "rename",
+        "note": ""
+      },
+      "enable_support": {
+        "key": "support_material",
+        "kind": "rename",
+        "note": ""
+      },
+      "enforce_support_layers": {
+        "key": "support_material_enforce_layers",
+        "kind": "rename",
+        "note": ""
+      },
+      "eng_plate_temp": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "eng_plate_temp_initial_layer": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "extra_perimeters_on_overhangs": {
+        "key": "extra_perimeters",
+        "kind": "rename",
+        "note": ""
+      },
+      "extruder_clearance_height_to_rod": {
+        "key": "extruder_clearance_height",
+        "kind": "rename",
+        "note": ""
+      },
+      "fan_cooling_layer_time": {
+        "key": "fan_below_layer_time",
+        "kind": "rename",
+        "note": ""
+      },
+      "fan_max_speed": {
+        "key": "max_fan_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "fan_min_speed": {
+        "key": "min_fan_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_deretraction_speed": {
+        "key": "filament_deretract_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_end_gcode": {
+        "key": "end_filament_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_flow_ratio": {
+        "key": "extrusion_multiplier",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_map": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca virtual->physical filament map"
+      },
+      "filament_retract_when_changing_layer": {
+        "key": "filament_retract_layer_change",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_retraction_length": {
+        "key": "filament_retract_length",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_retraction_minimum_travel": {
+        "key": "filament_retract_before_travel",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_retraction_speed": {
+        "key": "filament_retract_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_start_gcode": {
+        "key": "start_filament_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "filament_z_hop": {
+        "key": "filament_retract_lift",
+        "kind": "rename",
+        "note": ""
+      },
+      "filename_format": {
+        "key": "output_filename_format",
+        "kind": "rename",
+        "note": ""
+      },
+      "flush_multiplier": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca purge multiplier"
+      },
+      "flush_volumes_matrix": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca purge-matrix layout only"
+      },
+      "flush_volumes_vector": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca purge vector"
+      },
+      "fuzzy_skin_point_distance": {
+        "key": "fuzzy_skin_point_dist",
+        "kind": "rename",
+        "note": ""
+      },
+      "gap_fill_target": {
+        "key": "gap_fill_enabled",
+        "kind": "enum_remap",
+        "note": "Orca enum -> legacy bool gap_fill_enabled",
+        "values": {
+          "everywhere": "1",
+          "nowhere": "0",
+          "topbottom": "1"
+        }
+      },
+      "gap_infill_speed": {
+        "key": "gap_fill_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "hot_plate_temp": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "hot_plate_temp_initial_layer": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "infill_combination": {
+        "key": "infill_every_layers",
+        "kind": "rename",
+        "note": ""
+      },
+      "infill_direction": {
+        "key": "fill_angle",
+        "kind": "rename",
+        "note": ""
+      },
+      "infill_wall_overlap": {
+        "key": "infill_overlap",
+        "kind": "rename",
+        "note": ""
+      },
+      "initial_layer_acceleration": {
+        "key": "first_layer_acceleration",
+        "kind": "rename",
+        "note": ""
+      },
+      "initial_layer_line_width": {
+        "key": "first_layer_extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "initial_layer_print_height": {
+        "key": "first_layer_height",
+        "kind": "rename",
+        "note": ""
+      },
+      "initial_layer_speed": {
+        "key": "first_layer_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "inner_wall_line_width": {
+        "key": "perimeter_extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "inner_wall_speed": {
+        "key": "perimeter_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "internal_solid_infill_acceleration": {
+        "key": "solid_infill_acceleration",
+        "kind": "rename",
+        "note": ""
+      },
+      "internal_solid_infill_line_width": {
+        "key": "solid_infill_extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "internal_solid_infill_speed": {
+        "key": "solid_infill_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "ironing_flow": {
+        "key": "ironing_flowrate",
+        "kind": "rename",
+        "note": ""
+      },
+      "ironing_type": {
+        "key": "ironing",
+        "kind": "enum_remap",
+        "note": "Orca ironing_type enum -> Prusa ironing bool",
+        "values": {
+          "all solid layers": "1",
+          "all top surfaces": "1",
+          "all_solid_layers": "1",
+          "all_top_surfaces": "1",
+          "no ironing": "0",
+          "no_ironing": "0",
+          "topmost surface": "1",
+          "topmost_surface": "1"
+        }
+      },
+      "is_infill_first": {
+        "key": "infill_first",
+        "kind": "rename",
+        "note": ""
+      },
+      "layer_change_gcode": {
+        "key": "layer_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "line_width": {
+        "key": "extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "machine_end_gcode": {
+        "key": "end_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "machine_max_speed_e": {
+        "key": "machine_max_feedrate_e",
+        "kind": "rename",
+        "note": ""
+      },
+      "machine_max_speed_x": {
+        "key": "machine_max_feedrate_x",
+        "kind": "rename",
+        "note": ""
+      },
+      "machine_max_speed_y": {
+        "key": "machine_max_feedrate_y",
+        "kind": "rename",
+        "note": ""
+      },
+      "machine_max_speed_z": {
+        "key": "machine_max_feedrate_z",
+        "kind": "rename",
+        "note": ""
+      },
+      "machine_pause_gcode": {
+        "key": "pause_print_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "machine_start_gcode": {
+        "key": "start_gcode",
+        "kind": "rename",
+        "note": ""
+      },
+      "max_travel_detour_distance": {
+        "key": "avoid_crossing_perimeters_max_detour",
+        "kind": "rename",
+        "note": ""
+      },
+      "max_volumetric_extrusion_rate_slope": {
+        "key": "max_volumetric_extrusion_rate_slope_positive",
+        "kind": "rename",
+        "note": ""
+      },
+      "minimum_sparse_infill_area": {
+        "key": "solid_infill_below_area",
+        "kind": "rename",
+        "note": ""
+      },
+      "nozzle_temperature": {
+        "key": "temperature",
+        "kind": "rename",
+        "note": ""
+      },
+      "nozzle_temperature_initial_layer": {
+        "key": "first_layer_temperature",
+        "kind": "rename",
+        "note": ""
+      },
+      "only_one_wall_first_layer": {
+        "key": "only_one_perimeter_first_layer",
+        "kind": "rename",
+        "note": ""
+      },
+      "outer_wall_acceleration": {
+        "key": "external_perimeter_acceleration",
+        "kind": "rename",
+        "note": ""
+      },
+      "outer_wall_line_width": {
+        "key": "external_perimeter_extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "outer_wall_speed": {
+        "key": "external_perimeter_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "overhang_1_4_speed": {
+        "key": "overhang_speed_0",
+        "kind": "rename",
+        "note": ""
+      },
+      "overhang_2_4_speed": {
+        "key": "overhang_speed_1",
+        "kind": "rename",
+        "note": ""
+      },
+      "overhang_3_4_speed": {
+        "key": "overhang_speed_2",
+        "kind": "rename",
+        "note": ""
+      },
+      "overhang_4_4_speed": {
+        "key": "overhang_speed_3",
+        "kind": "rename",
+        "note": ""
+      },
+      "overhang_fan_speed": {
+        "key": "bridge_fan_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "prime_tower_brim_width": {
+        "key": "wipe_tower_brim_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "prime_tower_width": {
+        "key": "wipe_tower_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "print_sequence": {
+        "key": null,
+        "kind": "enum_remap",
+        "note": "Orca print_sequence enum -> Prusa complete_objects bool",
+        "values": {
+          "by layer": "0",
+          "by object": "1",
+          "by_layer": "0",
+          "by_object": "1"
+        }
+      },
+      "printable_area": {
+        "key": "bed_shape",
+        "kind": "rename",
+        "note": ""
+      },
+      "printable_height": {
+        "key": "max_print_height",
+        "kind": "rename",
+        "note": ""
+      },
+      "reduce_crossing_wall": {
+        "key": "avoid_crossing_perimeters",
+        "kind": "rename",
+        "note": ""
+      },
+      "reduce_fan_stop_start_freq": {
+        "key": "fan_always_on",
+        "kind": "rename",
+        "note": ""
+      },
+      "reduce_infill_retraction": {
+        "key": "only_retract_when_crossing_perimeters",
+        "kind": "rename",
+        "note": ""
+      },
+      "retract_when_changing_layer": {
+        "key": "retract_layer_change",
+        "kind": "rename",
+        "note": ""
+      },
+      "retraction_length": {
+        "key": "retract_length",
+        "kind": "rename",
+        "note": ""
+      },
+      "retraction_minimum_travel": {
+        "key": "retract_before_travel",
+        "kind": "rename",
+        "note": ""
+      },
+      "retraction_speed": {
+        "key": "retract_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "single_extruder_multi_material": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca SEMM toggle; no native equivalent"
+      },
+      "skirt_loops": {
+        "key": "skirts",
+        "kind": "rename",
+        "note": ""
+      },
+      "slow_down_for_layer_cooling": {
+        "key": "cooling",
+        "kind": "rename",
+        "note": ""
+      },
+      "slow_down_layer_time": {
+        "key": "slowdown_below_layer_time",
+        "kind": "rename",
+        "note": ""
+      },
+      "slow_down_min_speed": {
+        "key": "min_print_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "solid_infill_filament": {
+        "key": "solid_infill_extruder",
+        "kind": "rename",
+        "note": ""
+      },
+      "sparse_infill_acceleration": {
+        "key": "infill_acceleration",
+        "kind": "rename",
+        "note": ""
+      },
+      "sparse_infill_density": {
+        "key": "fill_density",
+        "kind": "rename",
+        "note": ""
+      },
+      "sparse_infill_filament": {
+        "key": "infill_extruder",
+        "kind": "rename",
+        "note": ""
+      },
+      "sparse_infill_line_width": {
+        "key": "infill_extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "sparse_infill_pattern": {
+        "key": "fill_pattern",
+        "kind": "rename",
+        "note": ""
+      },
+      "sparse_infill_speed": {
+        "key": "infill_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "spiral_mode": {
+        "key": "spiral_vase",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_angle": {
+        "key": "support_material_angle",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_base_pattern": {
+        "key": "support_material_pattern",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_base_pattern_spacing": {
+        "key": "support_material_spacing",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_bottom_z_distance": {
+        "key": "support_material_bottom_contact_distance",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_filament": {
+        "key": "support_material_extruder",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_interface_bottom_layers": {
+        "key": "support_material_bottom_interface_layers",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_interface_filament": {
+        "key": "support_material_interface_extruder",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_interface_loop_pattern": {
+        "key": "support_material_interface_contact_loops",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_interface_pattern": {
+        "key": "support_material_interface_pattern",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_interface_spacing": {
+        "key": "support_material_interface_spacing",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_interface_speed": {
+        "key": "support_material_interface_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_interface_top_layers": {
+        "key": "support_material_interface_layers",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_line_width": {
+        "key": "support_material_extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_object_xy_distance": {
+        "key": "support_material_xy_spacing",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_on_build_plate_only": {
+        "key": "support_material_buildplate_only",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_speed": {
+        "key": "support_material_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_style": {
+        "key": "support_material_style",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_threshold_angle": {
+        "key": "support_material_threshold",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_top_z_distance": {
+        "key": "support_material_contact_distance",
+        "kind": "rename",
+        "note": ""
+      },
+      "support_type": {
+        "key": null,
+        "kind": "type_changed",
+        "note": "Orca normal/tree(auto) enum -> Prusa support_style (snug/organic)",
+        "transform": "support_type"
+      },
+      "textured_plate_temp": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "textured_plate_temp_initial_layer": {
+        "key": null,
+        "kind": "removed",
+        "note": "Orca per-plate bed temp slot"
+      },
+      "top_one_wall_type": {
+        "key": "top_one_perimeter_type",
+        "kind": "rename",
+        "note": ""
+      },
+      "top_shell_layers": {
+        "key": "top_solid_layers",
+        "kind": "rename",
+        "note": ""
+      },
+      "top_shell_thickness": {
+        "key": "top_solid_min_thickness",
+        "kind": "rename",
+        "note": ""
+      },
+      "top_surface_acceleration": {
+        "key": "top_solid_infill_acceleration",
+        "kind": "rename",
+        "note": ""
+      },
+      "top_surface_line_width": {
+        "key": "top_infill_extrusion_width",
+        "kind": "rename",
+        "note": ""
+      },
+      "top_surface_pattern": {
+        "key": "top_fill_pattern",
+        "kind": "rename",
+        "note": ""
+      },
+      "top_surface_speed": {
+        "key": "top_solid_infill_speed",
+        "kind": "rename",
+        "note": ""
+      },
+      "tree_support_angle_slow": {
+        "key": "support_tree_angle_slow",
+        "kind": "rename",
+        "note": ""
+      },
+      "tree_support_branch_angle": {
+        "key": "support_tree_angle",
+        "kind": "rename",
+        "note": ""
+      },
+      "tree_support_branch_diameter": {
+        "key": "support_tree_branch_diameter",
+        "kind": "rename",
+        "note": ""
+      },
+      "tree_support_branch_diameter_angle": {
+        "key": "support_tree_branch_diameter_angle",
+        "kind": "rename",
+        "note": ""
+      },
+      "tree_support_branch_distance": {
+        "key": "support_tree_branch_distance",
+        "kind": "rename",
+        "note": ""
+      },
+      "tree_support_tip_diameter": {
+        "key": "support_tree_tip_diameter",
+        "kind": "rename",
+        "note": ""
+      },
+      "tree_support_top_rate": {
+        "key": "support_tree_top_rate",
+        "kind": "rename",
+        "note": ""
+      },
+      "wall_filament": {
+        "key": "perimeter_extruder",
+        "kind": "rename",
+        "note": ""
+      },
+      "wall_generator": {
+        "key": "perimeter_generator",
+        "kind": "rename",
+        "note": ""
+      },
+      "wall_loops": {
+        "key": "perimeters",
+        "kind": "rename",
+        "note": ""
+      },
+      "wall_sequence": {
+        "key": "external_perimeters_first",
+        "kind": "enum_remap",
+        "note": "Orca wall_sequence enum -> Prusa external_perimeters_first bool",
+        "values": {
+          "inner wall/outer wall": "0",
+          "inner/outer": "0",
+          "inner/outer wall": "0",
+          "outer wall/inner wall": "1",
+          "outer/inner": "1",
+          "outer/inner wall": "1"
+        }
+      },
+      "wipe_tower_filament": {
+        "key": "wipe_tower_extruder",
+        "kind": "rename",
+        "note": ""
+      },
+      "xy_contour_compensation": {
+        "key": "xy_size_compensation",
+        "kind": "rename",
+        "note": ""
+      },
+      "z_hop": {
+        "key": "retract_lift",
+        "kind": "rename",
+        "note": ""
+      }
+    },
+    "prusaslicer": {
+      "arc_fitting": {
+        "key": "arc_fitting",
+        "kind": "identity",
+        "note": ""
+      },
+      "avoid_crossing_perimeters": {
+        "key": "avoid_crossing_perimeters",
+        "kind": "identity",
+        "note": ""
+      },
+      "avoid_crossing_perimeters_max_detour": {
+        "key": "avoid_crossing_perimeters_max_detour",
+        "kind": "identity",
+        "note": ""
+      },
+      "bed_shape": {
+        "key": "bed_shape",
+        "kind": "identity",
+        "note": ""
+      },
+      "bed_temperature": {
+        "key": "bed_temperature",
+        "kind": "identity",
+        "note": ""
+      },
+      "before_layer_gcode": {
+        "key": "before_layer_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "bottom_fill_pattern": {
+        "key": "bottom_fill_pattern",
+        "kind": "identity",
+        "note": ""
+      },
+      "bottom_solid_layers": {
+        "key": "bottom_solid_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "bottom_solid_min_thickness": {
+        "key": "bottom_solid_min_thickness",
+        "kind": "identity",
+        "note": ""
+      },
+      "bridge_fan_speed": {
+        "key": "bridge_fan_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "bridge_flow_ratio": {
+        "key": "bridge_flow_ratio",
+        "kind": "identity",
+        "note": ""
+      },
+      "brim_separation": {
+        "key": "brim_separation",
+        "kind": "identity",
+        "note": ""
+      },
+      "cooling": {
+        "key": "cooling",
+        "kind": "identity",
+        "note": ""
+      },
+      "deretract_speed": {
+        "key": "deretract_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "disable_fan_first_layers": {
+        "key": "disable_fan_first_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "dont_support_bridges": {
+        "key": "dont_support_bridges",
+        "kind": "identity",
+        "note": ""
+      },
+      "end_filament_gcode": {
+        "key": "end_filament_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "end_gcode": {
+        "key": "end_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "external_perimeter_acceleration": {
+        "key": "external_perimeter_acceleration",
+        "kind": "identity",
+        "note": ""
+      },
+      "external_perimeter_extrusion_width": {
+        "key": "external_perimeter_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "external_perimeter_speed": {
+        "key": "external_perimeter_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "extra_perimeters": {
+        "key": "extra_perimeters",
+        "kind": "identity",
+        "note": ""
+      },
+      "extruder_clearance_height": {
+        "key": "extruder_clearance_height",
+        "kind": "identity",
+        "note": ""
+      },
+      "extrusion_multiplier": {
+        "key": "extrusion_multiplier",
+        "kind": "identity",
+        "note": ""
+      },
+      "extrusion_width": {
+        "key": "extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "fan_always_on": {
+        "key": "fan_always_on",
+        "kind": "identity",
+        "note": ""
+      },
+      "fan_below_layer_time": {
+        "key": "fan_below_layer_time",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_deretract_speed": {
+        "key": "filament_deretract_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_retract_before_travel": {
+        "key": "filament_retract_before_travel",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_retract_layer_change": {
+        "key": "filament_retract_layer_change",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_retract_length": {
+        "key": "filament_retract_length",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_retract_lift": {
+        "key": "filament_retract_lift",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_retract_speed": {
+        "key": "filament_retract_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "fill_angle": {
+        "key": "fill_angle",
+        "kind": "identity",
+        "note": ""
+      },
+      "fill_density": {
+        "key": "fill_density",
+        "kind": "identity",
+        "note": ""
+      },
+      "fill_pattern": {
+        "key": "fill_pattern",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_acceleration": {
+        "key": "first_layer_acceleration",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_bed_temperature": {
+        "key": "first_layer_bed_temperature",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_extrusion_width": {
+        "key": "first_layer_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_height": {
+        "key": "first_layer_height",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_speed": {
+        "key": "first_layer_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_temperature": {
+        "key": "first_layer_temperature",
+        "kind": "identity",
+        "note": ""
+      },
+      "fuzzy_skin_point_dist": {
+        "key": "fuzzy_skin_point_dist",
+        "kind": "identity",
+        "note": ""
+      },
+      "gap_fill_enabled": {
+        "key": "gap_fill_enabled",
+        "kind": "identity",
+        "note": ""
+      },
+      "gap_fill_speed": {
+        "key": "gap_fill_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_acceleration": {
+        "key": "infill_acceleration",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_every_layers": {
+        "key": "infill_every_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_extruder": {
+        "key": "infill_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_extrusion_width": {
+        "key": "infill_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_first": {
+        "key": "infill_first",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_overlap": {
+        "key": "infill_overlap",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_speed": {
+        "key": "infill_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "ironing_flowrate": {
+        "key": "ironing_flowrate",
+        "kind": "identity",
+        "note": ""
+      },
+      "layer_gcode": {
+        "key": "layer_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "machine_max_feedrate_e": {
+        "key": "machine_max_feedrate_e",
+        "kind": "identity",
+        "note": ""
+      },
+      "machine_max_feedrate_x": {
+        "key": "machine_max_feedrate_x",
+        "kind": "identity",
+        "note": ""
+      },
+      "machine_max_feedrate_y": {
+        "key": "machine_max_feedrate_y",
+        "kind": "identity",
+        "note": ""
+      },
+      "machine_max_feedrate_z": {
+        "key": "machine_max_feedrate_z",
+        "kind": "identity",
+        "note": ""
+      },
+      "max_fan_speed": {
+        "key": "max_fan_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "max_print_height": {
+        "key": "max_print_height",
+        "kind": "identity",
+        "note": ""
+      },
+      "max_volumetric_extrusion_rate_slope_positive": {
+        "key": "max_volumetric_extrusion_rate_slope_positive",
+        "kind": "identity",
+        "note": ""
+      },
+      "min_fan_speed": {
+        "key": "min_fan_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "min_print_speed": {
+        "key": "min_print_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "only_one_perimeter_first_layer": {
+        "key": "only_one_perimeter_first_layer",
+        "kind": "identity",
+        "note": ""
+      },
+      "only_retract_when_crossing_perimeters": {
+        "key": "only_retract_when_crossing_perimeters",
+        "kind": "identity",
+        "note": ""
+      },
+      "output_filename_format": {
+        "key": "output_filename_format",
+        "kind": "identity",
+        "note": ""
+      },
+      "overhang_speed_0": {
+        "key": "overhang_speed_0",
+        "kind": "identity",
+        "note": ""
+      },
+      "overhang_speed_1": {
+        "key": "overhang_speed_1",
+        "kind": "identity",
+        "note": ""
+      },
+      "overhang_speed_2": {
+        "key": "overhang_speed_2",
+        "kind": "identity",
+        "note": ""
+      },
+      "overhang_speed_3": {
+        "key": "overhang_speed_3",
+        "kind": "identity",
+        "note": ""
+      },
+      "overhangs": {
+        "key": "overhangs",
+        "kind": "identity",
+        "note": ""
+      },
+      "pause_print_gcode": {
+        "key": "pause_print_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "perimeter_extruder": {
+        "key": "perimeter_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "perimeter_extrusion_width": {
+        "key": "perimeter_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "perimeter_generator": {
+        "key": "perimeter_generator",
+        "kind": "identity",
+        "note": ""
+      },
+      "perimeter_speed": {
+        "key": "perimeter_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "perimeters": {
+        "key": "perimeters",
+        "kind": "identity",
+        "note": ""
+      },
+      "retract_before_travel": {
+        "key": "retract_before_travel",
+        "kind": "identity",
+        "note": ""
+      },
+      "retract_layer_change": {
+        "key": "retract_layer_change",
+        "kind": "identity",
+        "note": ""
+      },
+      "retract_length": {
+        "key": "retract_length",
+        "kind": "identity",
+        "note": ""
+      },
+      "retract_lift": {
+        "key": "retract_lift",
+        "kind": "identity",
+        "note": ""
+      },
+      "retract_speed": {
+        "key": "retract_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "skirts": {
+        "key": "skirts",
+        "kind": "identity",
+        "note": ""
+      },
+      "slowdown_below_layer_time": {
+        "key": "slowdown_below_layer_time",
+        "kind": "identity",
+        "note": ""
+      },
+      "solid_infill_acceleration": {
+        "key": "solid_infill_acceleration",
+        "kind": "identity",
+        "note": ""
+      },
+      "solid_infill_below_area": {
+        "key": "solid_infill_below_area",
+        "kind": "identity",
+        "note": ""
+      },
+      "solid_infill_extruder": {
+        "key": "solid_infill_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "solid_infill_extrusion_width": {
+        "key": "solid_infill_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "solid_infill_speed": {
+        "key": "solid_infill_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "spiral_vase": {
+        "key": "spiral_vase",
+        "kind": "identity",
+        "note": ""
+      },
+      "start_filament_gcode": {
+        "key": "start_filament_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "start_gcode": {
+        "key": "start_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material": {
+        "key": "support_material",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_angle": {
+        "key": "support_material_angle",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_bottom_contact_distance": {
+        "key": "support_material_bottom_contact_distance",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_bottom_interface_layers": {
+        "key": "support_material_bottom_interface_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_buildplate_only": {
+        "key": "support_material_buildplate_only",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_contact_distance": {
+        "key": "support_material_contact_distance",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_enforce_layers": {
+        "key": "support_material_enforce_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_extruder": {
+        "key": "support_material_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_extrusion_width": {
+        "key": "support_material_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_contact_loops": {
+        "key": "support_material_interface_contact_loops",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_extruder": {
+        "key": "support_material_interface_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_layers": {
+        "key": "support_material_interface_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_pattern": {
+        "key": "support_material_interface_pattern",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_spacing": {
+        "key": "support_material_interface_spacing",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_speed": {
+        "key": "support_material_interface_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_pattern": {
+        "key": "support_material_pattern",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_spacing": {
+        "key": "support_material_spacing",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_speed": {
+        "key": "support_material_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_style": {
+        "key": "support_material_style",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_threshold": {
+        "key": "support_material_threshold",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_xy_spacing": {
+        "key": "support_material_xy_spacing",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_angle": {
+        "key": "support_tree_angle",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_angle_slow": {
+        "key": "support_tree_angle_slow",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_branch_diameter": {
+        "key": "support_tree_branch_diameter",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_branch_diameter_angle": {
+        "key": "support_tree_branch_diameter_angle",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_branch_distance": {
+        "key": "support_tree_branch_distance",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_tip_diameter": {
+        "key": "support_tree_tip_diameter",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_top_rate": {
+        "key": "support_tree_top_rate",
+        "kind": "identity",
+        "note": ""
+      },
+      "temperature": {
+        "key": "temperature",
+        "kind": "identity",
+        "note": ""
+      },
+      "thin_walls": {
+        "key": "thin_walls",
+        "kind": "identity",
+        "note": ""
+      },
+      "toolchange_gcode": {
+        "key": "toolchange_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_fill_pattern": {
+        "key": "top_fill_pattern",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_infill_extrusion_width": {
+        "key": "top_infill_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_one_perimeter_type": {
+        "key": "top_one_perimeter_type",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_solid_infill_acceleration": {
+        "key": "top_solid_infill_acceleration",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_solid_infill_speed": {
+        "key": "top_solid_infill_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_solid_layers": {
+        "key": "top_solid_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_solid_min_thickness": {
+        "key": "top_solid_min_thickness",
+        "kind": "identity",
+        "note": ""
+      },
+      "wipe_tower": {
+        "key": "wipe_tower",
+        "kind": "identity",
+        "note": ""
+      },
+      "wipe_tower_brim_width": {
+        "key": "wipe_tower_brim_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "wipe_tower_extruder": {
+        "key": "wipe_tower_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "wipe_tower_width": {
+        "key": "wipe_tower_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "xy_size_compensation": {
+        "key": "xy_size_compensation",
+        "kind": "identity",
+        "note": ""
+      }
+    },
+    "slic3r": {
+      "arc_fitting": {
+        "key": "arc_fitting",
+        "kind": "identity",
+        "note": ""
+      },
+      "avoid_crossing_perimeters": {
+        "key": "avoid_crossing_perimeters",
+        "kind": "identity",
+        "note": ""
+      },
+      "avoid_crossing_perimeters_max_detour": {
+        "key": "avoid_crossing_perimeters_max_detour",
+        "kind": "identity",
+        "note": ""
+      },
+      "bed_shape": {
+        "key": "bed_shape",
+        "kind": "identity",
+        "note": ""
+      },
+      "bed_temperature": {
+        "key": "bed_temperature",
+        "kind": "identity",
+        "note": ""
+      },
+      "before_layer_gcode": {
+        "key": "before_layer_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "bottom_fill_pattern": {
+        "key": "bottom_fill_pattern",
+        "kind": "identity",
+        "note": ""
+      },
+      "bottom_solid_layers": {
+        "key": "bottom_solid_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "bottom_solid_min_thickness": {
+        "key": "bottom_solid_min_thickness",
+        "kind": "identity",
+        "note": ""
+      },
+      "bridge_fan_speed": {
+        "key": "bridge_fan_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "bridge_flow_ratio": {
+        "key": "bridge_flow_ratio",
+        "kind": "identity",
+        "note": ""
+      },
+      "brim_separation": {
+        "key": "brim_separation",
+        "kind": "identity",
+        "note": ""
+      },
+      "cooling": {
+        "key": "cooling",
+        "kind": "identity",
+        "note": ""
+      },
+      "deretract_speed": {
+        "key": "deretract_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "disable_fan_first_layers": {
+        "key": "disable_fan_first_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "dont_support_bridges": {
+        "key": "dont_support_bridges",
+        "kind": "identity",
+        "note": ""
+      },
+      "end_filament_gcode": {
+        "key": "end_filament_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "end_gcode": {
+        "key": "end_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "external_perimeter_acceleration": {
+        "key": "external_perimeter_acceleration",
+        "kind": "identity",
+        "note": ""
+      },
+      "external_perimeter_extrusion_width": {
+        "key": "external_perimeter_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "external_perimeter_speed": {
+        "key": "external_perimeter_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "extra_perimeters": {
+        "key": "extra_perimeters",
+        "kind": "identity",
+        "note": ""
+      },
+      "extruder_clearance_height": {
+        "key": "extruder_clearance_height",
+        "kind": "identity",
+        "note": ""
+      },
+      "extrusion_multiplier": {
+        "key": "extrusion_multiplier",
+        "kind": "identity",
+        "note": ""
+      },
+      "extrusion_width": {
+        "key": "extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "fan_always_on": {
+        "key": "fan_always_on",
+        "kind": "identity",
+        "note": ""
+      },
+      "fan_below_layer_time": {
+        "key": "fan_below_layer_time",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_deretract_speed": {
+        "key": "filament_deretract_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_retract_before_travel": {
+        "key": "filament_retract_before_travel",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_retract_layer_change": {
+        "key": "filament_retract_layer_change",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_retract_length": {
+        "key": "filament_retract_length",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_retract_lift": {
+        "key": "filament_retract_lift",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_retract_speed": {
+        "key": "filament_retract_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "fill_angle": {
+        "key": "fill_angle",
+        "kind": "identity",
+        "note": ""
+      },
+      "fill_density": {
+        "key": "fill_density",
+        "kind": "identity",
+        "note": ""
+      },
+      "fill_pattern": {
+        "key": "fill_pattern",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_acceleration": {
+        "key": "first_layer_acceleration",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_bed_temperature": {
+        "key": "first_layer_bed_temperature",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_extrusion_width": {
+        "key": "first_layer_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_height": {
+        "key": "first_layer_height",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_speed": {
+        "key": "first_layer_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_temperature": {
+        "key": "first_layer_temperature",
+        "kind": "identity",
+        "note": ""
+      },
+      "fuzzy_skin_point_dist": {
+        "key": "fuzzy_skin_point_dist",
+        "kind": "identity",
+        "note": ""
+      },
+      "gap_fill_enabled": {
+        "key": "gap_fill_enabled",
+        "kind": "identity",
+        "note": ""
+      },
+      "gap_fill_speed": {
+        "key": "gap_fill_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_acceleration": {
+        "key": "infill_acceleration",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_every_layers": {
+        "key": "infill_every_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_extruder": {
+        "key": "infill_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_extrusion_width": {
+        "key": "infill_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_first": {
+        "key": "infill_first",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_overlap": {
+        "key": "infill_overlap",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_speed": {
+        "key": "infill_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "ironing_flowrate": {
+        "key": "ironing_flowrate",
+        "kind": "identity",
+        "note": ""
+      },
+      "layer_gcode": {
+        "key": "layer_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "machine_max_feedrate_e": {
+        "key": "machine_max_feedrate_e",
+        "kind": "identity",
+        "note": ""
+      },
+      "machine_max_feedrate_x": {
+        "key": "machine_max_feedrate_x",
+        "kind": "identity",
+        "note": ""
+      },
+      "machine_max_feedrate_y": {
+        "key": "machine_max_feedrate_y",
+        "kind": "identity",
+        "note": ""
+      },
+      "machine_max_feedrate_z": {
+        "key": "machine_max_feedrate_z",
+        "kind": "identity",
+        "note": ""
+      },
+      "max_fan_speed": {
+        "key": "max_fan_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "max_print_height": {
+        "key": "max_print_height",
+        "kind": "identity",
+        "note": ""
+      },
+      "max_volumetric_extrusion_rate_slope_positive": {
+        "key": "max_volumetric_extrusion_rate_slope_positive",
+        "kind": "identity",
+        "note": ""
+      },
+      "min_fan_speed": {
+        "key": "min_fan_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "min_print_speed": {
+        "key": "min_print_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "only_one_perimeter_first_layer": {
+        "key": "only_one_perimeter_first_layer",
+        "kind": "identity",
+        "note": ""
+      },
+      "only_retract_when_crossing_perimeters": {
+        "key": "only_retract_when_crossing_perimeters",
+        "kind": "identity",
+        "note": ""
+      },
+      "output_filename_format": {
+        "key": "output_filename_format",
+        "kind": "identity",
+        "note": ""
+      },
+      "overhang_speed_0": {
+        "key": "overhang_speed_0",
+        "kind": "identity",
+        "note": ""
+      },
+      "overhang_speed_1": {
+        "key": "overhang_speed_1",
+        "kind": "identity",
+        "note": ""
+      },
+      "overhang_speed_2": {
+        "key": "overhang_speed_2",
+        "kind": "identity",
+        "note": ""
+      },
+      "overhang_speed_3": {
+        "key": "overhang_speed_3",
+        "kind": "identity",
+        "note": ""
+      },
+      "overhangs": {
+        "key": "overhangs",
+        "kind": "identity",
+        "note": ""
+      },
+      "pause_print_gcode": {
+        "key": "pause_print_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "perimeter_extruder": {
+        "key": "perimeter_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "perimeter_extrusion_width": {
+        "key": "perimeter_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "perimeter_generator": {
+        "key": "perimeter_generator",
+        "kind": "identity",
+        "note": ""
+      },
+      "perimeter_speed": {
+        "key": "perimeter_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "perimeters": {
+        "key": "perimeters",
+        "kind": "identity",
+        "note": ""
+      },
+      "retract_before_travel": {
+        "key": "retract_before_travel",
+        "kind": "identity",
+        "note": ""
+      },
+      "retract_layer_change": {
+        "key": "retract_layer_change",
+        "kind": "identity",
+        "note": ""
+      },
+      "retract_length": {
+        "key": "retract_length",
+        "kind": "identity",
+        "note": ""
+      },
+      "retract_lift": {
+        "key": "retract_lift",
+        "kind": "identity",
+        "note": ""
+      },
+      "retract_speed": {
+        "key": "retract_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "skirts": {
+        "key": "skirts",
+        "kind": "identity",
+        "note": ""
+      },
+      "slowdown_below_layer_time": {
+        "key": "slowdown_below_layer_time",
+        "kind": "identity",
+        "note": ""
+      },
+      "solid_infill_acceleration": {
+        "key": "solid_infill_acceleration",
+        "kind": "identity",
+        "note": ""
+      },
+      "solid_infill_below_area": {
+        "key": "solid_infill_below_area",
+        "kind": "identity",
+        "note": ""
+      },
+      "solid_infill_extruder": {
+        "key": "solid_infill_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "solid_infill_extrusion_width": {
+        "key": "solid_infill_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "solid_infill_speed": {
+        "key": "solid_infill_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "spiral_vase": {
+        "key": "spiral_vase",
+        "kind": "identity",
+        "note": ""
+      },
+      "start_filament_gcode": {
+        "key": "start_filament_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "start_gcode": {
+        "key": "start_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material": {
+        "key": "support_material",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_angle": {
+        "key": "support_material_angle",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_bottom_contact_distance": {
+        "key": "support_material_bottom_contact_distance",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_bottom_interface_layers": {
+        "key": "support_material_bottom_interface_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_buildplate_only": {
+        "key": "support_material_buildplate_only",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_contact_distance": {
+        "key": "support_material_contact_distance",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_enforce_layers": {
+        "key": "support_material_enforce_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_extruder": {
+        "key": "support_material_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_extrusion_width": {
+        "key": "support_material_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_contact_loops": {
+        "key": "support_material_interface_contact_loops",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_extruder": {
+        "key": "support_material_interface_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_layers": {
+        "key": "support_material_interface_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_pattern": {
+        "key": "support_material_interface_pattern",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_spacing": {
+        "key": "support_material_interface_spacing",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_speed": {
+        "key": "support_material_interface_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_pattern": {
+        "key": "support_material_pattern",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_spacing": {
+        "key": "support_material_spacing",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_speed": {
+        "key": "support_material_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_style": {
+        "key": "support_material_style",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_threshold": {
+        "key": "support_material_threshold",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_xy_spacing": {
+        "key": "support_material_xy_spacing",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_angle": {
+        "key": "support_tree_angle",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_angle_slow": {
+        "key": "support_tree_angle_slow",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_branch_diameter": {
+        "key": "support_tree_branch_diameter",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_branch_diameter_angle": {
+        "key": "support_tree_branch_diameter_angle",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_branch_distance": {
+        "key": "support_tree_branch_distance",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_tip_diameter": {
+        "key": "support_tree_tip_diameter",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_top_rate": {
+        "key": "support_tree_top_rate",
+        "kind": "identity",
+        "note": ""
+      },
+      "temperature": {
+        "key": "temperature",
+        "kind": "identity",
+        "note": ""
+      },
+      "thin_walls": {
+        "key": "thin_walls",
+        "kind": "identity",
+        "note": ""
+      },
+      "toolchange_gcode": {
+        "key": "toolchange_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_fill_pattern": {
+        "key": "top_fill_pattern",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_infill_extrusion_width": {
+        "key": "top_infill_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_one_perimeter_type": {
+        "key": "top_one_perimeter_type",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_solid_infill_acceleration": {
+        "key": "top_solid_infill_acceleration",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_solid_infill_speed": {
+        "key": "top_solid_infill_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_solid_layers": {
+        "key": "top_solid_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_solid_min_thickness": {
+        "key": "top_solid_min_thickness",
+        "kind": "identity",
+        "note": ""
+      },
+      "wipe_tower": {
+        "key": "wipe_tower",
+        "kind": "identity",
+        "note": ""
+      },
+      "wipe_tower_brim_width": {
+        "key": "wipe_tower_brim_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "wipe_tower_extruder": {
+        "key": "wipe_tower_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "wipe_tower_width": {
+        "key": "wipe_tower_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "xy_size_compensation": {
+        "key": "xy_size_compensation",
+        "kind": "identity",
+        "note": ""
+      }
+    },
+    "superslicer": {
+      "arc_fitting": {
+        "key": "arc_fitting",
+        "kind": "identity",
+        "note": ""
+      },
+      "avoid_crossing_perimeters": {
+        "key": "avoid_crossing_perimeters",
+        "kind": "identity",
+        "note": ""
+      },
+      "avoid_crossing_perimeters_max_detour": {
+        "key": "avoid_crossing_perimeters_max_detour",
+        "kind": "identity",
+        "note": ""
+      },
+      "bed_shape": {
+        "key": "bed_shape",
+        "kind": "identity",
+        "note": ""
+      },
+      "bed_temperature": {
+        "key": "bed_temperature",
+        "kind": "identity",
+        "note": ""
+      },
+      "before_layer_gcode": {
+        "key": "before_layer_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "bottom_fill_pattern": {
+        "key": "bottom_fill_pattern",
+        "kind": "identity",
+        "note": ""
+      },
+      "bottom_solid_layers": {
+        "key": "bottom_solid_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "bottom_solid_min_thickness": {
+        "key": "bottom_solid_min_thickness",
+        "kind": "identity",
+        "note": ""
+      },
+      "bridge_fan_speed": {
+        "key": "bridge_fan_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "bridge_flow_ratio": {
+        "key": "bridge_flow_ratio",
+        "kind": "identity",
+        "note": ""
+      },
+      "brim_separation": {
+        "key": "brim_separation",
+        "kind": "identity",
+        "note": ""
+      },
+      "cooling": {
+        "key": "cooling",
+        "kind": "identity",
+        "note": ""
+      },
+      "deretract_speed": {
+        "key": "deretract_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "disable_fan_first_layers": {
+        "key": "disable_fan_first_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "dont_support_bridges": {
+        "key": "dont_support_bridges",
+        "kind": "identity",
+        "note": ""
+      },
+      "end_filament_gcode": {
+        "key": "end_filament_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "end_gcode": {
+        "key": "end_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "external_perimeter_acceleration": {
+        "key": "external_perimeter_acceleration",
+        "kind": "identity",
+        "note": ""
+      },
+      "external_perimeter_extrusion_width": {
+        "key": "external_perimeter_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "external_perimeter_speed": {
+        "key": "external_perimeter_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "extra_perimeters": {
+        "key": "extra_perimeters",
+        "kind": "identity",
+        "note": ""
+      },
+      "extruder_clearance_height": {
+        "key": "extruder_clearance_height",
+        "kind": "identity",
+        "note": ""
+      },
+      "extrusion_multiplier": {
+        "key": "extrusion_multiplier",
+        "kind": "identity",
+        "note": ""
+      },
+      "extrusion_width": {
+        "key": "extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "fan_always_on": {
+        "key": "fan_always_on",
+        "kind": "identity",
+        "note": ""
+      },
+      "fan_below_layer_time": {
+        "key": "fan_below_layer_time",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_deretract_speed": {
+        "key": "filament_deretract_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_retract_before_travel": {
+        "key": "filament_retract_before_travel",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_retract_layer_change": {
+        "key": "filament_retract_layer_change",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_retract_length": {
+        "key": "filament_retract_length",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_retract_lift": {
+        "key": "filament_retract_lift",
+        "kind": "identity",
+        "note": ""
+      },
+      "filament_retract_speed": {
+        "key": "filament_retract_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "fill_angle": {
+        "key": "fill_angle",
+        "kind": "identity",
+        "note": ""
+      },
+      "fill_density": {
+        "key": "fill_density",
+        "kind": "identity",
+        "note": ""
+      },
+      "fill_pattern": {
+        "key": "fill_pattern",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_acceleration": {
+        "key": "first_layer_acceleration",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_bed_temperature": {
+        "key": "first_layer_bed_temperature",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_extrusion_width": {
+        "key": "first_layer_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_height": {
+        "key": "first_layer_height",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_speed": {
+        "key": "first_layer_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "first_layer_temperature": {
+        "key": "first_layer_temperature",
+        "kind": "identity",
+        "note": ""
+      },
+      "fuzzy_skin_point_dist": {
+        "key": "fuzzy_skin_point_dist",
+        "kind": "identity",
+        "note": ""
+      },
+      "gap_fill_enabled": {
+        "key": "gap_fill_enabled",
+        "kind": "identity",
+        "note": ""
+      },
+      "gap_fill_speed": {
+        "key": "gap_fill_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_acceleration": {
+        "key": "infill_acceleration",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_every_layers": {
+        "key": "infill_every_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_extruder": {
+        "key": "infill_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_extrusion_width": {
+        "key": "infill_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_first": {
+        "key": "infill_first",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_overlap": {
+        "key": "infill_overlap",
+        "kind": "identity",
+        "note": ""
+      },
+      "infill_speed": {
+        "key": "infill_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "ironing_flowrate": {
+        "key": "ironing_flowrate",
+        "kind": "identity",
+        "note": ""
+      },
+      "layer_gcode": {
+        "key": "layer_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "machine_max_feedrate_e": {
+        "key": "machine_max_feedrate_e",
+        "kind": "identity",
+        "note": ""
+      },
+      "machine_max_feedrate_x": {
+        "key": "machine_max_feedrate_x",
+        "kind": "identity",
+        "note": ""
+      },
+      "machine_max_feedrate_y": {
+        "key": "machine_max_feedrate_y",
+        "kind": "identity",
+        "note": ""
+      },
+      "machine_max_feedrate_z": {
+        "key": "machine_max_feedrate_z",
+        "kind": "identity",
+        "note": ""
+      },
+      "max_fan_speed": {
+        "key": "max_fan_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "max_print_height": {
+        "key": "max_print_height",
+        "kind": "identity",
+        "note": ""
+      },
+      "max_volumetric_extrusion_rate_slope_positive": {
+        "key": "max_volumetric_extrusion_rate_slope_positive",
+        "kind": "identity",
+        "note": ""
+      },
+      "min_fan_speed": {
+        "key": "min_fan_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "min_print_speed": {
+        "key": "min_print_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "only_one_perimeter_first_layer": {
+        "key": "only_one_perimeter_first_layer",
+        "kind": "identity",
+        "note": ""
+      },
+      "only_retract_when_crossing_perimeters": {
+        "key": "only_retract_when_crossing_perimeters",
+        "kind": "identity",
+        "note": ""
+      },
+      "output_filename_format": {
+        "key": "output_filename_format",
+        "kind": "identity",
+        "note": ""
+      },
+      "overhang_speed_0": {
+        "key": "overhang_speed_0",
+        "kind": "identity",
+        "note": ""
+      },
+      "overhang_speed_1": {
+        "key": "overhang_speed_1",
+        "kind": "identity",
+        "note": ""
+      },
+      "overhang_speed_2": {
+        "key": "overhang_speed_2",
+        "kind": "identity",
+        "note": ""
+      },
+      "overhang_speed_3": {
+        "key": "overhang_speed_3",
+        "kind": "identity",
+        "note": ""
+      },
+      "overhangs": {
+        "key": "overhangs",
+        "kind": "identity",
+        "note": ""
+      },
+      "pause_print_gcode": {
+        "key": "pause_print_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "perimeter_extruder": {
+        "key": "perimeter_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "perimeter_extrusion_width": {
+        "key": "perimeter_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "perimeter_generator": {
+        "key": "perimeter_generator",
+        "kind": "identity",
+        "note": ""
+      },
+      "perimeter_speed": {
+        "key": "perimeter_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "perimeters": {
+        "key": "perimeters",
+        "kind": "identity",
+        "note": ""
+      },
+      "retract_before_travel": {
+        "key": "retract_before_travel",
+        "kind": "identity",
+        "note": ""
+      },
+      "retract_layer_change": {
+        "key": "retract_layer_change",
+        "kind": "identity",
+        "note": ""
+      },
+      "retract_length": {
+        "key": "retract_length",
+        "kind": "identity",
+        "note": ""
+      },
+      "retract_lift": {
+        "key": "retract_lift",
+        "kind": "identity",
+        "note": ""
+      },
+      "retract_speed": {
+        "key": "retract_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "skirts": {
+        "key": "skirts",
+        "kind": "identity",
+        "note": ""
+      },
+      "slowdown_below_layer_time": {
+        "key": "slowdown_below_layer_time",
+        "kind": "identity",
+        "note": ""
+      },
+      "solid_infill_acceleration": {
+        "key": "solid_infill_acceleration",
+        "kind": "identity",
+        "note": ""
+      },
+      "solid_infill_below_area": {
+        "key": "solid_infill_below_area",
+        "kind": "identity",
+        "note": ""
+      },
+      "solid_infill_extruder": {
+        "key": "solid_infill_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "solid_infill_extrusion_width": {
+        "key": "solid_infill_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "solid_infill_speed": {
+        "key": "solid_infill_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "spiral_vase": {
+        "key": "spiral_vase",
+        "kind": "identity",
+        "note": ""
+      },
+      "start_filament_gcode": {
+        "key": "start_filament_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "start_gcode": {
+        "key": "start_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material": {
+        "key": "support_material",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_angle": {
+        "key": "support_material_angle",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_bottom_contact_distance": {
+        "key": "support_material_bottom_contact_distance",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_bottom_interface_layers": {
+        "key": "support_material_bottom_interface_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_buildplate_only": {
+        "key": "support_material_buildplate_only",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_contact_distance": {
+        "key": "support_material_contact_distance",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_enforce_layers": {
+        "key": "support_material_enforce_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_extruder": {
+        "key": "support_material_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_extrusion_width": {
+        "key": "support_material_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_contact_loops": {
+        "key": "support_material_interface_contact_loops",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_extruder": {
+        "key": "support_material_interface_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_layers": {
+        "key": "support_material_interface_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_pattern": {
+        "key": "support_material_interface_pattern",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_spacing": {
+        "key": "support_material_interface_spacing",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_interface_speed": {
+        "key": "support_material_interface_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_pattern": {
+        "key": "support_material_pattern",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_spacing": {
+        "key": "support_material_spacing",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_speed": {
+        "key": "support_material_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_style": {
+        "key": "support_material_style",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_threshold": {
+        "key": "support_material_threshold",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_material_xy_spacing": {
+        "key": "support_material_xy_spacing",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_angle": {
+        "key": "support_tree_angle",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_angle_slow": {
+        "key": "support_tree_angle_slow",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_branch_diameter": {
+        "key": "support_tree_branch_diameter",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_branch_diameter_angle": {
+        "key": "support_tree_branch_diameter_angle",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_branch_distance": {
+        "key": "support_tree_branch_distance",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_tip_diameter": {
+        "key": "support_tree_tip_diameter",
+        "kind": "identity",
+        "note": ""
+      },
+      "support_tree_top_rate": {
+        "key": "support_tree_top_rate",
+        "kind": "identity",
+        "note": ""
+      },
+      "temperature": {
+        "key": "temperature",
+        "kind": "identity",
+        "note": ""
+      },
+      "thin_walls": {
+        "key": "thin_walls",
+        "kind": "identity",
+        "note": ""
+      },
+      "toolchange_gcode": {
+        "key": "toolchange_gcode",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_fill_pattern": {
+        "key": "top_fill_pattern",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_infill_extrusion_width": {
+        "key": "top_infill_extrusion_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_one_perimeter_type": {
+        "key": "top_one_perimeter_type",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_solid_infill_acceleration": {
+        "key": "top_solid_infill_acceleration",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_solid_infill_speed": {
+        "key": "top_solid_infill_speed",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_solid_layers": {
+        "key": "top_solid_layers",
+        "kind": "identity",
+        "note": ""
+      },
+      "top_solid_min_thickness": {
+        "key": "top_solid_min_thickness",
+        "kind": "identity",
+        "note": ""
+      },
+      "wipe_tower": {
+        "key": "wipe_tower",
+        "kind": "identity",
+        "note": ""
+      },
+      "wipe_tower_brim_width": {
+        "key": "wipe_tower_brim_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "wipe_tower_extruder": {
+        "key": "wipe_tower_extruder",
+        "kind": "identity",
+        "note": ""
+      },
+      "wipe_tower_width": {
+        "key": "wipe_tower_width",
+        "kind": "identity",
+        "note": ""
+      },
+      "xy_size_compensation": {
+        "key": "xy_size_compensation",
+        "kind": "identity",
+        "note": ""
+      }
+    }
+  },
+  "gcode_placeholder_renames": {
+    "bed_temperature_initial_layer": "first_layer_bed_temperature",
+    "bed_temperature_initial_layer_single": "first_layer_bed_temperature",
+    "nozzle_temperature_initial_layer": "first_layer_temperature"
+  },
+  "generated_from": "app/src/main/java/com/flashforge/farm/config/ConfigObject.java",
+  "schema": "dialect_profile_key_map",
+  "target_dialect": "prusaslicer3",
+  "version": 2
+}

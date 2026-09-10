@@ -82,6 +82,13 @@ public class FarmApp extends Application {
     public void onCreate() {
         super.onCreate();
         INSTANCE = this;
+        // Issue #47: the Application object is also created inside
+        // isolatedProcess services (quarantine, slice sandbox), which have no
+        // filesystem/network permissions. Skip all startup work there; the
+        // sandbox service needs nothing beyond the loaded Application.
+        if (android.os.Build.VERSION.SDK_INT >= 28 && android.os.Process.isIsolated()) {
+            return;
+        }
         exportPendingCrashesToDownloads();
         AppBoot.run(Arrays.asList(
                 new PrefsTask(),

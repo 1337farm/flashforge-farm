@@ -67,6 +67,7 @@
         <service android:name=".api.AutoDispatchService" android:exported="false" android:foregroundServiceType="dataSync"/>
         <service android:name=".iroh.IrohP2PService" android:exported="false"/>
         <service android:name=".modelrepo.ModelQuarantineService" android:exported="false" android:isolatedProcess="true"/>
+        <service android:name=".slic3r.SliceSandboxService" android:exported="false" android:isolatedProcess="true"/>
         <provider
             android:authorities="${fileProviderAuthority}"
             android:name="androidx.core.content.FileProvider"

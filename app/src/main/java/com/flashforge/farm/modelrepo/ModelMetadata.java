@@ -317,7 +317,7 @@ public class ModelMetadata {
                 throw new IllegalArgumentException("remix hash too long");
             }
             if (remixOf.title != null && remixOf.title.length() > SafetyPolicy.MAX_TITLE_LEN) {
-                throw new IllegalArgumentException("remix title too long");
+                throw new IllegalArgumentException("remix title too long: " + remixOf.title.length() + " > " + SafetyPolicy.MAX_TITLE_LEN);
             }
         }
         

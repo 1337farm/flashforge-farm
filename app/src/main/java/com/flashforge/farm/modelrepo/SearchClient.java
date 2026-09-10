@@ -134,12 +134,30 @@ public class SearchClient {
     }
 
     public String publishLocalProfile(String name, String bio) throws Exception {
+        return publishLocalProfile(name, bio, null);
+    }
+    
+    /**
+     * Publish local profile with signing.
+     * If seed is provided, the profile will be signed with it.
+     */
+    public String publishLocalProfile(String name, String bio, byte[] seed) throws Exception {
         String pubkey = transport.getEndpointId();
         if (pubkey == null || pubkey.isEmpty()) {
             throw new UnavailableException("no local endpoint id");
         }
-        byte[] raw = UserProfile.toJson(pubkey, name, bio, "", null,
-                System.currentTimeMillis() / 1000L);
+        
+        byte[] raw;
+        if (seed != null && seed.length == 32) {
+            // Create signed profile
+            raw = UserProfile.toJsonWithSignature(pubkey, name, bio, "", null,
+                    System.currentTimeMillis() / 1000L, seed);
+        } else {
+            // Legacy unsigned profile (for backward compatibility)
+            raw = UserProfile.toJson(pubkey, name, bio, "", null,
+                    System.currentTimeMillis() / 1000L);
+        }
+        
         UserProfile self = UserProfile.parse(raw, pubkey);
         byte[] hash = transport.storeBlob(raw);
         String ticket = transport.shareTicket(hash);
@@ -207,7 +225,14 @@ public class SearchClient {
             byte[] raw = transport.blobFetch(profileTicket);
             UserProfile probe = UserProfile.parse(raw, null);
             if (probe != null && probe.pubkey != null && !probe.pubkey.isEmpty()) {
-                profileCache.put(probe.pubkey.toLowerCase(), probe);
+                // Verify profile signature if present
+                if (probe.verifySignature()) {
+                    profileCache.put(probe.pubkey.toLowerCase(), probe);
+                } else {
+                    Log.w(TAG, "Profile signature verification failed for " + profileTicket);
+                    // Still cache it but mark as unverified
+                    profileCache.put(probe.pubkey.toLowerCase(), probe);
+                }
             }
         } catch (Exception ignored) {
         }

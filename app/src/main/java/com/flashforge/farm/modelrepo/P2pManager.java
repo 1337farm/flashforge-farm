@@ -7,8 +7,8 @@ import java.io.File;
 
 public final class P2pManager {
     private static final String TAG = "P2pManager";
-    private static final String PREF_SECRET = "iroh_secret";
     private static final String PREF_MIGRATED = "iroh_migrated_v1";
+    private static final String LEGACY_PREF_SECRET = "iroh_secret";
 
     private static IrohModelTransport transport;
     private static boolean migrating;
@@ -16,10 +16,38 @@ public final class P2pManager {
     private P2pManager() {
     }
 
+    /**
+     * Initialize SecurePrefs. Call this early in app lifecycle (e.g., Application.onCreate()).
+     */
+    public static synchronized void initSecureStorage(Context ctx) {
+        if (!SecurePrefs.isInitialized()) {
+            SecurePrefs.init(ctx);
+            
+            // Attempt to migrate from legacy plaintext storage
+            try {
+                String legacyHex = com.flashforge.farm.utils.Prefs.getPrefs()
+                        .getString(LEGACY_PREF_SECRET, null);
+                if (legacyHex != null && !legacyHex.isEmpty()) {
+                    SecurePrefs.migrateFromPlaintext(ctx, legacyHex);
+                    // Clear legacy storage after migration
+                    com.flashforge.farm.utils.Prefs.getPrefs().edit()
+                            .remove(LEGACY_PREF_SECRET).apply();
+                    Log.i(TAG, "Migrated legacy secret key to secure storage");
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to migrate legacy secret key", e);
+            }
+        }
+    }
+
     public static synchronized IrohModelTransport transport(Context ctx) throws ModelTransport.UnavailableException {
         if (transport != null && transport.isReady()) {
             return transport;
         }
+        
+        // Ensure secure storage is initialized
+        initSecureStorage(ctx);
+        
         Context app = ctx.getApplicationContext();
         IrohModelTransport t = new IrohModelTransport();
         byte[] secret = loadSecret();
@@ -101,24 +129,20 @@ public final class P2pManager {
 
     private static byte[] loadSecret() {
         try {
-            String hex = com.flashforge.farm.utils.Prefs.getPrefs().getString(PREF_SECRET, null);
-            if (hex == null || hex.isEmpty()) {
-                return null;
-            }
-            return IrohModelTransport.hexToBytes(hex);
+            SecurePrefs securePrefs = SecurePrefs.getInstance();
+            return securePrefs.loadSecretKey();
         } catch (Exception e) {
+            Log.w(TAG, "Failed to load secret from secure storage", e);
             return null;
         }
     }
 
     private static void saveSecret(byte[] secret) {
         try {
-            if (secret == null || secret.length != 32) {
-                return;
-            }
-            com.flashforge.farm.utils.Prefs.getPrefs().edit()
-                    .putString(PREF_SECRET, IrohModelTransport.bytesToHex(secret)).apply();
-        } catch (Exception ignored) {
+            SecurePrefs securePrefs = SecurePrefs.getInstance();
+            securePrefs.saveSecretKey(secret);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to save secret to secure storage", e);
         }
     }
 

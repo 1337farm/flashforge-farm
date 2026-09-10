@@ -22,6 +22,31 @@ public class ModelPublisher {
     public ModelPublisher(IrohModelTransport transport) {
         this.transport = transport;
     }
+    
+    /**
+     * Publish a model with signing. The metadata will be signed with the provided seed.
+     */
+    public void publishModelWithSigning(File modelFile, ModelMetadata metadata, 
+            byte[] seed, PublishCallback callback) {
+        if (seed == null || seed.length != 32) {
+            callback.onError("Invalid seed for signing");
+            return;
+        }
+        
+        try {
+            // Set the designer pubkey from the seed
+            String pubkeyHex = Identity.hex(Identity.publicKey(seed));
+            metadata.designer.pubkey = pubkeyHex;
+            
+            // Sign the metadata
+            metadata.sign(seed);
+            
+            // Publish normally
+            publishModel(modelFile, metadata, callback);
+        } catch (Exception e) {
+            callback.onError("Signing failed: " + e.getMessage());
+        }
+    }
 
     public void publishModel(File modelFile, ModelMetadata metadata, PublishCallback callback) {
         List<File> files = new ArrayList<>();
@@ -81,6 +106,18 @@ public class ModelPublisher {
                     datas.add(readFile(f));
                 }
                 metadata.files = names;
+                
+                // Compute verification hash for the primary model file
+                if (!datas.isEmpty()) {
+                    String primaryHash = ModelSafety.sha256Stream(new java.io.ByteArrayInputStream(datas.get(0)), datas.get(0).length);
+                    metadata.verification = primaryHash;
+                }
+                
+                // Sign the metadata if a seed is available
+                // Note: In production, the seed should come from SecurePrefs
+                // This is a placeholder - actual signing should be done by the caller
+                // who has access to the user's private key
+                
                 String modelJson = metadata.toJson();
                 callback.onProgress("Publishing to network...", 70);
                 String ticket = transport.publishModel(modelJson, datas);

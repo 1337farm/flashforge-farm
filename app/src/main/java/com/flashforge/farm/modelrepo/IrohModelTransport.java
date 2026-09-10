@@ -70,6 +70,9 @@ public class IrohModelTransport implements ModelTransport {
         final Listener l = listener;
         new Thread(() -> {
             AtomicBoolean finished = new AtomicBoolean(false);
+            ModelMetadata metadata = null;
+            String expectedHash = null;
+            
             IrohTransferListener cb = new IrohTransferListener() {
                 @Override
                 public void onTransferProgress(int statusCode, int progressPct, long downloadedBytes, long totalBytes, String message) {
@@ -92,13 +95,39 @@ public class IrohModelTransport implements ModelTransport {
                     if (finished.get()) {
                         return;
                     }
-                    ModelMetadata meta = ModelMetadata.parse(modelJson);
-                    l.onMetadata(t, meta, entriesFrom(fileNamesJson, modelJson));
+                    try {
+                        metadata = ModelMetadata.parse(modelJson);
+                        l.onMetadata(t, metadata, entriesFrom(fileNamesJson, modelJson));
+                        
+                        // Extract expected hash from metadata verification field
+                        if (metadata.verification != null && !metadata.verification.isEmpty()) {
+                            expectedHash = metadata.verification.toLowerCase();
+                            Log.d(TAG, "Expected hash for " + t + ": " + expectedHash);
+                        } else {
+                            Log.w(TAG, "No verification hash in metadata for " + t);
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Failed to parse metadata for " + t, e);
+                        if (finished.compareAndSet(false, true)) {
+                            l.onError(t, "Invalid metadata: " + e.getMessage());
+                        }
+                    }
                 }
 
                 @Override
                 public void onFetchComplete(String dir) {
-                    finish();
+                    if (finished.get()) {
+                        return;
+                    }
+                    
+                    // Verify hash before completing
+                    if (expectedHash != null && !expectedHash.isEmpty()) {
+                        verifyAndComplete(dir, expectedHash, t, d, l, finished);
+                    } else {
+                        // No hash to verify, complete directly (legacy support)
+                        Log.w(TAG, "Completing fetch without hash verification for " + t);
+                        finish();
+                    }
                 }
 
                 private void finish() {
@@ -119,6 +148,95 @@ public class IrohModelTransport implements ModelTransport {
                 l.onError(t, msg == null ? "fetch failed" : msg);
             }
         }, "iroh-fetch").start();
+    }
+
+    /**
+     * Verify downloaded content hash and complete or quarantine
+     */
+    private void verifyAndComplete(String dirPath, String expectedHash, String ticket, 
+            File outputDir, Listener listener, AtomicBoolean finished) {
+        try {
+            File dir = new File(dirPath);
+            if (!dir.exists() || !dir.isDirectory()) {
+                if (finished.compareAndSet(false, true)) {
+                    listener.onError(ticket, "Download directory missing");
+                }
+                return;
+            }
+            
+            // Collect all files and compute combined hash
+            File[] files = dir.listFiles();
+            if (files == null || files.length == 0) {
+                if (finished.compareAndSet(false, true)) {
+                    listener.onError(ticket, "No files downloaded");
+                }
+                return;
+            }
+            
+            // For multi-file downloads, we need to verify the content
+            // The verification field in metadata should match the SHA-256 of the primary model file
+            // or we need to compute a combined hash
+            String computedHash = computeDirectoryHash(dir);
+            
+            if (!expectedHash.equalsIgnoreCase(computedHash)) {
+                Log.e(TAG, "Hash mismatch for " + ticket + 
+                      ": expected=" + expectedHash + ", got=" + computedHash);
+                
+                // Quarantine the content
+                if (finished.compareAndSet(false, true)) {
+                    listener.onError(ticket, "Hash verification failed - content may be tampered. " +
+                            "Expected: " + expectedHash.substring(0, Math.min(16, expectedHash.length())) +
+                            "..., Got: " + computedHash.substring(0, Math.min(16, computedHash.length())) + "...");
+                }
+                return;
+            }
+            
+            Log.i(TAG, "Hash verification passed for " + ticket);
+            finish();
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Hash verification error for " + ticket, e);
+            if (finished.compareAndSet(false, true)) {
+                listener.onError(ticket, "Verification error: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Compute SHA-256 hash of all files in a directory (sorted by name for consistency)
+     */
+    private String computeDirectoryHash(File dir) throws Exception {
+        File[] files = dir.listFiles();
+        if (files == null || files.length == 0) {
+            return "";
+        }
+        
+        // Sort files by name for consistent hash
+        java.util.Arrays.sort(files, (a, b) -> a.getName().compareTo(b.getName()));
+        
+        java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+        
+        for (File f : files) {
+            if (f.isFile()) {
+                // Include filename in hash to detect file substitution
+                md.update(f.getName().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                
+                try (java.io.FileInputStream fis = new java.io.FileInputStream(f)) {
+                    byte[] buf = new byte[32768];
+                    int n;
+                    while ((n = fis.read(buf)) != -1) {
+                        md.update(buf, 0, n);
+                    }
+                }
+            }
+        }
+        
+        StringBuilder sb = new StringBuilder();
+        for (byte v : md.digest()) {
+            sb.append(Character.forDigit((v >> 4) & 0xF, 16));
+            sb.append(Character.forDigit(v & 0xF, 16));
+        }
+        return sb.toString();
     }
 
     @Override

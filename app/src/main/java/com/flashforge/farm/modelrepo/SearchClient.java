@@ -4,6 +4,7 @@ import android.util.Log;
 
 import com.flashforge.farm.modelrepo.ModelTransport.UnavailableException;
 import com.flashforge.farm.modelrepo.profile.UserProfile;
+import com.flashforge.farm.modelrepo.SecurityLogger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -96,6 +97,7 @@ public class SearchClient {
             long waitTimeMs = searchRateLimiter.getWaitTimeMs();
             String errorMsg = "Rate limit exceeded. Please wait " + (waitTimeMs / 1000) + " seconds.";
             Log.w(TAG, "Search rate limit exceeded for: " + keyword);
+            SecurityLogger.logRateLimitExceeded("Search: " + keyword, waitTimeMs);
             if (callback != null) {
                 callback.onError(errorMsg);
             }
@@ -139,6 +141,7 @@ public class SearchClient {
         
         // Check rate limit (synchronous path)
         if (!searchRateLimiter.tryAcquire()) {
+            SecurityLogger.logRateLimitExceeded("Search (sync): " + keyword, searchRateLimiter.getWaitTimeMs());
             throw new UnavailableException("Search rate limit exceeded");
         }
         
@@ -184,6 +187,7 @@ public class SearchClient {
     public String publishLocalProfile(String name, String bio, byte[] seed) throws Exception {
         // Check profile rate limit
         if (!profileRateLimiter.tryAcquire()) {
+            SecurityLogger.logRateLimitExceeded("Profile publish", profileRateLimiter.getWaitTimeMs());
             throw new UnavailableException("Profile publish rate limit exceeded");
         }
         
@@ -272,9 +276,13 @@ public class SearchClient {
             if (probe != null && probe.pubkey != null && !probe.pubkey.isEmpty()) {
                 // Verify profile signature if present
                 if (probe.verifySignature()) {
+                    SecurityLogger.log(SecurityLogger.Severity.INFO, SecurityLogger.Category.SIGNATURE,
+                            "Profile signature verified",
+                            "Pubkey: " + SecurityLogger.truncateKey(probe.pubkey));
                     profileCache.put(probe.pubkey.toLowerCase(), probe);
                 } else {
                     Log.w(TAG, "Profile signature verification failed for " + profileTicket);
+                    SecurityLogger.logSignatureVerificationFailure(probe.pubkey, "Profile signature verification failed");
                     // Still cache it but mark as unverified
                     profileCache.put(probe.pubkey.toLowerCase(), probe);
                 }

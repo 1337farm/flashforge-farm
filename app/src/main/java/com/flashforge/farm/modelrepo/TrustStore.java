@@ -146,16 +146,25 @@ public class TrustStore {
     public void setTrusted(String pubkey, boolean trusted) {
         String k = key(pubkey);
         if (!k.isEmpty()) {
+            Level oldLevel = level(pubkey);
             storage.putBoolean("trust:" + k, trusted);
             markSeen(pubkey);
+            Level newLevel = level(pubkey);
+            SecurityLogger.logTrustChange(pubkey, oldLevel, newLevel);
         }
     }
 
     public void setBlocked(String pubkey, boolean blocked) {
         String k = key(pubkey);
         if (!k.isEmpty()) {
+            Level oldLevel = level(pubkey);
             storage.putBoolean("block:" + k, blocked);
             markSeen(pubkey);
+            Level newLevel = level(pubkey);
+            SecurityLogger.logTrustChange(pubkey, oldLevel, newLevel);
+            if (blocked) {
+                SecurityLogger.logPeerBlocked(pubkey, "Manually blocked by user");
+            }
         }
     }
 

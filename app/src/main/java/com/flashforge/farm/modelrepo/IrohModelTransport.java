@@ -39,12 +39,23 @@ public class IrohModelTransport implements ModelTransport {
                 throw new UnavailableException("Iroh init returned false");
             }
             initialized = true;
-            Log.i(TAG, "Iroh endpoint initialized: " + bytesToHex(IrohBridge.INSTANCE.endpointId()));
+            String endpointId = bytesToHex(IrohBridge.INSTANCE.endpointId());
+            Log.i(TAG, "Iroh endpoint initialized: " + endpointId);
+            
+            // Log encryption status
+            boolean encryptionEnabled = (sk != null && sk.length == 32);
+            SecurityLogger.logEncryption(SecurityLogger.Severity.INFO, 
+                    "Transport encryption status", 
+                    "Endpoint: " + endpointId + ", Encryption: " + encryptionEnabled);
         } catch (UnsatisfiedLinkError e) {
             Log.e(TAG, "Native libnative_iroh_engine.so missing", e);
+            SecurityLogger.log(SecurityLogger.Severity.ERROR, SecurityLogger.Category.NETWORK,
+                    "P2P native library missing", e);
             throw new UnavailableException("P2P native library missing in this build");
         } catch (RuntimeException e) {
             Log.e(TAG, "Failed to initialize Iroh endpoint", e);
+            SecurityLogger.log(SecurityLogger.Severity.ERROR, SecurityLogger.Category.NETWORK,
+                    "Failed to initialize Iroh endpoint", e);
             throw new UnavailableException("Iroh init failed: " + e.getMessage());
         }
     }
@@ -106,11 +117,20 @@ public class IrohModelTransport implements ModelTransport {
                         if (metadata.verification != null && !metadata.verification.isEmpty()) {
                             expectedHash = metadata.verification.toLowerCase();
                             Log.d(TAG, "Expected hash for " + t + ": " + expectedHash);
+                            SecurityLogger.log(SecurityLogger.Severity.DEBUG, SecurityLogger.Category.VERIFICATION,
+                                    "Expected hash extracted from metadata", 
+                                    "Ticket: " + t + ", Hash: " + expectedHash);
                         } else {
                             Log.w(TAG, "No verification hash in metadata for " + t);
+                            SecurityLogger.log(SecurityLogger.Severity.WARNING, SecurityLogger.Category.VERIFICATION,
+                                    "No verification hash in metadata", 
+                                    "Ticket: " + t);
                         }
                     } catch (Exception e) {
                         Log.e(TAG, "Failed to parse metadata for " + t, e);
+                        SecurityLogger.log(SecurityLogger.Severity.ERROR, SecurityLogger.Category.CONTENT,
+                                "Failed to parse metadata", 
+                                "Ticket: " + t + ", Error: " + e.getMessage());
                         if (finished.compareAndSet(false, true)) {
                             l.onError(t, "Invalid metadata: " + e.getMessage());
                         }
@@ -190,6 +210,12 @@ public class IrohModelTransport implements ModelTransport {
                 Log.e(TAG, "Hash mismatch for " + ticket + 
                       ": expected=" + expectedHash + ", got=" + computedHash);
                 
+                // Log hash verification failure
+                SecurityLogger.logHashVerificationFailure(ticket, expectedHash, computedHash);
+                SecurityLogger.logQuarantine(SecurityLogger.Severity.WARNING,
+                        "Content quarantined due to hash mismatch",
+                        "Ticket: " + ticket);
+                
                 // Quarantine the content
                 if (finished.compareAndSet(false, true)) {
                     listener.onError(ticket, "Hash verification failed - content may be tampered. " +
@@ -198,6 +224,10 @@ public class IrohModelTransport implements ModelTransport {
                 }
                 return;
             }
+            
+            SecurityLogger.log(SecurityLogger.Severity.INFO, SecurityLogger.Category.VERIFICATION,
+                    "Hash verification passed", 
+                    "Ticket: " + ticket);
             
             Log.i(TAG, "Hash verification passed for " + ticket);
             
@@ -233,6 +263,12 @@ public class IrohModelTransport implements ModelTransport {
                     if (!verdict.allow) {
                         Log.e(TAG, "Model verification failed for " + ticket + ": " + verdict.reason + " - " + verdict.detail);
                         
+                        // Log model verification failure
+                        SecurityLogger.logModelVerificationFailure(ticket, verdict.reason, verdict.detail);
+                        SecurityLogger.logQuarantine(SecurityLogger.Severity.WARNING,
+                                "Content quarantined due to model verification failure",
+                                "Ticket: " + ticket + ", Reason: " + verdict.reason + ", Detail: " + verdict.detail);
+                        
                         // Quarantine the content
                         if (finished.compareAndSet(false, true)) {
                             listener.onError(ticket, "Model verification failed: " + verdict.detail);
@@ -241,9 +277,15 @@ public class IrohModelTransport implements ModelTransport {
                     }
                     
                     Log.i(TAG, "Model verification passed for " + ticket);
+                    SecurityLogger.log(SecurityLogger.Severity.INFO, SecurityLogger.Category.VERIFICATION,
+                            "Model verification passed", 
+                            "Ticket: " + ticket);
                     
                 } catch (Exception e) {
                     Log.e(TAG, "Model verification error for " + ticket, e);
+                    SecurityLogger.log(SecurityLogger.Severity.WARNING, SecurityLogger.Category.VERIFICATION,
+                            "Model verification error (backward compatibility)",
+                            "Ticket: " + ticket + ", Error: " + e.getMessage());
                     // Don't fail the download for verification errors - just log
                     // This ensures backward compatibility with unsigned models
                 }

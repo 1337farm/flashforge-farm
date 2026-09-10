@@ -264,7 +264,7 @@ public class IrohModelTransport implements ModelTransport {
                         Log.e(TAG, "Model verification failed for " + ticket + ": " + verdict.reason + " - " + verdict.detail);
                         
                         // Log model verification failure
-                        SecurityLogger.logModelVerificationFailure(ticket, verdict.reason, verdict.detail);
+                        SecurityLogger.logModelVerificationFailure(ticket, verdict.reason.toString(), verdict.detail);
                         SecurityLogger.logQuarantine(SecurityLogger.Severity.WARNING,
                                 "Content quarantined due to model verification failure",
                                 "Ticket: " + ticket + ", Reason: " + verdict.reason + ", Detail: " + verdict.detail);

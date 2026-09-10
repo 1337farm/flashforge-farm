@@ -2,6 +2,8 @@ package com.flashforge.farm.modelrepo;
 
 import android.util.Log;
 
+import com.flashforge.farm.modelrepo.ModelTransport.UnavailableException;
+
 /**
  * Transport layer security verification and monitoring.
  * Provides encryption status checking and security validation for the P2P transport.

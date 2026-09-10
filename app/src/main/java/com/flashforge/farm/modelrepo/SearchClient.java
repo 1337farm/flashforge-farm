@@ -174,7 +174,7 @@ public class SearchClient {
         executor.execute(() -> {
             try {
                 List<SearchResult> results = search(keyword);
-                queryCache.put(keyword.toLowerCase(), results);
+                queryCache.put(keyword.toLowerCase(), new CacheEntry(results));
                 if (callback != null) {
                     callback.onResults(results);
                 }

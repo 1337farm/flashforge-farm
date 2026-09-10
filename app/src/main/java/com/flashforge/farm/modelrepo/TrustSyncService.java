@@ -2,6 +2,7 @@ package com.flashforge.farm.modelrepo;
 
 import android.util.Log;
 
+import com.flashforge.farm.modelrepo.ModelTransport.UnavailableException;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -112,7 +113,7 @@ public class TrustSyncService {
         }
         
         public String toJsonString() {
-            return gson.toJson(toJson());
+            return new Gson().toJson(toJson());
         }
         
         public byte[] toBytes() {

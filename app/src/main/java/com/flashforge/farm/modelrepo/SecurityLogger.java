@@ -169,9 +169,8 @@ public final class SecurityLogger {
      */
     public static void setMaxHistorySize(int size) {
         synchronized (eventHistory) {
-            MAX_HISTORY_SIZE = size;
             // Trim history if needed
-            while (eventHistory.size() > MAX_HISTORY_SIZE) {
+            while (eventHistory.size() > size) {
                 eventHistory.remove(0);
             }
         }
@@ -181,14 +180,14 @@ public final class SecurityLogger {
      * Log a security event.
      */
     public static void log(Severity severity, Category category, String message) {
-        log(severity, category, message, null);
+        log(severity, category, message, (String)null);
     }
     
     /**
      * Log a security event with details.
      */
     public static void log(Severity severity, Category category, String message, String details) {
-        log(severity, category, message, details, null);
+        log(severity, category, message, details, (Throwable)null);
     }
     
     /**

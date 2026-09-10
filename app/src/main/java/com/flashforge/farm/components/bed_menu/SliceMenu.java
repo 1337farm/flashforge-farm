@@ -345,6 +345,16 @@ public class SliceMenu extends ListBedMenu {
             return fragment.getGlView().getRenderer().getGcodeResult();
         }
 
+        /** Run a native viewer mutation on the GL thread. The libvgcode viewer is
+         *  only ever safe to touch from the GL context (it calls GL APIs and its
+         *  render buffers are consumed by the render loop); toggling roles/options
+         *  from the UI thread raced the GL thread (SIGSEGV) and, after a re-slice,
+         *  dead-referenced a released viewer (null-pointer native crash). */
+        private void runOnGl(Runnable action) {
+            if (fragment == null || fragment.getGlView() == null) return;
+            fragment.getGlView().queueEvent(action);
+        }
+
         @Override
         protected View onCreateView(Context ctx, boolean portrait) {
             LinearLayout ll = new LinearLayout(ctx);
@@ -431,25 +441,24 @@ public class SliceMenu extends ListBedMenu {
             seamLabel.setTextColor(ThemesRepo.getColor(android.R.attr.textColorPrimary));
             seamRow.addView(seamLabel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-            MaterialCheckBox seamCheckBox = new MaterialCheckBox(ctx);
+            MaterialCheckBox seamCheckBox = new MaterialCheckBox(ctx) {
+                @Override
+                public boolean dispatchTouchEvent(MotionEvent event) {
+                    return false;
+                }
+            };
             seamCheckBox.setChecked(viewer != null && viewer.isOptionVisible(GCodeViewer.OPTION_TYPE_SEAMS));
             seamRow.addView(seamCheckBox, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-            seamRow.setOnClickListener(v -> {
-                GCodeViewer vViewer = getViewer();
-                if (vViewer != null) {
-                    vViewer.toggleOptionVisibility(GCodeViewer.OPTION_TYPE_SEAMS);
+            seamRow.setOnClickListener(v -> runOnGl(() -> {
+                GCodeViewer gv = getViewer();
+                if (gv == null) return;
+                gv.toggleOptionVisibility(GCodeViewer.OPTION_TYPE_SEAMS);
+                ViewUtils.postOnMainThread(() -> {
                     seamCheckBox.setChecked(!seamCheckBox.isChecked());
                     fragment.getGlView().requestRender();
-                }
-            });
-            seamCheckBox.setOnCheckedChangeListener((buttonView, isChecked) -> {
-                GCodeViewer vViewer = getViewer();
-                if (vViewer != null && vViewer.isOptionVisible(GCodeViewer.OPTION_TYPE_SEAMS) != isChecked) {
-                    vViewer.toggleOptionVisibility(GCodeViewer.OPTION_TYPE_SEAMS);
-                    fragment.getGlView().requestRender();
-                }
-            });
+                });
+            }));
 
             ll.addView(seamRow, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             ll.addView(new DividerView(ctx), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(1f)));
@@ -548,6 +557,10 @@ public class SliceMenu extends ListBedMenu {
         private float getTotalEstimatedTime() {
             GCodeViewer viewer = getViewer();
             if (viewer == null) return 0;
+            return getTotalEstimatedTime(viewer);
+        }
+
+        private float getTotalEstimatedTime(GCodeViewer viewer) {
             float total = 0;
             for (int i = 0; i < GCodeViewer.EXTRUSION_ROLES_COUNT; i++) {
                 if (viewer.isExtrusionRoleVisible(i)) {
@@ -718,21 +731,27 @@ public class SliceMenu extends ListBedMenu {
 
                 checkBox.setChecked(viewer.isExtrusionRoleVisible(role));
                 checkBox.setButtonTintList(ColorStateList.valueOf(SegmentsView.mapColor(role)));
-                setOnClickListener(v -> {
-                    if (getTotalEstimatedTime() == viewer.getEstimatedTime(role)) {
+                setOnClickListener(v -> runOnGl(() -> {
+                    GCodeViewer liveViewer = getViewer();
+                    if (liveViewer == null) return;
+                    if (getTotalEstimatedTime(liveViewer) == liveViewer.getEstimatedTime(role)) {
                         return;
                     }
 
-                    viewer.toggleExtrusionRoleVisible(role);
-                    checkBox.setChecked(!checkBox.isChecked());
-                    updateValues();
-                    if (invalidateGl != null) ViewUtils.removeCallbacks(invalidateGl);
-                    ViewUtils.postOnMainThread(invalidateGl = () -> {
-                        Pair<Long, Long> p = viewer.getLayersViewRange();
-                        viewer.setLayersViewRange(p.first, p.second);
-                        fragment.getGlView().requestRender();
-                    }, 250);
-                });
+                    liveViewer.toggleExtrusionRoleVisible(role);
+                    ViewUtils.postOnMainThread(() -> {
+                        checkBox.toggle();
+                        updateValues();
+                        if (invalidateGl != null) ViewUtils.removeCallbacks(invalidateGl);
+                        ViewUtils.postOnMainThread(invalidateGl = () -> runOnGl(() -> {
+                            GCodeViewer glViewer = getViewer();
+                            if (glViewer == null) return;
+                            Pair<Long, Long> p = glViewer.getLayersViewRange();
+                            glViewer.setLayersViewRange(p.first, p.second);
+                            fragment.getGlView().requestRender();
+                        }), 250);
+                    });
+                }));
             }
 
             @Override

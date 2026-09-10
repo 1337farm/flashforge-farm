@@ -148,7 +148,7 @@ public class ModelSafetyTest {
         m.title = "Benchy";
         m.designer = new ModelMetadata.Designer();
         m.designer.name = "Alice";
-        m.designer.pubkey = "abc123";
+        m.designer.pubkey = "";
         m.tags = Arrays.asList("calibration", "test");
         m.files = Arrays.asList("benchy.stl");
         m.remixOf = new ModelMetadata.RemixRef();

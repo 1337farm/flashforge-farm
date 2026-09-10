@@ -38,6 +38,14 @@ public class ModelMetadata {
     public String signature = "";
     @SerializedName("signedBy")
     public String signedBy = "";
+    @SerializedName("reputation")
+    public Reputation reputation = new Reputation();
+    @SerializedName("createdAt")
+    public long createdAt = 0;
+    @SerializedName("updatedAt")
+    public long updatedAt = 0;
+    @SerializedName("version")
+    public String version = "";
 
     public static class Designer {
         @SerializedName("name")
@@ -69,6 +77,76 @@ public class ModelMetadata {
         public String contentHash = "";
         @SerializedName("title")
         public String title = "";
+    }
+    
+    /**
+     * Reputation tracking for models.
+     */
+    public static class Reputation {
+        @SerializedName("downloadCount")
+        public long downloadCount = 0;
+        
+        @SerializedName("rating")
+        public double rating = 0.0;
+        
+        @SerializedName("ratingCount")
+        public int ratingCount = 0;
+        
+        @SerializedName("flagCount")
+        public int flagCount = 0;
+        
+        @SerializedName("lastRated")
+        public long lastRated = 0;
+        
+        @SerializedName("lastDownloaded")
+        public long lastDownloaded = 0;
+        
+        public void addRating(double rating) {
+            if (rating < 0 || rating > 5) {
+                throw new IllegalArgumentException("Rating must be between 0 and 5");
+            }
+            if (this.ratingCount == 0) {
+                this.rating = rating;
+            } else {
+                this.rating = ((this.rating * this.ratingCount) + rating) / (this.ratingCount + 1);
+            }
+            this.ratingCount++;
+            this.lastRated = System.currentTimeMillis() / 1000;
+        }
+        
+        public void incrementDownload() {
+            this.downloadCount++;
+            this.lastDownloaded = System.currentTimeMillis() / 1000;
+        }
+        
+        public void flag() {
+            this.flagCount++;
+        }
+        
+        public double getAverageRating() {
+            return ratingCount > 0 ? rating : 0.0;
+        }
+        
+        public boolean hasRatings() {
+            return ratingCount > 0;
+        }
+        
+        public boolean isFlagged() {
+            return flagCount > 0;
+        }
+        
+        public double getPopularityScore() {
+            return downloadCount * 0.7 + ratingCount * 0.3;
+        }
+        
+        public void reset() {
+            this.downloadCount = 0;
+            this.rating = 0.0;
+            this.ratingCount = 0;
+            this.flagCount = 0;
+            this.lastRated = 0;
+            this.lastDownloaded = 0;
+        }
     }
 
     public static ModelMetadata parse(String json) {
@@ -252,6 +330,13 @@ public class ModelMetadata {
         
         if (signedBy != null && signedBy.length() > 64) {
             throw new IllegalArgumentException("signedBy pubkey too long");
+        }
+        
+        if (reputation == null) {
+            reputation = new Reputation();
+        }
+        if (version != null && version.length() > 32) {
+            throw new IllegalArgumentException("version too long");
         }
     }
 }

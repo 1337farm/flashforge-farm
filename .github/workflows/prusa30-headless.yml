@@ -222,7 +222,21 @@ jobs:
           done
           grep -q "1_86" engine/prusa30/jniImports/boost/include/boost/version.hpp \
             || { echo "ERROR: staged Boost headers are not 1.86"; exit 1; }
+          echo "--- actual staged archive names (FindBoost must match these) ---"
+          ls engine/prusa30/jniImports/boost/lib/$ABI/lib/
           echo "Boost $BOOST_VER present and verified"
+
+      - name: Bridge Boost archives into stage/lib (FindBoost search path)
+        run: |
+          # FindBoost probes <prefix>/stage/lib for BOOST_ROOT layouts; our
+          # NDK archives live one level deeper (lib/<abi>/lib, Orca layout).
+          # Relative symlinks keep working whatever the runner workspace is.
+          mkdir -p engine/prusa30/jniImports/boost/stage/lib
+          for a in engine/prusa30/jniImports/boost/lib/$ABI/lib/libboost_*.a; do
+            ln -sf "../../lib/$ABI/lib/$(basename "$a")" \
+              "engine/prusa30/jniImports/boost/stage/lib/$(basename "$a")"
+          done
+          ls engine/prusa30/jniImports/boost/stage/lib/ | head -5
 
       - name: Restore staged oneTBB v2021.12.0 from cache
         uses: actions/cache/restore@v5
@@ -256,6 +270,7 @@ jobs:
             -DBoost_INCLUDE_DIR="$(pwd)/engine/prusa30/jniImports/boost/include" \
             -DBoost_LIBRARY_DIR="$(pwd)/engine/prusa30/jniImports/boost/lib/arm64-v8a/lib" \
             -DBoost_ARCHITECTURE="-a64" \
+            -DBoost_DEBUG=ON \
             -DTBB_ROOT="$(pwd)/engine/prusa30/jniImports/tbb"
 
       - name: Build headless core (libslic3r)

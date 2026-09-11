@@ -155,24 +155,4 @@ public final class SecurePrefs {
         encryptedPrefs.edit().clear().apply();
         Log.d(TAG, "All secure preferences cleared");
     }
-    
-    /**
-     * Migrate from old plaintext storage to encrypted storage.
-     * Call this once during app upgrade.
-     */
-    public static void migrateFromPlaintext(Context context, String oldHexKey) {
-        if (oldHexKey == null || oldHexKey.isEmpty()) {
-            return;
-        }
-        try {
-            byte[] secret = IrohModelTransport.hexToBytes(oldHexKey);
-            if (secret != null && secret.length == 32) {
-                SecurePrefs prefs = new SecurePrefs(context);
-                prefs.saveSecretKey(secret);
-                Log.i(TAG, "Migrated secret key to encrypted storage");
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to migrate secret key", e);
-        }
-    }
 }

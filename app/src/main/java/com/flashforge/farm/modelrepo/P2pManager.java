@@ -8,7 +8,6 @@ import java.io.File;
 public final class P2pManager {
     private static final String TAG = "P2pManager";
     private static final String PREF_MIGRATED = "iroh_migrated_v1";
-    private static final String LEGACY_PREF_SECRET = "iroh_secret";
 
     private static IrohModelTransport transport;
     private static boolean migrating;
@@ -22,21 +21,6 @@ public final class P2pManager {
     public static synchronized void initSecureStorage(Context ctx) {
         if (!SecurePrefs.isInitialized()) {
             SecurePrefs.init(ctx);
-            
-            // Attempt to migrate from legacy plaintext storage
-            try {
-                String legacyHex = com.flashforge.farm.utils.Prefs.getPrefs()
-                        .getString(LEGACY_PREF_SECRET, null);
-                if (legacyHex != null && !legacyHex.isEmpty()) {
-                    SecurePrefs.migrateFromPlaintext(ctx, legacyHex);
-                    // Clear legacy storage after migration
-                    com.flashforge.farm.utils.Prefs.getPrefs().edit()
-                            .remove(LEGACY_PREF_SECRET).apply();
-                    Log.i(TAG, "Migrated legacy secret key to secure storage");
-                }
-            } catch (Exception e) {
-                Log.w(TAG, "Failed to migrate legacy secret key", e);
-            }
         }
     }
 

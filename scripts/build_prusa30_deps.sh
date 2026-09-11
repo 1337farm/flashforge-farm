@@ -67,9 +67,14 @@ stage_include() {
     mkdir -p "$dest"
     local src
     for src in "$@"; do
-        # Copy each matched tree preserving its trailing dir name.
         local found
-        found="$(find "$dir" -type d -path "*/$src" | head -1)"
+        # Prefer the canonical `<archive>/include/<src>` tree; fall back to any
+        # depth of `<src>` for deps (e.g. Eigen) whose headers are not under
+        # include/. Avoid matching the staging dir itself.
+        found="$(find "$dir" -type d -path "*/include/$src" | sort | head -1)"
+        if [ -z "$found" ]; then
+            found="$(find "$dir" -mindepth 2 -type d -path "*/$src" | sort | head -1)"
+        fi
         if [ -z "$found" ]; then
             echo "--- [stage] WARN: include tree '$src' not found for $name ---" >&2
             continue

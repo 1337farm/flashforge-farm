@@ -57,8 +57,7 @@ compile_mocks.txt
 /benchy_new.gcode
 app/screen.png
 
-# Generated sample-model archive (rebuilt deterministically by publish-models.sh)
-/models/models.zip
+
 
 scripts/tests/engine_repro/regress/.run.log
 scripts/tests/engine_repro/regress/.engine_pin

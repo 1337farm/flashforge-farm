@@ -21,7 +21,6 @@ import android.widget.ArrayAdapter;
 import android.widget.TextView;
 import android.widget.AdapterView;
 import android.app.AlertDialog;
-import com.flashforge.farm.iroh.IrohP2PService;
 
 import androidx.core.widget.NestedScrollView;
 
@@ -32,6 +31,8 @@ import com.flashforge.farm.R;
 import com.flashforge.farm.components.FarmAlertDialogBuilder;
 import com.flashforge.farm.navigation.Fragment;
 import com.flashforge.farm.theme.ThemesRepo;
+import com.flashforge.farm.utils.FarmBackup;
+import com.flashforge.farm.utils.PairingRuntime;
 import com.flashforge.farm.utils.PrinterFleetManager;
 import com.flashforge.farm.utils.PrintQueueManager;
 import com.flashforge.farm.utils.UsbProvisioningManager;
@@ -82,8 +83,17 @@ public class FleetFragment extends Fragment {
         for (PrinterFleetManager.Printer p : printers) {
             TextView pt = new TextView(ctx);
             String code = p.accessCode != null ? p.accessCode : "—";
-            pt.setText(p.name + " (" + p.ipOrUrl + ")\n" + getString(R.string.FleetUniqueCode) + ": " + code + "\n"
+            StringBuilder card = new StringBuilder(p.name + " (" + p.ipOrUrl + ")\n"
+                    + getString(R.string.FleetUniqueCode) + ": " + code + "\n"
                     + p.loadedFilamentColor + " " + p.loadedFilamentType + " @ " + p.nozzleSize + "mm");
+            if (p.model != null && !p.model.isEmpty()) card.append("\n").append(ctx.getString(R.string.FleetPrinterModelValue, p.model));
+            if (p.firmwareVersion != null && !p.firmwareVersion.isEmpty()) card.append("\n").append(ctx.getString(R.string.FleetFirmwareVersionValue, p.firmwareVersion));
+            if (p.nodeId != null && !p.nodeId.isEmpty()) {
+                card.append("\n").append(ctx.getString(R.string.FleetPaired));
+            } else if (p.pairToken != null && p.pairExpiresAt > System.currentTimeMillis()) {
+                card.append("\n").append(ctx.getString(R.string.FleetPairingPending));
+            }
+            pt.setText(card.toString());
             pt.setTextColor(ThemesRepo.getColor(android.R.attr.textColorPrimary));
             pt.setPadding(0, ViewUtils.dp(8), 0, ViewUtils.dp(8));
             contentLayout.addView(pt);
@@ -104,11 +114,6 @@ public class FleetFragment extends Fragment {
             provisionBtn.setText(R.string.FleetProvisionViaUsb);
             provisionBtn.setOnClickListener(v -> promptProvision(p, true, saveTargetSpinner));
             contentLayout.addView(provisionBtn, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-            Button p2pBtn = new Button(ctx);
-            p2pBtn.setText(R.string.FleetProvisionConnect);
-            p2pBtn.setOnClickListener(v -> connectViaP2P(p));
-            contentLayout.addView(p2pBtn, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
 
         Button addPrinterBtn = new Button(ctx);
@@ -141,6 +146,38 @@ public class FleetFragment extends Fragment {
                 qt.setOnClickListener(v -> showEditQueueDialog(item));
                 contentLayout.addView(qt);
             }
+        }
+
+        // Backup & Restore Section: fleet printers + print queue + slicer configs in one JSON file.
+        TextView backupTitle = new TextView(ctx);
+        backupTitle.setText(R.string.FleetBackupTitle);
+        backupTitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
+        backupTitle.setTypeface(ViewUtils.getTypeface(ViewUtils.ROBOTO_MEDIUM));
+        backupTitle.setTextColor(ThemesRepo.getColor(android.R.attr.textColorPrimary));
+        backupTitle.setPadding(0, ViewUtils.dp(24), 0, 0);
+        contentLayout.addView(backupTitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        if (ctx instanceof Activity) {
+            Activity act = (Activity) ctx;
+            Button backupBtn = new Button(ctx);
+            backupBtn.setText(R.string.FleetBackup);
+            backupBtn.setOnClickListener(v -> {
+                Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                i.setType("application/json");
+                i.putExtra(Intent.EXTRA_TITLE, FarmBackup.BACKUP_FILE_NAME);
+                act.startActivityForResult(i, MainActivity.REQUEST_CODE_BACKUP);
+            });
+            contentLayout.addView(backupBtn, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            Button restoreBtn = new Button(ctx);
+            restoreBtn.setText(R.string.FleetRestore);
+            restoreBtn.setOnClickListener(v -> {
+                Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType("*/*");
+                act.startActivityForResult(i, MainActivity.REQUEST_CODE_RESTORE);
+            });
+            contentLayout.addView(restoreBtn, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
     }
 
@@ -227,9 +264,13 @@ public class FleetFragment extends Fragment {
         nameInput.setHint(R.string.FleetPrinterName);
         layout.addView(nameInput);
 
-        android.widget.CheckBox p2pCheck = new android.widget.CheckBox(ctx);
-        p2pCheck.setText("Enable P2P Mode");
-        layout.addView(p2pCheck);
+        final EditText modelInput = new EditText(ctx);
+        modelInput.setHint(R.string.FleetPrinterModel);
+        layout.addView(modelInput);
+
+        final EditText firmwareInput = new EditText(ctx);
+        firmwareInput.setHint(R.string.FleetFirmwareVersion);
+        layout.addView(firmwareInput);
 
         final EditText nozzleInput = new EditText(ctx);
         nozzleInput.setHint(R.string.FleetNozzleSize);
@@ -253,13 +294,18 @@ public class FleetFragment extends Fragment {
         builder.setView(layout);
 
         builder.setPositiveButton("Add", (dialog, which) -> {
+            String key = PrinterFleetManager.generatePublicKey();
             PrinterFleetManager.Printer p = new PrinterFleetManager.Printer(
                 String.valueOf(System.currentTimeMillis()),
                 "",
                 nameInput.getText().toString().trim(),
                 nozzleInput.getText().toString().trim(),
                 typeInput.getText().toString().trim(),
-                colorInput.getText().toString().trim()
+                colorInput.getText().toString().trim(),
+                key,
+                PrinterFleetManager.generateAccessCode(key),
+                emptyToNull(modelInput.getText().toString().trim()),
+                emptyToNull(firmwareInput.getText().toString().trim())
             );
             PrinterFleetManager.addPrinter(p);
             refreshView();
@@ -269,9 +315,13 @@ public class FleetFragment extends Fragment {
         builder.show();
     }
 
-    // ---- P2P / USB provisioning ----
+    private static String emptyToNull(String s) {
+        return (s == null || s.isEmpty()) ? null : s;
+    }
 
-    /** Deploy or remove the p2p module. The {@code saveTargetSpinner} selects the save
+    // ---- USB provisioning ----
+
+    /** Deploy or remove the on-printer agent module. The {@code saveTargetSpinner} selects the save
      *  destination: "USB" (default) writes to an auto-detected USB drive, "File" opens the
      *  SAF folder picker, and "Share" opens the system share sheet. */
     private void promptProvision(PrinterFleetManager.Printer printer, boolean install, Spinner saveTargetSpinner) {
@@ -391,30 +441,14 @@ public class FleetFragment extends Fragment {
 
     /** Callback for both USB-direct and share-target provisioning completions. */
     private void onProvisionCallback(boolean ok, String msg) {
+        // A fresh pairing token may have been issued: push it to the accept-loop.
+        PairingRuntime.refreshTokens();
         postSnack(ok ? R.string.FleetProvisioningDone : R.string.FleetProvisionViaUsb, msg);
         if (getContext() != null) {
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (getView() != null) refreshView();
             });
         }
-    }
-
-    /** Connect to a provisioned printer over the p2p overlay by its unique code. */
-    private void connectViaP2P(PrinterFleetManager.Printer printer) {
-        Context ctx = getContext();
-        if (ctx == null || printer == null) return;
-        IrohP2PService.dial(ctx, printer.accessCode, printer.ipOrUrl, new IrohP2PService.DialCallback() {
-            @Override
-            public void onResult(boolean ok, String msg) {
-                if (!ok) {
-                    new FarmAlertDialogBuilder(ctx)
-                        .setTitle(R.string.FleetProvisionConnect)
-                        .setMessage(getString(R.string.FleetP2pNotReady) + "\n\n" + msg)
-                        .setPositiveButton(android.R.string.ok, null)
-                        .show();
-                }
-            }
-        });
     }
 
     /** Called by MainActivity after the SAF tree picker returns. Performs the USB deploy. */
@@ -452,6 +486,11 @@ public class FleetFragment extends Fragment {
 
     private String getString(int res) {
         return getContext() == null ? "" : getContext().getString(res);
+    }
+
+    /** Re-render after an external change (e.g. backup restore). */
+    public void refreshNow() {
+        refreshView();
     }
 
     @Override

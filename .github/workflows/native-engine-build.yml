@@ -910,7 +910,7 @@ jobs:
     # needs.X.result != 'failure' is NOT evaluated when an upstream `needs`
     # job was SKIPPED (not failed) — github silently skips downstream jobs.
     # That silently skipped the whole APK+merge chain on native=false PRs
-    # (e.g. p2p publish kit, no engine/ changes): dep+engine skipped by
+    # (e.g. docs-only PRs, no engine/ changes): dep+engine skipped by
     # path-filter, apk clicked through on the naive form below, and merge
     # never fired. With !cancelled() the state machine actually evaluates
     # the result guards instead of dropping the job.
@@ -1146,30 +1146,6 @@ jobs:
           gh release create farm-apk-latest "$OUT/$APK_NAME" "$OUT/apk-manifest.json" --repo "${{ github.repository }}" \
             --title "FlashForge Farm APK (latest)" \
             --notes "Rolling sideloadable debug APK built from source. Re-published on every green build."
-
-  publish-models:
-    name: models
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout repository
-        run: |
-          git init -q .
-          git remote add origin "https://github.com/${{ github.repository }}.git"
-          git fetch --depth 100 origin "${{ github.sha }}"
-          git checkout "${{ github.sha }}"
-
-      - name: Publish sample-models release (deterministic, sha-pinned)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-          chmod +x scripts/publish-models.sh
-          scripts/publish-models.sh --publish
-          echo "models-latest verified (models.zip sha pinned in models/manifest.json)"
 
   automerge:
     name: merge

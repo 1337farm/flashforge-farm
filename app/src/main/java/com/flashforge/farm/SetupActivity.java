@@ -78,9 +78,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import com.flashforge.farm.modelrepo.safety.SafetyPolicy;
-import com.flashforge.farm.modelrepo.safety.ZipGuard;
-
 
 import cz.msebera.android.httpclient.Header;
 import com.flashforge.farm.components.FarmAlertDialogBuilder;
@@ -241,13 +238,8 @@ public class SetupActivity extends AppCompatActivity {
                                         try {
                                             ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(responseBody));
                                             ZipEntry en;
-                                            int zipEntries = 0;
                                             while ((en = zis.getNextEntry()) != null) {
-                                                if (++zipEntries > SafetyPolicy.MAX_ZIP_ENTRIES) {
-                                                    throw new java.io.IOException("too many zip entries");
-                                                }
-                                                byte[] entryBytes = ZipGuard.readStreamBytes(zis, SafetyPolicy.MAX_METADATA_BYTES);
-                                                String version = parseVendorVersion(new ByteArrayInputStream(entryBytes));
+                                                String version = parseVendorVersion(zis);
                                                 String baseUrl = repo.url + "/" + en.getName().substring(0, en.getName().length() - 4);
                                                 String iniUrl = baseUrl + "/" + version + ".ini";
 

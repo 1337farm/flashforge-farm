@@ -16,8 +16,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import com.flashforge.farm.FarmApp;
-import com.flashforge.farm.modelrepo.safety.SafetyPolicy;
-import com.flashforge.farm.modelrepo.safety.ZipGuard;
 
 public class Native {
     private static final String TAG = "slic3r.Native";
@@ -116,12 +114,7 @@ public class Native {
 
         try (ZipInputStream zis = new ZipInputStream(new FileInputStream(archive))) {
             ZipEntry entry;
-            long totalOut = 0;
-            int entryCount = 0;
             while ((entry = zis.getNextEntry()) != null) {
-                if (++entryCount > SafetyPolicy.MAX_ZIP_ENTRIES) {
-                    throw new IOException("too many zip entries");
-                }
                 File outFile = new File(extractRoot, entry.getName());
                 String outPath = outFile.getCanonicalPath();
                 if (!outPath.equals(extractRoot.getCanonicalPath()) && !outPath.startsWith(rootPath)) {
@@ -143,10 +136,6 @@ public class Native {
                 try (FileOutputStream fos = new FileOutputStream(outFile)) {
                     int read;
                     while ((read = zis.read(buffer)) != -1) {
-                        totalOut += read;
-                        if (totalOut > SafetyPolicy.MAX_ZIP_OUTPUT_BYTES) {
-                            throw new IOException("zip output over budget");
-                        }
                         fos.write(buffer, 0, read);
                     }
                 }

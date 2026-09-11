@@ -38,9 +38,17 @@ public final class UsbProvisioningManager {
     public static final String IROH_DEFAULT_URL =
             "https://github.com/n0-computer/iroh/releases/latest/download/iroh-armv7-unknown-linux-gnueabihf";
 
+    /** Dial-back agent binary (docs/usb-pairing.md), published from iroh-android-native releases. */
+    public static final String FARM_AGENT_DEFAULT_URL =
+            "https://github.com/1337farm/iroh-android-native/releases/latest/download/farm-agent-armv7-unknown-linux-gnueabihf";
+
     /** Provisioning modes written to mode.txt. */
     public static final String MODE_RAM = "RAM";
     public static final String MODE_INSTALL = "INSTALL";
+
+    /** Reverse-pairing payload: phone-*.addr files at the drive root (see docs/usb-pairing.md). */
+    public static final String PHONE_ADDR_PREFIX = "phone-";
+    public static final String PHONE_ADDR_SUFFIX = ".addr";
 
     public interface ProvisionCallback {
         void onResult(boolean ok, String message);
@@ -132,6 +140,19 @@ public final class UsbProvisioningManager {
                     // Mode
                     String modeText = mode == 1 ? MODE_INSTALL : MODE_RAM;
                     writeZipText(zos, "mode.txt", modeText);
+                    // Reverse-pairing payload so the printer can dial back (best-effort)
+                    try {
+                        PrinterFleetManager.Printer rec = ensureFleetRecord(printer);
+                        String phoneNodeIdHex = NodeIdentity.nodeIdHex(ctx);
+                        String token = PairingService.generateToken();
+                        rec.pairToken = token;
+                        rec.pairExpiresAt = System.currentTimeMillis() + PairingService.TOKEN_VALIDITY_MS;
+                        PrinterFleetManager.savePrinters(PrinterFleetManager.getPrinters());
+                        writeZipText(zos, phoneAddrFileName(rec, phoneNodeIdHex),
+                                buildPhoneAddrJson(rec, phoneNodeIdHex, token));
+                    } catch (Exception e) {
+                        Log.w(TAG, "No phone.addr in share package", e);
+                    }
                     // Iroh binary (optional — large; skip if not yet downloaded to keep the
                     // share payload small and predictable)
                     File bin = obtainIrohBinary(ctx, null, null);
@@ -141,6 +162,15 @@ public final class UsbProvisioningManager {
                     // Scripts (assets — best-effort)
                     writeZipAsset(ctx, zos, "flashforge_init.sh");
                     writeZipAsset(ctx, zos, "uninstall.sh");
+                    // Dial-back agent binary (best-effort)
+                    try {
+                        File agent = obtainAgentBinary(ctx, null);
+                        if (agent != null && agent.exists() && agent.length() > 0 && agent.length() < 32L * 1024L * 1024L) {
+                            writeZipFile(zos, "farm-agent", agent);
+                        }
+                    } catch (Exception e) {
+                        Log.w(TAG, "No farm-agent in share package", e);
+                    }
                 }
                 if (cb != null) cb.onResult(true, "Share package ready (" + zip.length() + " bytes).", zip);
             } catch (Exception e) {
@@ -181,6 +211,31 @@ public final class UsbProvisioningManager {
         }
     }
 
+    /** Download (or reuse) the ARMv7 farm-agent binary. Null when unavailable. */
+    public static File obtainAgentBinary(Context ctx, String url) {
+        File cacheFile = new File(ctx.getCacheDir(), "farm-agent-armv7");
+        if (cacheFile.exists() && cacheFile.length() > 0) return cacheFile;
+        try {
+            URL u = new URL(url == null || url.isEmpty() ? FARM_AGENT_DEFAULT_URL : url);
+            HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(60000);
+            conn.setInstanceFollowRedirects(true);
+            try (InputStream in = conn.getInputStream();
+                 FileOutputStream out = new FileOutputStream(cacheFile)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+            }
+            return cacheFile;
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to obtain farm-agent binary", e);
+            //noinspection ResultOfMethodCallIgnored
+            cacheFile.delete();
+            return null;
+        }
+    }
+
     /**
      * Deploy the provisioning payload to the USB drive whose tree {@code treeUri} was selected.
      * Runs the download + writes on a background thread and reports via {@code cb}.
@@ -202,12 +257,92 @@ public final class UsbProvisioningManager {
                 writeText(ctx, treeUri, "mode.txt", "text/plain", modeText);
                 writeAsset(ctx, treeUri, "flashforge_init.sh", "application/x-sh");
                 writeAsset(ctx, treeUri, "uninstall.sh", "application/x-sh");
+                writePhoneAddr(ctx, treeUri, ensureFleetRecord(printer), NodeIdentity.nodeIdHex(ctx));
+                try {
+                    File agent = obtainAgentBinary(ctx, null);
+                    if (agent != null) {
+                        writeStream(ctx, treeUri, "farm-agent", "application/octet-stream", new FileInputStream(agent));
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "No farm-agent on stick; pairing dial-back inactive", e);
+                }
                 cb.onResult(true, "Deployed successfully (mode: " + modeText + ").\nRemove & boot the USB drive to finish provisioning.");
             } catch (Exception e) {
                 Log.e(TAG, "Provisioning failed", e);
                 cb.onResult(false, "Provisioning failed: " + e.getMessage());
             }
         }, "usb-provision").start();
+    }
+
+    /**
+     * Reverse-pairing payload (docs/usb-pairing.md): attach a one-time token to the
+     * printer's fleet record and write this phone's NodeAddr to
+     * phone-&lt;printer&gt;-&lt;phonesuffix&gt;.addr so the printer can dial back first.
+     */
+    private static void writePhoneAddr(Context ctx, Uri tree, PrinterFleetManager.Printer rec, String phoneNodeIdHex) throws Exception {
+        String token = PairingService.generateToken();
+        rec.pairToken = token;
+        rec.pairExpiresAt = System.currentTimeMillis() + PairingService.TOKEN_VALIDITY_MS;
+        PrinterFleetManager.savePrinters(PrinterFleetManager.getPrinters());
+        writeText(ctx, tree, phoneAddrFileName(rec, phoneNodeIdHex), "application/json",
+                buildPhoneAddrJson(rec, phoneNodeIdHex, token));
+    }
+
+    static String phoneAddrFileName(PrinterFleetManager.Printer rec, String phoneNodeIdHex) {
+        String suffix = phoneNodeIdHex.length() >= 8 ? phoneNodeIdHex.substring(0, 8) : phoneNodeIdHex;
+        return PHONE_ADDR_PREFIX + sanitize(rec.id) + "-" + suffix + PHONE_ADDR_SUFFIX;
+    }
+
+    static String buildPhoneAddrJson(PrinterFleetManager.Printer rec, String phoneNodeIdHex, String token) {
+        StringBuilder json = new StringBuilder(512);
+        json.append("{\"format\":\"").append(PairingService.PHONE_ADDR_FORMAT).append("\",");
+        json.append("\"version\":").append(PairingService.PHONE_ADDR_VERSION).append(",");
+        json.append("\"nodeId\":\"").append(phoneNodeIdHex).append("\",");
+        json.append("\"relays\":[],");
+        json.append("\"alpn\":\"").append(PairingService.PAIR_ALPN).append("\",");
+        json.append("\"token\":\"").append(token).append("\",");
+        json.append("\"printerId\":\"").append(escape(rec.id)).append("\",");
+        json.append("\"issuedAt\":").append(System.currentTimeMillis()).append("}");
+        return json.toString();
+    }
+
+    /** Fleet record for pairing: the given printer when it is stored, else a new record. Never null. */
+    private static PrinterFleetManager.Printer ensureFleetRecord(PrinterFleetManager.Printer printer) {
+        if (printer != null && printer.id != null && !"tmp".equals(printer.id)) {
+            PrinterFleetManager.Printer found = PrinterFleetManager.findPrinter(printer.id);
+            if (found != null) return found;
+        }
+        if (PrinterFleetManager.getPrinters() == null) {
+            PrinterFleetManager.savePrinters(new java.util.ArrayList<PrinterFleetManager.Printer>());
+        }
+        String key = (printer != null && printer.publicKey != null)
+                ? printer.publicKey : PrinterFleetManager.generatePublicKey();
+        PrinterFleetManager.Printer rec = new PrinterFleetManager.Printer(
+                String.valueOf(System.currentTimeMillis()),
+                printer != null && printer.ipOrUrl != null ? printer.ipOrUrl : "",
+                printer != null && printer.name != null ? printer.name : "",
+                printer != null && printer.nozzleSize != null ? printer.nozzleSize : "",
+                printer != null && printer.loadedFilamentType != null ? printer.loadedFilamentType : "",
+                printer != null && printer.loadedFilamentColor != null ? printer.loadedFilamentColor : "",
+                key, PrinterFleetManager.generateAccessCode(key));
+        PrinterFleetManager.addPrinter(rec);
+        PrinterFleetManager.Printer stored = PrinterFleetManager.findPrinter(rec.id);
+        return stored != null ? stored : rec;
+    }
+
+    private static String sanitize(String s) {
+        if (s == null) return "unknown";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            sb.append((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ? c : '_');
+        }
+        return sb.length() == 0 ? "unknown" : sb.toString();
+    }
+
+    private static String escape(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     /** Remove an Iroh deployment from the drive (keeps only the uninstall driver script). */

@@ -585,74 +585,83 @@ def main():
             "pull_request runs require manual approval)"
         )
 
-    irohbridge_aar = "com.example.irohapp:irohbridge"
+    # Model-repo removal guards (2026-09-11 rip-out): the model repository stays
+    # deleted. The P2P transport itself is kept for USB reverse-pairing
+    # (docs/usb-pairing.md) via the shared irohbridge AAR.
     if "build-iroh" in jobs:
         failures.append(
-            "workflow must not define a build-iroh job (farm-iroh UniFFI crate "
-            "was replaced by the shared irohbridge AAR; a stale job referencing "
-            "p2p/ or scripts/build_farm_iroh_android.sh fails CI)"
+            "workflow must not define a build-iroh job (farm-iroh crate removed)"
+        )
+    if "publish-models" in jobs:
+        failures.append(
+            "workflow must not define a publish-models job "
+            "(models/ seed dir + scripts/publish-models.sh deleted)"
         )
     wf_text = WORKFLOW.read_text()
-    for needle in ("farm-iroh", "libfarm_iroh", "build_farm_iroh", "HEAD:p2p", "p2p/output", "iroh_src", "checksum_func_connect"):
+    for needle in ("farm-iroh", "libfarm_iroh", "build_farm_iroh",
+                   "publish-models", "models-latest", "ModelRepo", "modelrepo"):
         if needle in wf_text:
             failures.append(
-                f"workflow must not reference {needle!r} (farm-iroh crate removed; "
-                "P2P transport ships as the irohbridge AAR)"
+                f"workflow must not reference {needle!r} "
+                "(model-repo stack removed; P2P transport stays for pairing)"
             )
             break
+    irohbridge_aar = "com.example.irohapp:irohbridge"
     if irohbridge_aar not in gradle:
         failures.append(
             "app/build.gradle must depend on com.example.irohapp:irohbridge "
-            "(shared P2P engine AAR from GitHub Packages)"
+            "(shared P2P engine AAR: pairing accept/dial)"
         )
-    for needle in ("computer.iroh", "net.java.dev.jna", "p2p/output", "p2p/gen"):
+    for needle in ("computer.iroh", "net.java.dev.jna", "security-crypto"):
         if needle in gradle:
             failures.append(
-                f"app/build.gradle must not reference {needle!r} (farm-iroh/computer.iroh removed)"
+                f"app/build.gradle must not reference {needle!r} "
+                "(farm-iroh/computer.iroh removed)"
             )
             break
+    # net-i2p-crypto-eddsa is allowed: pure-Java Ed25519 used only for
+    # phone node-identity derivation (NodeIdentity), not P2P transport.
     root_gradle = (REPO / "build.gradle").read_text()
     if "iroh-android-native" not in root_gradle or "GH_PACKAGES_TOKEN" not in root_gradle:
         failures.append(
             "root build.gradle must declare the GitHub Packages maven repo for "
             "1337farm/iroh-android-native with GH_PACKAGES_USER/GH_PACKAGES_TOKEN credentials"
         )
-    apk_steps = [st for st in apk_job.get("steps", []) if isinstance(st, dict)]
     if apk_job.get("permissions", {}).get("packages") != "read":
         failures.append(
             "package-apk must grant packages: read (GITHUB_TOKEN needs it "
             "to resolve the irohbridge AAR from GitHub Packages)"
         )
-    ghcred = next((st for st in apk_steps if str(st.get("name", "")) == "Configure GitHub Packages credentials for irohbridge AAR"), {})
-    ghcred_text = str(ghcred.get("run", "")) + str(ghcred.get("env", ""))
-    if "secrets.GITHUB_TOKEN" not in ghcred_text:
-        failures.append(
-            "package-apk must configure GitHub Packages credentials from "
-            "secrets.GITHUB_TOKEN before Gradle so the irohbridge AAR resolves"
-        )
-    transport = (REPO / "app/src/main/java/com/flashforge/farm/modelrepo/IrohModelTransport.java").read_text()
-    if "IrohBridge" not in transport:
-        failures.append(
-            "IrohModelTransport must be backed by com.example.irohapp.IrohBridge (irohbridge AAR)"
-        )
-    for needle in ("uniffi.farm_iroh", "libfarm_iroh", "Farm_irohKt", "FarmEndpoint"):
-        if needle in transport:
+    for gone in (
+        "app/src/main/java/com/flashforge/farm/modelrepo",
+        "app/src/main/java/com/flashforge/farm/iroh",
+        "app/src/test/java/com/flashforge/farm/modelrepo",
+        "app/src/main/java/com/flashforge/farm/fragment/ModelRepoFragment.java",
+        "app/src/main/java/com/flashforge/farm/fragment/ModelPublishFragment.java",
+        "models",
+        "scripts/publish-models.sh",
+        "scripts/migrate_models_to_iroh.py",
+        "scripts/gen_admin_key.py",
+        "scripts/SEED_RUNBOOK.md",
+        "p2p",
+        "scripts/build_farm_iroh_android.sh",
+        "app/src/main/kotlin/com/flashforge/farm/iroh/IrohSpike.kt",
+    ):
+        if (REPO / gone).exists():
             failures.append(
-                f"IrohModelTransport must not reference {needle!r} (farm-iroh UniFFI binding removed)"
+                f"{gone} must stay deleted (P2P/model-repo stack removed)"
             )
-            break
-    if (REPO / "p2p").exists():
-        failures.append("p2p/ crate must be deleted (replaced by the irohbridge AAR)")
-    if (REPO / "scripts/build_farm_iroh_android.sh").exists():
-        failures.append("scripts/build_farm_iroh_android.sh must be deleted (no source cdylib build)")
-    if (REPO / "app/src/main/kotlin/com/flashforge/farm/iroh/IrohSpike.kt").exists():
-        failures.append("IrohSpike.kt must be deleted (computer.iroh spike removed)")
-    sc = (REPO / "app/src/main/java/com/flashforge/farm/modelrepo/SearchClient.java").read_text()
-    for needle in ("announceWithProfile", "parseAnnounce", "publishLocalProfile"):
-        if needle not in sc:
+
+    # Deploy-kit asset sync guard: the app ships byte-identical copies of the
+    # printer scripts from flashforge_deploy/ — editing one side only bricks
+    # provisioning or silently ships a stale script.
+    for name in ("flashforge_init.sh", "uninstall.sh"):
+        a = (REPO / "flashforge_deploy" / name).read_bytes()
+        b = (REPO / "app/src/main/assets" / name).read_bytes()
+        if a != b:
             failures.append(
-                f"SearchClient must implement {needle} (profile tickets ride the "
-                "announce envelope; the engine carries models only)"
+                f"flashforge_deploy/{name} and app/src/main/assets/{name} "
+                "must stay byte-identical (app ships the deploy copy)"
             )
             break
 

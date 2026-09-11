@@ -11,7 +11,7 @@ import android.os.RemoteException;
 /**
  * Binder interface for the isolated slice sandbox (issue #47).
  *
- * Hand-rolled Stub/Proxy mirroring IModelQuarantine (no AIDL): the whole
+ * Hand-rolled Stub/Proxy (no AIDL): the whole
  * Slic3r/OCCT read + slice pipeline runs in an android:isolatedProcess
  * service, so a parser exploit lands in a permission-less process.
  * Files cross the boundary as FDs; the service opens them via

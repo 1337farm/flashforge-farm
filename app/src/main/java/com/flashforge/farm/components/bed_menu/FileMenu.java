@@ -6,7 +6,6 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 
-import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -23,8 +22,6 @@ import androidx.core.graphics.ColorUtils;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -37,8 +34,6 @@ import java.util.regex.Pattern;
 
 import com.flashforge.farm.MainActivity;
 import com.flashforge.farm.R;
-import com.flashforge.farm.SetupActivity;
-import com.flashforge.farm.modelrepo.ModelLibrary;
 import com.flashforge.farm.FarmApp;
 
 import com.flashforge.farm.components.FarmAlertDialogBuilder;
@@ -46,17 +41,16 @@ import com.flashforge.farm.components.UnfoldMenu;
 import com.flashforge.farm.config.ConfigObject;
 
 import com.flashforge.farm.events.NeedDismissCalibrationsMenu;
-import com.flashforge.farm.events.NeedDismissSnackbarEvent;
-import com.flashforge.farm.events.NeedSnackbarEvent;
 import com.flashforge.farm.events.ObjectsListChangedEvent;
 import com.flashforge.farm.events.SelectedObjectChangedEvent;
-import com.flashforge.farm.fragment.BedFragment;
+import com.flashforge.farm.gallery.Primitives;
+import com.flashforge.farm.gallery.ShapeGalleryMenu;
+import com.flashforge.farm.gallery.StlWriter;
 import com.flashforge.farm.recycler.PreferenceItem;
 import com.flashforge.farm.recycler.SimpleRecyclerAdapter;
 import com.flashforge.farm.recycler.SimpleRecyclerItem;
 import com.flashforge.farm.recycler.SpaceItem;
 import com.flashforge.farm.slic3r.Bed3D;
-import com.flashforge.farm.slic3r.Slic3rRuntimeError;
 import com.flashforge.farm.theme.FarmTheme;
 import com.flashforge.farm.theme.ThemesRepo;
 import com.flashforge.farm.utils.ViewUtils;
@@ -284,48 +278,24 @@ public class FileMenu extends ListBedMenu {
             return (int) (portrait ? into.getHeight() * 0.35f : into.getWidth() * 0.6f);
         }
 
-        /** Load a bundled placeholder model onto the bed, downloading it from the model library on first use. */
-        private void ensurePlaceholderModel(String key) {
-            ModelLibrary.ensureModel(FarmApp.INSTANCE, key + ".stl", new ModelLibrary.Callback() {
-                @Override
-                public void onReady(File src) {
-                    new Thread(() -> {
+        private void ensurePaPlaceholder() {
+            if (FileMenu.this.fragment.getGlView().getRenderer().getModel() != null) return;
+            new Thread(() -> {
+                try {
+                    File f = new File(FarmApp.getModelCacheDir(), "pa_placeholder_cube.stl");
+                    StlWriter.writeBinary(f, Primitives.cube(20));
+                    ViewUtils.postOnMainThread(() -> {
                         try {
-                            File f = new File(FarmApp.getModelCacheDir(), "calibration_" + key + ".stl");
-                            copyFile(src, f);
-                            ViewUtils.postOnMainThread(() -> {
-                                try {
-                                    FileMenu.this.fragment.loadModel(f);
-                                    Bus.OBJECTS_LIST_CHANGED.postValue(new ObjectsListChangedEvent());
-                                } catch (Exception e) {
-                                    Log.e("FileMenu", "Failed to load PA placeholder model", e);
-                                }
-                            });
+                            FileMenu.this.fragment.loadModel(f);
+                            Bus.OBJECTS_LIST_CHANGED.postValue(new ObjectsListChangedEvent());
                         } catch (Exception e) {
-                            Log.e("FileMenu", "Failed to load PA placeholder model", e);
+                            android.util.Log.e("FileMenu", "PA placeholder failed", e);
                         }
-                    }, "model-copy").start();
+                    });
+                } catch (Exception e) {
+                    android.util.Log.e("FileMenu", "PA placeholder failed", e);
                 }
-
-                @Override
-                public void onError(String msg) {
-                    Log.e("FileMenu", "Model download failed: " + msg);
-                    ViewUtils.postOnMainThread(() -> Toast.makeText(
-                            FarmApp.INSTANCE, "Model download failed: " + msg,
-                            Toast.LENGTH_LONG).show());
-                }
-            });
-        }
-
-        private void copyFile(File src, File dst) throws IOException {
-            try (InputStream in = new java.io.FileInputStream(src);
-                 FileOutputStream fos = new FileOutputStream(dst)) {
-                byte[] buffer = new byte[10240];
-                int c;
-                while ((c = in.read(buffer)) != -1) {
-                    fos.write(buffer, 0, c);
-                }
-            }
+            }, "pa-placeholder").start();
         }
 
         private String loadJSLoader(String key) {
@@ -417,14 +387,7 @@ public class FileMenu extends ListBedMenu {
                         FarmApp.PENDING_CALIB_START = 0;
                         FarmApp.PENDING_CALIB_END = 0.1;
                         FarmApp.PENDING_CALIB_STEP = 0.002;
-                        // The PA line generates its own gcode pattern (GCode.cpp), but the engine still
-                        // needs at least one object on the bed to pass validation. If the bed is empty,
-                        // drop in a tiny placeholder; its geometry is never printed (engine skips normal
-                        // object printing in Calib_PA_Line mode).
-                        boolean hasModel = FileMenu.this.fragment.getGlView().getRenderer().getModel() != null;
-                        if (!hasModel) {
-                            ensurePlaceholderModel("pa_test");
-                        }
+                        ensurePaPlaceholder();
                         Toast.makeText(ctx, "Pressure Advance armed — go to the Slice tab", Toast.LENGTH_LONG).show();
                         Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu());
                         dismiss(true);
@@ -459,10 +422,7 @@ public class FileMenu extends ListBedMenu {
                                     FarmApp.PENDING_CALIB_END = 0.1;
                                     FarmApp.PENDING_CALIB_STEP = 0.002;
                                 }
-                                boolean hasModel = FileMenu.this.fragment.getGlView().getRenderer().getModel() != null;
-                                if (!hasModel) {
-                                    ensurePlaceholderModel("pa_tower");
-                                }
+                                ensurePaPlaceholder();
                                 Toast.makeText(ctx, "PA Tower armed — go to the Slice tab", Toast.LENGTH_LONG).show();
                                 Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu());
                                 dismiss(true);
@@ -475,18 +435,13 @@ public class FileMenu extends ListBedMenu {
                         FarmApp.PENDING_CALIB_START = 0;
                         FarmApp.PENDING_CALIB_END = 0.1;
                         FarmApp.PENDING_CALIB_STEP = 0.002;
-                        boolean hasModel = FileMenu.this.fragment.getGlView().getRenderer().getModel() != null;
-                        if (!hasModel) {
-                            ensurePlaceholderModel("pa_pattern");
-                        }
+                        ensurePaPlaceholder();
                         Toast.makeText(ctx, "PA Pattern armed — go to the Slice tab", Toast.LENGTH_LONG).show();
                         Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu());
                         dismiss(true);
                     }),
-                    new PreferenceItem().setIcon(R.drawable.deployed_code_24).setTitle(ctx.getString(R.string.MenuFileCalibrationsModels)).setSubtitle(ctx.getString(R.string.MenuFileCalibrationsModelsDescription)).setOnClickListener(v -> {
-                        if (ctx instanceof MainActivity) {
-                            ((MainActivity) ctx).showUnfoldMenu(new CalibrationModelsMenu().setFragment(fragment), v);
-                        }
+                    new PreferenceItem().setIcon(R.drawable.grid_layout_outline_28).setTitle(ctx.getString(R.string.MenuFileShapeGallery)).setSubtitle("Primitives, tags and your own models").setOnClickListener(v -> {
+                        fragment.showUnfoldMenu(new ShapeGalleryMenu(), v);
                     })
             ));
             rv.setAdapter(adapter);
@@ -530,114 +485,6 @@ public class FileMenu extends ListBedMenu {
             super.onDestroy();
 
             Bus.DISMISS_CALIBRATIONS_MENU.removeObserver(onDismiss);
-        }
-    }
-
-    public final static class CalibrationModelsMenu extends UnfoldMenu {
-        private void loadModel(String key) {
-            BedFragment fragment = this.fragment;
-            ViewUtils.postOnMainThread(() -> {
-                File f = new File(FarmApp.getModelCacheDir(), "handy_model_" + key);
-                new Thread(()->{
-                    try {
-                        File src = ModelLibrary.getModelFileSync(FarmApp.INSTANCE, key);
-                        InputStream in = new java.io.FileInputStream(src);
-                        FileOutputStream fos = new FileOutputStream(f);
-                        byte[] buffer = new byte[10240]; int c;
-                        while ((c = in.read(buffer)) != -1) {
-                            fos.write(buffer, 0, c);
-                        }
-                        fos.close();
-                        in.close();
-
-                        ViewUtils.postOnMainThread(() -> {
-                            try {
-                                if (f.getName().endsWith(".gcode")) {
-                                    fragment.loadGCode(f);
-                                } else {
-                                    fragment.loadModel(f);
-                                    Bus.OBJECTS_LIST_CHANGED.postValue(new ObjectsListChangedEvent());
-                                }
-                                Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuFileOpenFileLoaded));
-                            } catch (Slic3rRuntimeError e) {
-                                f.delete();
-                                android.util.Log.e("FarmApp", "Slic3r error: ", e);
-
-                                ViewUtils.postOnMainThread(() -> new FarmAlertDialogBuilder(fragment.getContext())
-                                        .setTitle(R.string.MenuFileOpenFileFailed)
-                                        .setMessage(e.toString())
-                                        .setPositiveButton(android.R.string.ok, null)
-                                        .show());
-                            }
-                        });
-                    } catch (Exception e) {
-                        f.delete();
-                        ViewUtils.postOnMainThread(() -> new FarmAlertDialogBuilder(fragment.getContext())
-                                .setTitle(R.string.MenuFileOpenFileFailed)
-                                .setMessage(e.toString())
-                                .setPositiveButton(android.R.string.ok, null)
-                                .show());
-                    }
-                }).start();
-            }, 200);
-            Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu());
-            dismiss(true);
-        }
-
-        @Override
-        protected View onCreateView(Context ctx, boolean portrait) {
-            LinearLayout ll = new LinearLayout(ctx);
-            ll.setOrientation(LinearLayout.VERTICAL);
-
-            LinearLayout toolbar = new LinearLayout(ctx);
-            toolbar.setPadding(ViewUtils.dp(12), 0, ViewUtils.dp(12), 0);
-            toolbar.setOrientation(LinearLayout.HORIZONTAL);
-            toolbar.setGravity(Gravity.CENTER_VERTICAL);
-            toolbar.setBackground(ViewUtils.createRipple(ThemesRepo.getColor(android.R.attr.colorControlHighlight), 0));
-            toolbar.setOnClickListener(v -> dismiss());
-
-            ImageView icon = new ImageView(ctx);
-            icon.setImageResource(R.drawable.arrow_left_outline_28);
-            icon.setColorFilter(ThemesRepo.getColor(android.R.attr.textColorSecondary));
-            toolbar.addView(icon, new LinearLayout.LayoutParams(ViewUtils.dp(28), ViewUtils.dp(28)));
-
-            TextView title = new TextView(ctx);
-            title.setText(R.string.MenuOrientationPositionBack);
-            title.setTypeface(ViewUtils.getTypeface(ViewUtils.ROBOTO_MEDIUM));
-            title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
-            title.setTextColor(ThemesRepo.getColor(android.R.attr.textColorPrimary));
-            toolbar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f) {{
-                leftMargin = ViewUtils.dp(12);
-            }});
-            ll.addView(toolbar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(52)));
-
-            ll.addView(new DividerView(ctx), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(1f)));
-
-            RecyclerView rv = new FadeRecyclerView(ctx);
-            SimpleRecyclerAdapter adapter = new SimpleRecyclerAdapter();
-            adapter.setItems(Arrays.asList(
-                    new PreferenceItem().setIcon(R.drawable.model_thumb_orcacube_v2).setNoTint(true).setRoundRadius(ViewUtils.dp(8)).setTitle("Orca Cube").setOnClickListener(v -> loadModel("OrcaCube_v2.stl")),
-                    new PreferenceItem().setIcon(R.drawable.model_thumb_orcatolerancetest).setNoTint(true).setRoundRadius(ViewUtils.dp(8)).setTitle("Orca Tolerance Test").setOnClickListener(v -> loadModel("OrcaToleranceTest.stl")),
-                    new PreferenceItem().setIcon(R.drawable.model_thumb_3dbenchy).setNoTint(true).setRoundRadius(ViewUtils.dp(8)).setTitle(ctx.getString(R.string.MenuFileCalibrationsModels3DBenchy)).setOnClickListener(v -> loadModel("3dbenchy.stl")),
-                    new PreferenceItem().setIcon(R.drawable.model_thumb_calicat).setNoTint(true).setRoundRadius(ViewUtils.dp(8)).setTitle("Cali Cat").setOnClickListener(v -> loadModel("calicat.stl")),
-                    new PreferenceItem().setIcon(R.drawable.model_thumb_ksr_fdmtest_v4).setNoTint(true).setRoundRadius(ViewUtils.dp(8)).setTitle("Autodesk FDM Test").setOnClickListener(v -> loadModel("ksr_fdmtest_v4.stl")),
-                    new PreferenceItem().setIcon(R.drawable.model_thumb_voron_design_cube_v7).setNoTint(true).setRoundRadius(ViewUtils.dp(8)).setTitle("Voron Cube").setOnClickListener(v -> loadModel("Voron_Design_Cube_v7.stl")),
-                    new PreferenceItem().setIcon(R.drawable.model_thumb_stanford_bunny).setNoTint(true).setRoundRadius(ViewUtils.dp(8)).setTitle("Stanford Bunny").setOnClickListener(v -> loadModel("Stanford_Bunny.stl")),
-                    new PreferenceItem().setIcon(R.drawable.model_thumb_orca_stringhell).setNoTint(true).setRoundRadius(ViewUtils.dp(8)).setTitle("Orca String Hell").setOnClickListener(v -> loadModel("Orca_stringhell.stl"))
-            ));
-            rv.setAdapter(adapter);
-            ll.addView(rv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-            return ll;
-        }
-
-        @Override
-        public int getRequestedSize(FrameLayout into, boolean portrait) {
-            return portrait ? into.getHeight() - into.getPaddingTop() - into.getPaddingBottom() : into.getWidth();
-        }
-
-        public CalibrationModelsMenu setFragment(BedFragment fragment) {
-            this.fragment = fragment;
-            return this;
         }
     }
 }

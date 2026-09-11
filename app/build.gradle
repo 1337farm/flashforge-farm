@@ -224,15 +224,17 @@ static String getGitCommitHash(File dir) {
 dependencies {
     testImplementation "junit:junit:4.13.2"
     implementation 'com.google.code.gson:gson:2.14.0'
-    // P2P model registry transport: shared iroh-android-native engine AAR
+    // P2P transport for USB reverse-pairing (printer dial-back) and later
+    // phone->printer dials: shared iroh-android-native engine AAR
     // (com.example.irohapp.IrohBridge over JNI). Published to GitHub Packages
     // by 1337farm/iroh-android-native; pinned to a stable engine-v* version.
-    implementation 'com.example.irohapp:irohbridge:0.3.0'
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1'
-    // P2P identity: pure-Java Ed25519 (minSdk-safe; JDK/Android lack it).
-    // Bloxbean fork (0.3.1): maintained patch line of eddsa-java with
-    // verification fixes over the dormant 0.3.0.
+    // Pairing needs >= 0.4.0 (pairAccept/pairStop/pairDial).
+    implementation 'com.example.irohapp:irohbridge:0.4.0'
+    // Phone node identity: pure-Java Ed25519 (minSdk 23 lacks JDK Ed25519) to
+    // derive the stable iroh NodeId from the node seed. Standard derivation, so
+    // Java and the Rust engine agree byte-for-byte from the same seed.
     implementation 'com.bloxbean.cardano:net-i2p-crypto-eddsa:0.3.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1'
     implementation 'com.github.instacart:truetime-android:4.0.0.alpha'
     implementation 'com.github.mrudultora:Colorpicker:1.2.0'
     implementation 'com.github.bumptech.glide:glide:5.0.9'
@@ -240,6 +242,4 @@ dependencies {
     implementation 'com.google.android.material:material:1.14.0'
     implementation 'com.loopj.android:android-async-http:1.4.11'
     implementation 'androidx.activity:activity:1.10.1'
-    // Security: EncryptedSharedPreferences for secure key storage
-    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
 }

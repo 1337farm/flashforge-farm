@@ -257,6 +257,11 @@ jobs:
         run: |
           # Configure upstream as the TOP-LEVEL project: its root CMakeLists
           # relies on CMAKE_SOURCE_DIR/module-path being the upstream tree.
+          # TBB's config dir varies by install layout (lib/cmake/TBB vs
+          # lib/<triplet>/cmake/TBB); resolve it instead of guessing.
+          TBB_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/tbb" -name TBBConfig.cmake -printf '%h\n' | head -1)"
+          test -n "$TBB_CMAKE_DIR" || { echo "ERROR: TBBConfig.cmake not staged"; exit 1; }
+          echo "TBB config dir: $TBB_CMAKE_DIR"
           cmake -S "$(pwd)/engine/build/prusaslicer-src" -B build/prusa30 \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a \
@@ -271,7 +276,7 @@ jobs:
             -DBoost_LIBRARY_DIR="$(pwd)/engine/prusa30/jniImports/boost/lib/arm64-v8a/lib" \
             -DBoost_ARCHITECTURE="-a64" \
             -DBoost_COMPILER="-clang" \
-            -DTBB_ROOT="$(pwd)/engine/prusa30/jniImports/tbb"
+            -DTBB_DIR="$TBB_CMAKE_DIR"
 
       - name: Build headless core (libslic3r)
         run: |

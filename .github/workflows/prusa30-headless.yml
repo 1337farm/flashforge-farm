@@ -53,7 +53,7 @@ jobs:
           NEED=1
           if [ "${{ steps.boost-cache.outputs.cache-hit }}" = "true" ]; then
             OK=1
-            for lib in system filesystem thread locale regex chrono atomic date_time iostreams nowide; do
+            for lib in system filesystem thread regex chrono atomic date_time iostreams nowide; do
               ls "engine/prusa30/jniImports/boost/lib/$ABI/lib/libboost_${lib}"*.a >/dev/null 2>&1 || OK=0
             done
             grep -q "1_86" engine/prusa30/jniImports/boost/include/boost/version.hpp 2>/dev/null || OK=0
@@ -86,7 +86,7 @@ jobs:
       - name: Verify staged Boost exactly
         if: steps.validate.outputs.need == '1'
         run: |
-          for lib in system filesystem thread locale regex chrono atomic date_time iostreams nowide; do
+          for lib in system filesystem thread regex chrono atomic date_time iostreams nowide; do
             ls "engine/prusa30/jniImports/boost/lib/$ABI/lib/libboost_${lib}"*.a >/dev/null \
               || { echo "ERROR: missing libboost_$lib archive"; exit 1; }
           done
@@ -216,7 +216,7 @@ jobs:
 
       - name: Validate staged Boost exactly
         run: |
-          for lib in system filesystem thread locale regex chrono atomic date_time iostreams nowide; do
+          for lib in system filesystem thread regex chrono atomic date_time iostreams nowide; do
             ls "engine/prusa30/jniImports/boost/lib/$ABI/lib/libboost_${lib}"*.a >/dev/null \
               || { echo "ERROR: staged Boost missing libboost_$lib"; exit 1; }
           done

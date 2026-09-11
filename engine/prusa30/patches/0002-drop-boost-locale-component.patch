@@ -1,0 +1,19 @@
+diff --git a/cmake/modules/Boost.cmake b/cmake/modules/Boost.cmake
+index 1111111..2222222 100644
+--- a/cmake/modules/Boost.cmake
++++ b/cmake/modules/Boost.cmake
+@@ -13,7 +13,13 @@
+ # boost::process was introduced first in version 1.64.0,
+ # boost::beast::detail::base64 was introduced first in version 1.66.0
+ set(MINIMUM_BOOST_VERSION "1.86.0")
+-set(_boost_components "system;filesystem;thread;locale;regex;chrono;atomic;date_time;iostreams;nowide")
++# Android NDK (min API 23) provides no iconv/ICU backend, so Boost.Locale
++# cannot build its compiled lib for the NDK target — and no headless TU
++# links locale symbols (the single #include in
++# src/libslic3r/src/libslic3r/utils.cpp is vestigial; UTF conversion goes
++# through boost::nowide). Drop the component so find_package succeeds with
++# the NDK-built Boost tree.
++set(_boost_components "system;filesystem;thread;regex;chrono;atomic;date_time;iostreams;nowide")
+ if(EMSCRIPTEN)
+     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --use-port=sdl2 --use-port=zlib -fwasm-exceptions")
+     #find_package(Boost ${MINIMUM_BOOST_VERSION} REQUIRED )

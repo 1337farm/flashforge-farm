@@ -78,6 +78,11 @@ SRC="$(find "oneTBB-$TBB_VER" -maxdepth 2 -name CMakeLists.txt -path '*oneTBB*' 
 [ -n "$SRC" ] || SRC="$(find "oneTBB-$TBB_VER" -maxdepth 1 -mindepth 1 -type d | head -1)"
 echo "[tbb] source: $SRC"
 
+# NOTE: oneTBB v2021.12.0's real option names (see its CMakeLists.txt) are
+# TBB_TEST (default ON — the suite does NOT cross-compile to Android),
+# BUILD_SHARED_LIBS (default ON — upstream SLIC3R_STATIC wants static), and
+# TBBMALLOC_PROXY_BUILD. TBB_BUILD_TESTS / TBB_BUILD_SHARED /
+# TBB_BUILD_TBBMALLOC_PROXY are NOT options (they'd be silently ignored).
 cmake -S "$SRC" -B "oneTBB-build" \
     -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
     -DANDROID_ABI="$ABI" \
@@ -85,11 +90,9 @@ cmake -S "$SRC" -B "oneTBB-build" \
     -DANDROID_STL=c++_shared \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$STAGE_ROOT" \
-    -DTBB_BUILD_SHARED=OFF \
-    -DTBB_BUILD_STATIC=ON \
-    -DTBB_BUILD_TESTS=OFF \
-    -DTBB_BUILD_TBBMALLOC=ON \
-    -DTBB_BUILD_TBBMALLOC_PROXY=OFF
+    -DBUILD_SHARED_LIBS=OFF \
+    -DTBB_TEST=OFF \
+    -DTBBMALLOC_PROXY_BUILD=OFF
 cmake --build "oneTBB-build" -j"$N_CORES"
 cmake --install "oneTBB-build"
 

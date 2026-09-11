@@ -14,10 +14,13 @@
 set -euo pipefail
 
 PRUSA_REF="${PRUSA_REF:-6f510128d7c2e543b62919b74bea7e876f564205}"
-DEFAULT_DIR="$(dirname "$0")/../build/prusaslicer-src"
+# Absolute SCRIPT_DIR/PATCHES_DIR: patches are applied inside `git -C "$PRUSA_DIR"`
+# (a different cwd), so a relative path would fail to resolve there.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEFAULT_DIR="$SCRIPT_DIR/../build/prusaslicer-src"
 PRUSA_DIR="${PRUSA_DIR:-$DEFAULT_DIR}"
 PRUSA_SHALLOW="${PRUSA_SHALLOW:-1}"
-PATCHES_DIR="$(dirname "$0")/patches"
+PATCHES_DIR="$SCRIPT_DIR/patches"
 REPO_URL="https://github.com/prusa3d/PrusaSlicer.git"
 
 log() { printf '[fetch-prusa] %s\n' "$*" >&2; }

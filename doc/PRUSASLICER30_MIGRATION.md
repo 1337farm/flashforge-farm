@@ -167,3 +167,8 @@ interactor split first. This is the real remaining unknown, not `IPrint`.
 The import/convert tooling already shipped (#107–#115) maps foreign profiles
 into the *old* Orca key space; step 4 re-points its target to the 3.0
 `ConfigDef`/`ConfigPack` so imports land natively.
+> **Open blocker (verified):** `FileLoadingLogic` / `ConfigLoad` live in the
+> GUI-gated `slic3r-shared` module; upstream's headless split of it is not done
+> ("It requires splitting slic3r-shared first"). The headless driver therefore
+> adds `slic3r-shared` to the headless module set (see engine/prusa30/CMakeLists.txt)
+> pending the upstream split.

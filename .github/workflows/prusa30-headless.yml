@@ -12,21 +12,175 @@ on:
     branches: ["main", "master"]
     paths:
       - "engine/prusa30/**"
+      - "scripts/build_boost.sh"
+      - "scripts/build_prusa30_tbb.sh"
       - ".github/workflows/prusa30-headless.yml"
   pull_request:
     paths:
       - "engine/prusa30/**"
+      - "scripts/build_boost.sh"
+      - "scripts/build_prusa30_tbb.sh"
       - ".github/workflows/prusa30-headless.yml"
 
 env:
   NDK_VERSION: "23.1.7779620"
   PRUSA_REF: "6f510128d7c2e543b62919b74bea7e876f564205"
+  BOOST_VER: "1.86.0"
+  ABI: "arm64-v8a"
 
 jobs:
+  build-boost:
+    name: boost
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged Boost ${{ env.BOOST_VER }} from cache
+        id: boost-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/boost
+          key: prusa30-boost-${{ env.BOOST_VER }}-${{ hashFiles('scripts/build_boost.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored Boost
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.boost-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            for lib in system filesystem thread locale regex chrono atomic date_time iostreams nowide; do
+              ls "engine/prusa30/jniImports/boost/lib/$ABI/lib/libboost_${lib}"*.a >/dev/null 2>&1 || OK=0
+            done
+            grep -q "1_86" engine/prusa30/jniImports/boost/include/boost/version.hpp 2>/dev/null || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build Boost ${{ env.BOOST_VER }} from source (FULL)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_boost.sh
+          BOOST_VER="$BOOST_VER" ABI="$ABI" API_LEVEL="23" \
+            JNI_IMPORTS_DIR="$(pwd)/engine/prusa30/jniImports" \
+            ./scripts/build_boost.sh
+
+      - name: Verify staged Boost exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          for lib in system filesystem thread locale regex chrono atomic date_time iostreams nowide; do
+            ls "engine/prusa30/jniImports/boost/lib/$ABI/lib/libboost_${lib}"*.a >/dev/null \
+              || { echo "ERROR: missing libboost_$lib archive"; exit 1; }
+          done
+          grep -q "1_86" engine/prusa30/jniImports/boost/include/boost/version.hpp \
+            || { echo "ERROR: staged headers are not Boost 1.86"; exit 1; }
+          echo "Boost $BOOST_VER staged and verified"
+
+      - name: Save staged Boost ${{ env.BOOST_VER }}
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/boost
+          key: prusa30-boost-${{ env.BOOST_VER }}-${{ hashFiles('scripts/build_boost.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-tbb:
+    name: tbb
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged oneTBB v2021.12.0 from cache
+        id: tbb-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/tbb
+          key: prusa30-tbb-v2021.12.0-${{ hashFiles('scripts/build_prusa30_tbb.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored oneTBB
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.tbb-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/tbb/include/oneapi/tbb/version.h || OK=0
+            ls engine/prusa30/jniImports/tbb/lib*/cmake/TBB/TBBConfig.cmake >/dev/null 2>&1 \
+              || find engine/prusa30/jniImports/tbb -name TBBConfig.cmake | grep -q . || OK=0
+            find engine/prusa30/jniImports/tbb -name 'libtbb.a' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build oneTBB v2021.12.0 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_tbb.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/tbb" \
+            ./scripts/build_prusa30_tbb.sh
+
+      - name: Verify staged oneTBB exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/tbb/include/oneapi/tbb/version.h \
+            || { echo "ERROR: oneapi/tbb/version.h missing"; exit 1; }
+          find engine/prusa30/jniImports/tbb -name TBBConfig.cmake | grep -q . \
+            || { echo "ERROR: TBBConfig.cmake missing"; exit 1; }
+          find engine/prusa30/jniImports/tbb -name 'libtbb.a' | grep -q . \
+            || { echo "ERROR: no libtbb.a staged"; exit 1; }
+          echo "oneTBB v2021.12.0 staged and verified"
+
+      - name: Save staged oneTBB v2021.12.0
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/tbb
+          key: prusa30-tbb-v2021.12.0-${{ hashFiles('scripts/build_prusa30_tbb.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
   headless-build:
     name: headless
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    needs: [build-boost, build-tbb]
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -52,6 +206,39 @@ jobs:
           chmod +x scripts/build_prusa30_deps.sh
           ./scripts/build_prusa30_deps.sh
 
+      - name: Restore staged Boost ${{ env.BOOST_VER }} from cache
+        id: boost-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/boost
+          key: prusa30-boost-${{ env.BOOST_VER }}-${{ hashFiles('scripts/build_boost.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged Boost exactly
+        run: |
+          for lib in system filesystem thread locale regex chrono atomic date_time iostreams nowide; do
+            ls "engine/prusa30/jniImports/boost/lib/$ABI/lib/libboost_${lib}"*.a >/dev/null \
+              || { echo "ERROR: staged Boost missing libboost_$lib"; exit 1; }
+          done
+          grep -q "1_86" engine/prusa30/jniImports/boost/include/boost/version.hpp \
+            || { echo "ERROR: staged Boost headers are not 1.86"; exit 1; }
+          echo "Boost $BOOST_VER present and verified"
+
+      - name: Restore staged oneTBB v2021.12.0 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/tbb
+          key: prusa30-tbb-v2021.12.0-${{ hashFiles('scripts/build_prusa30_tbb.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged oneTBB exactly
+        run: |
+          test -f engine/prusa30/jniImports/tbb/include/oneapi/tbb/version.h \
+            || { echo "ERROR: staged oneTBB missing oneapi headers"; exit 1; }
+          find engine/prusa30/jniImports/tbb -name TBBConfig.cmake | grep -q . \
+            || { echo "ERROR: staged oneTBB missing TBBConfig.cmake"; exit 1; }
+          echo "oneTBB v2021.12.0 present and verified"
+
       - name: Configure headless 3.0 build (arm64-v8a)
         run: |
           # Configure upstream as the TOP-LEVEL project: its root CMakeLists
@@ -64,7 +251,11 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DSLIC3R_GUI=OFF \
             -DSLIC3R_BUILD_TESTS=OFF \
-            -DCMAKE_PREFIX_PATH="$(pwd)/engine/prusa30/jniImports"
+            -DCMAKE_PREFIX_PATH="$(pwd)/engine/prusa30/jniImports" \
+            -DBOOST_ROOT="$(pwd)/engine/prusa30/jniImports/boost" \
+            -DBoost_INCLUDE_DIR="$(pwd)/engine/prusa30/jniImports/boost/include" \
+            -DBoost_LIBRARYDIR="$(pwd)/engine/prusa30/jniImports/boost/lib/arm64-v8a/lib" \
+            -DTBB_ROOT="$(pwd)/engine/prusa30/jniImports/tbb"
 
       - name: Build headless core (libslic3r)
         run: |

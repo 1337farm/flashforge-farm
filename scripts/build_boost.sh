@@ -8,12 +8,12 @@
 # Local on-device builds do NOT compile Boost here anymore: they download the
 # CI-built native dependencies (see scripts/fetch-native-deps.sh).
 #
-# Builds Boost 1.85.0 for the configured ABI via Boost-for-Android's
-# build-android.sh, then copies the static archives + headers into the source
-# tree at $JNI_IMPORTS_DIR/boost. By default we do a FULL build
-# (BOOST_ALL_LIBS=1) so every archive b2 produces for this ABI is staged and
-# available to the app; the app links exactly what it needs and unused archives
-# are simply not pulled by the linker.
+# Builds Boost ($BOOST_VER, default 1.85.0) for the configured ABI via
+# Boost-for-Android's build-android.sh, then copies the static archives +
+# headers into the source tree at $JNI_IMPORTS_DIR/boost. By default we do a
+# FULL build (BOOST_ALL_LIBS=1) so every archive b2 produces for this ABI is
+# staged and available to the app; the app links exactly what it needs and
+# unused archives are simply not pulled by the linker.
 #
 # Env inputs (all optional; defaults shown):
 #   ANDROID_NDK_ROOT  NDK root (required; falls back to $ANDROID_SDK_ROOT/ndk/23.1.7779620)
@@ -21,6 +21,7 @@
 #   ABI               target ABI (default arm64-v8a)
 #   API_LEVEL         Android target version (default 23)
 #   N_CORES           parallelism (default nproc)
+#   BOOST_VER         Boost version to build (default 1.85.0; prusa30 uses 1.86.0)
 #   BOOST_ALL_LIBS    1 (default) for full build, 0 to restrict to BOOST_LIBS
 #   BOOST_LIBS        comma-separated --with-libraries list (only used when BOOST_ALL_LIBS=0)
 #   WRAP_HOST_TOOLS   must be 'none' (the only supported mode; emulator modes removed)
@@ -44,9 +45,12 @@ fi
 ABI="${ABI:-arm64-v8a}"
 API_LEVEL="${API_LEVEL:-23}"
 N_CORES="${N_CORES:-$(nproc)}"
+BOOST_VER="${BOOST_VER:-1.85.0}"
 WRAP_HOST_TOOLS="${WRAP_HOST_TOOLS:-none}"
 WORK_DIR="${WORK_DIR:-/tmp/build_android_deps}"
 JNI_IMPORTS_DIR="${JNI_IMPORTS_DIR:-$ROOT/engine/src/main/jniImports}"
+# Header install dir carries major_minor (boost-1_85, boost-1_86, ...).
+VER_DIR="boost-$(printf '%s' "$BOOST_VER" | awk -F. '{printf "%s_%s", $1, $2}')"
 
 # The full Boost library list produced by a FULL build. By default we build
 # everything (BOOST_ALL_LIBS=1) — unused archives are simply not pulled by the
@@ -55,7 +59,7 @@ JNI_IMPORTS_DIR="${JNI_IMPORTS_DIR:-$ROOT/engine/src/main/jniImports}"
 BOOST_LIBS="${BOOST_LIBS:-atomic,charconv,chrono,container,context,contract,coroutine,date_time,exception,fiber,filesystem,graph,iostreams,json,log,math,nowide,program_options,random,regex,serialization,stacktrace,system,test,thread,timer,type_erasure,url,wave}"
 
 echo "======================================================================="
-echo " [Boost] Building Boost 1.85.0 ($ABI, api $API_LEVEL, -j$N_CORES, wrap=$WRAP_HOST_TOOLS)"
+echo " [Boost] Building Boost $BOOST_VER ($ABI, api $API_LEVEL, -j$N_CORES, wrap=$WRAP_HOST_TOOLS)"
 echo " [Boost] NDK: $NDK"
 if [ "${BOOST_ALL_LIBS:-1}" = "1" ]; then
     echo " [Boost] mode: FULL build (all libraries; python/mpi auto-skipped by b2)"
@@ -106,7 +110,7 @@ else
     b2_libs=(--with-libraries="$BOOST_LIBS")
 fi
 ./build-android.sh \
-    --boost=1.85.0 \
+    --boost="$BOOST_VER" \
     "${b2_libs[@]}" \
     --arch="$ABI" \
     --target-version="$API_LEVEL" \
@@ -121,13 +125,13 @@ fi
 DEST="$JNI_IMPORTS_DIR/boost"
 mkdir -p "$DEST/lib/$ABI/lib" "$DEST/include"
 cp "$OUT"/*.a "$DEST/lib/$ABI/lib/"
-# Boost-for-Android installs headers under include/boost-1_85/boost/... but the
-# app's CMakeLists expects them flat under include/boost/... (include dirs in
-# CMakeLists.txt reference engine/src/main/jniImports/boost/include). Normalize (safe
-# to re-run): lift the <ver>/boost dir up one level, then drop the version dir.
+# Boost-for-Android installs headers under include/boost-1_85/boost/... (or
+# boost-1_86/... for 1.86.0) but consumers expect them flat under
+# include/boost/.... Normalize (safe to re-run): lift the <ver>/boost dir up
+# one level, then drop the version dir.
 cp -r "build/out/$ABI/include/." "$DEST/include/"
-if [ -d "$DEST/include/boost-1_85" ]; then
-    cp -r "$DEST/include/boost-1_85/." "$DEST/include/"
-    rm -rf "$DEST/include/boost-1_85"
+if [ -d "$DEST/include/$VER_DIR" ]; then
+    cp -r "$DEST/include/$VER_DIR/." "$DEST/include/"
+    rm -rf "$DEST/include/$VER_DIR"
 fi
 echo "[boost] done. $(ls "$DEST/lib/$ABI/lib"/*.a | wc -l) archives -> $DEST/lib/$ABI/lib"

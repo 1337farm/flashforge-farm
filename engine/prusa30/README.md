@@ -9,8 +9,8 @@ core. See `doc/PRUSASLICER30_MIGRATION.md` for the grounded migration plan.
 ```
 engine/prusa30/
 ├── fetch_prusaslicer.sh           # clone+pin+patch the upstream engine tree (build dir only)
-├── CMakeLists.txt                 # headless android build entry (adds modules + driver)
 ├── farm_driver.cpp                # JNI-facing slice driver (Domain::ConfigPack -> Print -> gcode)
+├── deps-manifest.json             # exact compiled/header dep pins from upstream deps/*.cmake
 └── patches/
     └── 0001-src-allow-headless-build.patch   # remove upstream `FATAL_ERROR` under SLIC3R_GUI=OFF
 ```
@@ -20,12 +20,22 @@ engine/prusa30/
 - `fetch_prusaslicer.sh` writes the engine source to `engine/build/prusaslicer-src`
   (a build dir in `.gitignore`, never committed). `PRUSA_REF` selects the commit;
   default = pinned `version_3.0.0-alpha11`.
-- The JNI layer and app/CMakeLists reference `engine/prusa30` targets, *not* the
-  upstream tree directly, so the only thing that changes with upstream bumps is
-  `PRUSA_REF`.
-- The upstream source requires the staged native deps (Boost 1.86.0, OCCT V7_6_1,
-  oneTBB 2021.12.0, CGAL v5.6.2, OpenVDB v11.0.0, …). Those handle-overs are
-  tracked separately and must be in place before the headless build goes green.
+- The `.github/workflows/prusa30-headless.yml` workflow drives the loop: stage the
+  header-only deps (`scripts/build_prusa30_deps.sh` → `engine/prusa30/jniImports/`),
+  configure the **fetched upstream as the TOP-LEVEL project** (its root CMakeLists
+  relies on `CMAKE_SOURCE_DIR`/module-path being the upstream tree — a wrapper
+  `add_subdirectory(upstream EXCLUDE_FROM_ALL)` does not work), then build the
+  headless core target `libslic3r` (`src/libslic3r/CMakeLists.txt`). Implementing
+  deps-Boost 1.86.0, OCCT V7_6_1, oneTBB 2021.12.0, CGAL v5.6.2, OpenVDB v11.0.0,
+  …) still to be staged for the NDK — red configure/build runs enumerate the exact
+  `find_*`/dep failures, per the loop's design.
+- `farm_driver.cpp` is **not yet compiled in CI**. Its config/model-load glue
+  (`Slic3r/Biz/Config/ConfigLoad.hpp`, `Slic3r/Biz/FileLoadingLogic.hpp`) lives in
+  upstream's `slic3r-shared` module, which is `SLIC3R_GUI`-gated in
+  `src/CMakeLists.txt` (3.0-alpha has not split it headless). Until that lands, the
+  driver is validated locally with `scripts/tests/syntax_check_prusa30.sh`
+  (`-fsyntax-only` against the fetched upstream headers); a future patch adds it to
+  the headless build once `slic3r-shared` is buildable.
 
 ## Why a headless patch exists at all
 

@@ -39,6 +39,7 @@ engine/src/main/jniLibs/
 engine/src/main/occt/
 engine/build/
 engine/output/
+engine/prusa30/jniImports/
 app/src/main/assets/update.json
 vendor/upstream-apk/
 .fetch-cache/

@@ -991,6 +991,20 @@ public class BedFragment extends Fragment {
         computePlateOrigin(index, cols, bedMax.x - bedMin.x, bedMax.y - bedMin.y, out);
     }
 
+    /** Read a stream fully but bail out (IOException) past a byte cap, mirroring the
+     *  former modelrepo ZipGuard metadata limit (256 KiB) that this code replaced. */
+    private static String readCapped(java.io.InputStream in, long maxBytes) throws java.io.IOException {
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[1024]; long total = 0; int c;
+        while ((c = in.read(buf)) != -1) {
+            total += c;
+            if (total > maxBytes) { in.close(); throw new java.io.IOException("metadata entry exceeds " + maxBytes + " bytes"); }
+            bos.write(buf, 0, c);
+        }
+        in.close();
+        return new String(bos.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+    }
+
     /**
      * Bed size the project file was laid out for, from its embedded printable_area. The world
      * offsets of objects on plate 2+ are multiples of THIS bed's stride — which may differ from
@@ -1000,8 +1014,7 @@ public class BedFragment extends Fragment {
         try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(f)) {
             java.util.zip.ZipEntry en = zip.getEntry("Metadata/project_settings.config");
             if (en == null) return false;
-            org.json.JSONObject cfg = new org.json.JSONObject(
-                    com.flashforge.farm.utils.IOUtils.readString(zip.getInputStream(en), true));
+            org.json.JSONObject cfg = new org.json.JSONObject(readCapped(zip.getInputStream(en), 256L * 1024));
             org.json.JSONArray area = cfg.optJSONArray("printable_area");
             if (area == null || area.length() == 0) return false;
             double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;

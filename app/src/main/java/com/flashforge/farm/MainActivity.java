@@ -347,50 +347,65 @@ public class MainActivity extends AppCompatActivity {
                 }
             } else if (requestCode == MainActivity.REQUEST_CODE_RESTORE) {
                 if (data == null || data.getData() == null) return;
-                try {
-                    InputStream in = getContentResolver().openInputStream(data.getData());
-                    ByteArrayOutputStream buf = new ByteArrayOutputStream();
-                    byte[] buffer = new byte[10240];
-                    int c;
-                    while ((c = in.read(buffer)) != -1) {
-                        buf.write(buffer, 0, c);
+                Uri restoreUri = data.getData();
+                IOUtils.IO_POOL.submit(() -> {
+                    try {
+                        InputStream in = getContentResolver().openInputStream(restoreUri);
+                        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+                        byte[] buffer = new byte[10240];
+                        int c; long total = 0;
+                        while ((c = in.read(buffer)) != -1) {
+                            total += c;
+                            if (total > 16L * 1024 * 1024)
+                                throw new IOException("backup file too large");
+                            buf.write(buffer, 0, c);
+                        }
+                        in.close();
+                        FarmBackup.RestoreReport r = FarmBackup.importJson(buf.toString("UTF-8"));
+                        com.flashforge.farm.utils.PairingRuntime.refreshTokens();
+                        ViewUtils.postOnMainThread(() -> {
+                            Fragment cur = getNavigationDelegate().getCurrentFragment();
+                            if (cur instanceof FleetFragment) {
+                                ((FleetFragment) cur).refreshNow();
+                            }
+                            new FarmAlertDialogBuilder(this)
+                                    .setTitle(R.string.FleetRestore)
+                                    .setMessage(getString(R.string.FleetRestoreDone, r.printers, r.queuedJobs,
+                                            r.printProfiles + r.filamentProfiles + r.printerProfiles))
+                                    .setPositiveButton(android.R.string.ok, null)
+                                    .show();
+                        });
+                    } catch (Exception e) {
+                        ViewUtils.postOnMainThread(() ->
+                            new FarmAlertDialogBuilder(this)
+                                    .setTitle(R.string.FleetRestore)
+                                    .setMessage(getString(R.string.FleetRestoreFailed, e.toString()))
+                                    .setPositiveButton(android.R.string.ok, null)
+                                    .show());
                     }
-                    in.close();
-                    FarmBackup.RestoreReport r = FarmBackup.importJson(buf.toString("UTF-8"));
-                    com.flashforge.farm.utils.PairingRuntime.refreshTokens();
-                    Fragment cur = getNavigationDelegate().getCurrentFragment();
-                    if (cur instanceof FleetFragment) {
-                        ((FleetFragment) cur).refreshNow();
-                    }
-                    new FarmAlertDialogBuilder(this)
-                            .setTitle(R.string.FleetRestore)
-                            .setMessage(getString(R.string.FleetRestoreDone, r.printers, r.queuedJobs,
-                                    r.printProfiles + r.filamentProfiles + r.printerProfiles))
-                            .setPositiveButton(android.R.string.ok, null)
-                            .show();
-                } catch (Exception e) {
-                    new FarmAlertDialogBuilder(this)
-                            .setTitle(R.string.FleetRestore)
-                            .setMessage(getString(R.string.FleetRestoreFailed, e.toString()))
-                            .setPositiveButton(android.R.string.ok, null)
-                            .show();
-                }
+                });
             } else if (requestCode == MainActivity.REQUEST_CODE_IMPORT_GALLERY) {
                 if (data == null || data.getData() == null) return;
-                try {
-                    Uri uri = data.getData();
-                    String name = IOUtils.getDisplayName(uri);
-                    InputStream in = getContentResolver().openInputStream(uri);
-                    com.flashforge.farm.gallery.GalleryStore.importStream(in, name);
-                    in.close();
-                    Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuFileShapeGalleryAdded));
-                } catch (Exception e) {
-                    new FarmAlertDialogBuilder(this)
-                            .setTitle(R.string.MenuFileShapeGalleryAdd)
-                            .setMessage(getString(R.string.MenuFileShapeGalleryAddFailed) + ": " + e.getMessage())
-                            .setPositiveButton(android.R.string.ok, null)
-                            .show();
-                }
+                Uri importUri = data.getData();
+                IOUtils.IO_POOL.submit(() -> {
+                    InputStream in = null;
+                    try {
+                        String name = IOUtils.getDisplayName(importUri);
+                        in = getContentResolver().openInputStream(importUri);
+                        com.flashforge.farm.gallery.GalleryStore.importStream(in, name);
+                        ViewUtils.postOnMainThread(() ->
+                                Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuFileShapeGalleryAdded)));
+                    } catch (Exception e) {
+                        ViewUtils.postOnMainThread(() ->
+                            new FarmAlertDialogBuilder(this)
+                                    .setTitle(R.string.MenuFileShapeGalleryAdd)
+                                    .setMessage(getString(R.string.MenuFileShapeGalleryAddFailed) + ": " + e.getMessage())
+                                    .setPositiveButton(android.R.string.ok, null)
+                                    .show());
+                    } finally {
+                        if (in != null) try { in.close(); } catch (IOException ignored) {}
+                    }
+                });
             } else if (requestCode == MainActivity.REQUEST_CODE_PROVISION_USB
                     || requestCode == MainActivity.REQUEST_CODE_UNINSTALL_USB) {
                 Fragment cur = getNavigationDelegate().getCurrentFragment();

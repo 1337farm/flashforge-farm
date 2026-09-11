@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.Comparator;
 
 public final class GalleryStore {
+    private static final long MAX_IMPORT_BYTES = 600L * 1024 * 1024; // matches MeshLoader limit
     private GalleryStore() {
     }
 
@@ -52,7 +53,15 @@ public final class GalleryStore {
             out = new FileOutputStream(dest);
             byte[] buf = new byte[10240];
             int n;
-            while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+            long total = 0;
+            while ((n = in.read(buf)) != -1) {
+                total += n;
+                if (total > MAX_IMPORT_BYTES) throw new IOException("model larger than " + MAX_IMPORT_BYTES + " bytes");
+                out.write(buf, 0, n);
+            }
+        } catch (IOException e) {
+            dest.delete();
+            throw e;
         } finally {
             if (out != null) {
                 try {

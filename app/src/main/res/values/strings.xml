@@ -47,13 +47,17 @@
     <string name="ModelContextDeleteAll">Delete all</string>
     <string name="ModelContextDeletedAll">All models deleted.</string>
     <string name="MenuFileCalibrations">Calibrat.</string>
-    <string name="MenuFileCalibrationsModels">Handy Models</string>
-    <string name="MenuFileCalibrationsModelsDescription">Handy models library</string>
+    <string name="MenuFileShapeGallery">Shape gallery</string>
+    <string name="MenuFileShapeGalleryAdd">Add model…</string>
+    <string name="MenuFileShapeGalleryAdded">Model added to gallery.</string>
+    <string name="MenuFileShapeGalleryAddFailed">Could not add model</string>
+    <string name="MenuFileShapeGalleryDeleted">Model removed.</string>
+    <string name="MenuFileShapeGalleryDelete">Remove from gallery?</string>
+    <string name="MenuFileShapeGalleryLoading">Loading…</string>
     <string-array name="pa_presets">
         <item>Direct Drive (0-0.1, step 0.002)</item>
         <item>Bowden (0-0.5, step 0.05)</item>
     </string-array>
-    <string name="MenuFileCalibrationsModels3DBenchy" translatable="false">3D Benchy</string>
     <string name="MenuFileImportProfiles">Import profiles</string>
     <string name="MenuFileImportProfilesFailed">Import failed</string>
     <string name="MenuFileImportProfilesFailedBaseProfileNotFound">Parent profile not found: %s</string>
@@ -203,21 +207,6 @@
     <string name="No">No</string>
     <string name="SlotFleet">Fleet &amp; Queue</string>
     <string name="SlotFleetTooltip">Manage your printers and print queue</string>
-    <string name="SlotModels">Models</string>
-    <string name="SlotModelsTooltip">Browse and download community models (P2P)</string>
-    <string name="ModelRepoTicketHint">Paste model ticket or magnet</string>
-    <string name="ModelRepoFetch">Fetch</string>
-    <string name="ModelRepoIdle">No downloads yet. Paste a ticket above to fetch a model.</string>
-    <string name="ModelRepoResolving">Resolving…</string>
-    <string name="ModelRepoConfirm">Found “%1$s” by %2$s. Tap Fetch again to confirm download.</string>
-    <string name="ModelRepoDownloading">Downloading %1$s…</string>
-    <string name="ModelRepoProgress">%1$d%% (KB %2$d / %3$d)</string>
-    <string name="ModelRepoVerifying">Verifying download…</string>
-    <string name="ModelRepoDone">Download complete. Tap a file to open it.</string>
-    <string name="ModelRepoFailed">Failed: %1$s</string>
-    <string name="ModelRepoUnavailable">P2P transport not available in this build</string>
-    <string name="ModelRepoBlockedType">Blocked file type: %1$s</string>
-    <string name="ModelRepoBlockedPublisher">Publisher is blocked</string>
     <string name="FleetAddPrinter">Add Printer</string>
     <string name="FleetPrinterName">Printer Name</string>
     <string name="FleetNozzleSize">Nozzle Size (mm)</string>
@@ -233,13 +222,24 @@
         <item>@string/FleetSaveTargetFile</item>
         <item>@string/FleetSaveTargetShare</item>
     </string-array>
+    <string name="FleetPrinterModel">Printer model (e.g. AD5M)</string>
+    <string name="FleetPrinterModelValue">Model: %1$s</string>
+    <string name="FleetFirmwareVersion">Firmware version</string>
+    <string name="FleetFirmwareVersionValue">Firmware: %1$s</string>
+    <string name="FleetBackupTitle">Backup &amp; Restore</string>
+    <string name="FleetBackup">Backup to file</string>
+    <string name="FleetRestore">Restore from file</string>
+    <string name="FleetBackupDone">Backup saved</string>
+    <string name="FleetBackupFailed">Backup failed: %1$s</string>
+    <string name="FleetPaired">Paired — P2P ready</string>
+    <string name="FleetPairingPending">Pairing — waiting for the printer to call back</string>
+    <string name="FleetRestoreDone">Restored %1$d printers, %2$d queued jobs, %3$d profiles</string>
+    <string name="FleetRestoreFailed">Restore failed: %1$s</string>
     <string name="FleetProvisionViaUsb">Provision via USB</string>
     <string name="FleetProvisionMode">Mode</string>
     <string name="FleetProvisionModeRam">RAM (volatile, zero footprint)</string>
     <string name="FleetProvisionModeInstall">Persistent (autostart on boot)</string>
-    <string name="FleetProvisionConnect">Connect via p2p</string>
     <string name="FleetUniqueCode">Unique code</string>
-    <string name="FleetP2pNotReady">P2P dial not yet available: no Iroh node is bundled on-device. The USB module is written; import its public key to dial over the overlay.</string>
     <string name="FleetProvisioningDone">Provisioning finished.</string>
     <string name="FleetNoUsbDetected">No USB drive detected. Plug in a FAT32 drive, or pick a folder instead.</string>
     <string name="MenuSliceEnqueuePrint">Add to Print Queue</string>

@@ -8128,6 +8128,13 @@ void PrintConfigDef::handle_legacy(t_config_option_key &opt_key, std::string &va
         }
     } else if (opt_key == "overhang_fan_threshold" && value == "5%") {
         value = "10%";
+    } else if (opt_key == "overhang_fan_threshold") {
+        if (value == "0" || value == "0.0") value = "0%";
+        else if (value == "10" || value == "10.0") value = "10%";
+        else if (value == "25" || value == "25.0") value = "25%";
+        else if (value == "50" || value == "50.0") value = "50%";
+        else if (value == "75" || value == "75.0") value = "75%";
+        else if (value == "95" || value == "95.0") value = "95%";
     } else if( opt_key == "wall_infill_order" ) {
         if (value == "inner wall/outer wall/infill" || value == "infill/inner wall/outer wall") {
             opt_key = "wall_sequence";

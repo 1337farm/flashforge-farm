@@ -1,0 +1,63 @@
+name: prusa30-headless
+
+# Compile-fix loop for the Orca -> PrusaSlicer 3.0 swap. Fetches the pinned
+# upstream tree, applies our headless patch, then configures/builds
+# engine/prusa30 against the Android NDK. Isolated from native-engine-build.yml
+# (which still builds the Orca engine) so the 3.0 bring-up does not break the
+# shipping app. A red run IS the error list that drives the next fix PR.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main", "master"]
+    paths:
+      - "engine/prusa30/**"
+      - ".github/workflows/prusa30-headless.yml"
+  pull_request:
+    paths:
+      - "engine/prusa30/**"
+      - ".github/workflows/prusa30-headless.yml"
+
+env:
+  NDK_VERSION: "23.1.7779620"
+  PRUSA_REF: "6f510128d7c2e543b62919b74bea7e876f564205"
+
+jobs:
+  headless-build:
+    name: headless
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Android SDK env
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Fetch PrusaSlicer 3.0 source (pinned + patched)
+        run: |
+          chmod +x engine/prusa30/fetch_prusaslicer.sh
+          PRUSA_REF="$PRUSA_REF" ./engine/prusa30/fetch_prusaslicer.sh
+
+      - name: Configure headless 3.0 build (arm64-v8a)
+        run: |
+          cmake -S engine/prusa30 -B build/prusa30 \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_STL=c++_shared \
+            -DANDROID_PLATFORM=android-23 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSLIC3R_GUI=OFF \
+            -DPRUSA30_SRC="$(pwd)/engine/build/prusaslicer-src"
+
+      - name: Build headless slice driver
+        run: |
+          cmake --build build/prusa30 --target farm_prusa30 -j"$(nproc)"

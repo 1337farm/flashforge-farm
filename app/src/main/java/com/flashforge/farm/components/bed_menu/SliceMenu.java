@@ -767,15 +767,11 @@ public class SliceMenu extends ListBedMenu {
         private PositionScrollView fromTrack, toTrack;
         private TextView title;
 
-        private Runnable applyCallback;
-
         private GCodeViewer getViewer() {
             return fragment.getGlView().getRenderer().getViewer();
         }
 
         private void applyView(int from, int to) {
-            if (applyCallback != null) ViewUtils.removeCallbacks(applyCallback);
-
             GCodeViewer viewer = getViewer();
             if (viewer == null) {
                 return;
@@ -818,26 +814,19 @@ public class SliceMenu extends ListBedMenu {
                 if (toTrack.getCurrentPosition() < integer) {
                     toTrack.setCurrentPosition(integer);
                 }
-                title.setText(fragment.getContext().getString(R.string.MenuSliceInfoLayers, fromTrack.getCurrentPosition(), integer));
-
-                ViewUtils.removeCallbacks(applyCallback);
-                ViewUtils.postOnMainThread(applyCallback = ()-> applyView(integer, toTrack.getCurrentPosition()), 50);
+                applyView(integer, toTrack.getCurrentPosition());
             });
             fromTrack.setListener(integer -> {
                 GCodeViewer viewer = getViewer();
                 if (viewer != null) viewer.setFastMode(false);
                 applyView(integer, toTrack.getCurrentPosition());
             });
-            ll.addView(fromTrack, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(80)));
 
             toTrack = new PositionScrollView(ctx);
             toTrack.setProgressListener(integer -> {
                 GCodeViewer viewer = getViewer();
                 if (viewer != null && Prefs.isPerformanceModeEnabled()) viewer.setFastMode(true);
-                title.setText(fragment.getContext().getString(R.string.MenuSliceInfoLayers, fromTrack.getCurrentPosition(), integer));
-
-                ViewUtils.removeCallbacks(applyCallback);
-                ViewUtils.postOnMainThread(applyCallback = ()-> applyView(fromTrack.getCurrentPosition(), integer), 50);
+                applyView(fromTrack.getCurrentPosition(), integer);
             });
             toTrack.setListener(integer -> {
                 GCodeViewer viewer = getViewer();
@@ -845,6 +834,7 @@ public class SliceMenu extends ListBedMenu {
                 applyView(fromTrack.getCurrentPosition(), integer);
             });
             ll.addView(toTrack, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(80)));
+            ll.addView(fromTrack, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(80)));
 
             ll.addView(new DividerView(ctx), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(1f)));
             LinearLayout toolbar = new LinearLayout(ctx);

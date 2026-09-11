@@ -21,6 +21,7 @@ import com.flashforge.farm.boot.AppBoot;
 import com.flashforge.farm.boot.CheckUpdateJsonTask;
 import com.flashforge.farm.boot.ClearModelCacheTask;
 import com.flashforge.farm.boot.LoadSlic3rConfigTask;
+import com.flashforge.farm.boot.PairingTask;
 import com.flashforge.farm.boot.PrefsTask;
 import com.flashforge.farm.boot.PrintConfigWarmupTask;
 import com.flashforge.farm.boot.TrueTimeTask;
@@ -83,7 +84,7 @@ public class FarmApp extends Application {
         super.onCreate();
         INSTANCE = this;
         // Issue #47: the Application object is also created inside
-        // isolatedProcess services (quarantine, slice sandbox), which have no
+        // isolatedProcess services (slice sandbox), which have no
         // filesystem/network permissions. Skip all startup work there; the
         // sandbox service needs nothing beyond the loaded Application.
         if (android.os.Build.VERSION.SDK_INT >= 28 && android.os.Process.isIsolated()) {
@@ -98,7 +99,8 @@ public class FarmApp extends Application {
                 new PrintConfigWarmupTask(),
                 new CheckUpdateJsonTask(),
                 new ClearModelCacheTask(),
-                new LoadSlic3rConfigTask()
+                new LoadSlic3rConfigTask(),
+                new PairingTask()
         ));
         Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
             StringWriter sw = new StringWriter();

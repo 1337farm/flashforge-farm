@@ -8,8 +8,6 @@ import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.util.Log;
 
-import com.flashforge.farm.modelrepo.safety.SafetyPolicy;
-
 /**
  * Isolated slice sandbox (issue #47).
  *
@@ -27,6 +25,7 @@ import com.flashforge.farm.modelrepo.safety.SafetyPolicy;
 public class SliceSandboxService extends Service {
     private static final String TAG = "SliceSandbox";
     private static final Object SLICE_LOCK = new Object();
+    private static final long MAX_MODEL_BYTES = 100L * 1024 * 1024;
 
     private static void closeFd(int fd) {
         if (fd < 0) {
@@ -61,7 +60,7 @@ public class SliceSandboxService extends Service {
                     return result(SandboxProto.STATUS_ERROR_INFRA,
                             "model stat failed");
                 }
-                if (modelSize == 0 || modelSize > SafetyPolicy.MAX_PARSE_BYTES) {
+                if (modelSize == 0 || modelSize > MAX_MODEL_BYTES) {
                     return result(SandboxProto.STATUS_ERROR_CONTENT,
                             "model size out of bounds: " + modelSize);
                 }
@@ -138,7 +137,7 @@ public class SliceSandboxService extends Service {
                     return result(SandboxProto.STATUS_ERROR_INFRA,
                             "model stat failed");
                 }
-                if (modelSize == 0 || modelSize > SafetyPolicy.MAX_PARSE_BYTES) {
+                if (modelSize == 0 || modelSize > MAX_MODEL_BYTES) {
                     return result(SandboxProto.STATUS_ERROR_CONTENT,
                             "model size out of bounds: " + modelSize);
                 }

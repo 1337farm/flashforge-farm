@@ -31,6 +31,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -46,9 +47,6 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
-
-import com.flashforge.farm.modelrepo.safety.SafetyPolicy;
-import com.flashforge.farm.modelrepo.safety.ZipGuard;
 
 
 
@@ -70,6 +68,7 @@ import com.flashforge.farm.slic3r.Native;
 import com.flashforge.farm.slic3r.Slic3rConfigWrapper;
 import com.flashforge.farm.slic3r.Slic3rRuntimeError;
 import com.flashforge.farm.theme.ThemesRepo;
+import com.flashforge.farm.utils.FarmBackup;
 import com.flashforge.farm.utils.IOUtils;
 import com.flashforge.farm.utils.FilamentSlot;
 import com.flashforge.farm.utils.Prefs;
@@ -82,7 +81,8 @@ public class MainActivity extends AppCompatActivity {
                             REQUEST_CODE_IMPORT_PROFILES = 3, REQUEST_CODE_EXPORT_PROFILES = 4,
                             REQUEST_CODE_EXPORT_3MF = 5,
                             REQUEST_CODE_PROVISION_USB = 6, REQUEST_CODE_UNINSTALL_USB = 7,
-                            REQUEST_CODE_IMPORT_MODEL = 8;
+                            REQUEST_CODE_BACKUP = 8, REQUEST_CODE_RESTORE = 9,
+                            REQUEST_CODE_IMPORT_GALLERY = 10;
 
     private static MainActivity activeInstance;
 
@@ -331,10 +331,65 @@ public class MainActivity extends AppCompatActivity {
                             .setPositiveButton(android.R.string.ok, null)
                             .show();
                 }
-            } else if (requestCode == MainActivity.REQUEST_CODE_IMPORT_MODEL) {
-                Fragment cur = getNavigationDelegate().getCurrentFragment();
-                if (cur instanceof com.flashforge.farm.fragment.ModelPublishFragment) {
-                    ((com.flashforge.farm.fragment.ModelPublishFragment) cur).handlePickedFile(data);
+            } else if (requestCode == MainActivity.REQUEST_CODE_BACKUP) {
+                if (data == null || data.getData() == null) return;
+                try {
+                    OutputStream out = getContentResolver().openOutputStream(data.getData());
+                    out.write(FarmBackup.exportJson().getBytes(StandardCharsets.UTF_8));
+                    out.close();
+                    Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.FleetBackupDone));
+                } catch (Exception e) {
+                    new FarmAlertDialogBuilder(this)
+                            .setTitle(R.string.FleetBackup)
+                            .setMessage(getString(R.string.FleetBackupFailed, e.toString()))
+                            .setPositiveButton(android.R.string.ok, null)
+                            .show();
+                }
+            } else if (requestCode == MainActivity.REQUEST_CODE_RESTORE) {
+                if (data == null || data.getData() == null) return;
+                try {
+                    InputStream in = getContentResolver().openInputStream(data.getData());
+                    ByteArrayOutputStream buf = new ByteArrayOutputStream();
+                    byte[] buffer = new byte[10240];
+                    int c;
+                    while ((c = in.read(buffer)) != -1) {
+                        buf.write(buffer, 0, c);
+                    }
+                    in.close();
+                    FarmBackup.RestoreReport r = FarmBackup.importJson(buf.toString("UTF-8"));
+                    com.flashforge.farm.utils.PairingRuntime.refreshTokens();
+                    Fragment cur = getNavigationDelegate().getCurrentFragment();
+                    if (cur instanceof FleetFragment) {
+                        ((FleetFragment) cur).refreshNow();
+                    }
+                    new FarmAlertDialogBuilder(this)
+                            .setTitle(R.string.FleetRestore)
+                            .setMessage(getString(R.string.FleetRestoreDone, r.printers, r.queuedJobs,
+                                    r.printProfiles + r.filamentProfiles + r.printerProfiles))
+                            .setPositiveButton(android.R.string.ok, null)
+                            .show();
+                } catch (Exception e) {
+                    new FarmAlertDialogBuilder(this)
+                            .setTitle(R.string.FleetRestore)
+                            .setMessage(getString(R.string.FleetRestoreFailed, e.toString()))
+                            .setPositiveButton(android.R.string.ok, null)
+                            .show();
+                }
+            } else if (requestCode == MainActivity.REQUEST_CODE_IMPORT_GALLERY) {
+                if (data == null || data.getData() == null) return;
+                try {
+                    Uri uri = data.getData();
+                    String name = IOUtils.getDisplayName(uri);
+                    InputStream in = getContentResolver().openInputStream(uri);
+                    com.flashforge.farm.gallery.GalleryStore.importStream(in, name);
+                    in.close();
+                    Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuFileShapeGalleryAdded));
+                } catch (Exception e) {
+                    new FarmAlertDialogBuilder(this)
+                            .setTitle(R.string.MenuFileShapeGalleryAdd)
+                            .setMessage(getString(R.string.MenuFileShapeGalleryAddFailed) + ": " + e.getMessage())
+                            .setPositiveButton(android.R.string.ok, null)
+                            .show();
                 }
             } else if (requestCode == MainActivity.REQUEST_CODE_PROVISION_USB
                     || requestCode == MainActivity.REQUEST_CODE_UNINSTALL_USB) {
@@ -481,7 +536,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String readZipEntryText(ZipFile zip, ZipEntry entry) throws IOException {
-        return ZipGuard.readEntryText(zip, entry, SafetyPolicy.MAX_METADATA_BYTES);
+        try (InputStream in = zip.getInputStream(entry); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[10240];
+            int c;
+            while ((c = in.read(buffer)) != -1) {
+                out.write(buffer, 0, c);
+            }
+            return out.toString("UTF-8");
+        }
     }
 
     private String embeddedPresetFallbackName(String path) {
@@ -640,11 +702,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         java.util.Enumeration<? extends ZipEntry> entries = zip.entries();
-        int seen = 0;
         while (entries.hasMoreElements()) {
-            if (++seen > SafetyPolicy.MAX_ZIP_ENTRIES) {
-                throw new java.io.IOException("too many zip entries");
-            }
             String name = entries.nextElement().getName();
             if (name.startsWith("Metadata/plate_") && (name.endsWith(".png") || name.endsWith(".json") || name.endsWith(".gcode"))) {
                 String num = name.substring("Metadata/plate_".length());
@@ -671,11 +729,7 @@ public class MainActivity extends AppCompatActivity {
         try (ZipFile zip = new ZipFile(file)) {
             result.plateCount = countPlates(zip);
             java.util.Enumeration<? extends ZipEntry> entries = zip.entries();
-            int seenEntries = 0;
             while (entries.hasMoreElements()) {
-                if (++seenEntries > SafetyPolicy.MAX_ZIP_ENTRIES) {
-                    throw new java.io.IOException("too many zip entries");
-                }
                 ZipEntry entry = entries.nextElement();
                 if (entry.isDirectory()) continue;
                 String name = entry.getName();
@@ -1175,19 +1229,6 @@ public class MainActivity extends AppCompatActivity {
                 }
                 fos.close();
                 in.close();
-                com.flashforge.farm.modelrepo.verify.Verdict v =
-                        com.flashforge.farm.modelrepo.QuarantineClient.check(
-                                MainActivity.this, f);
-                if (!v.allow) {
-                    f.delete();
-                    String why = v.detail.isEmpty() ? v.reason.name() : v.detail;
-                    ViewUtils.postOnMainThread(() -> new FarmAlertDialogBuilder(MainActivity.this)
-                            .setTitle(R.string.MenuFileOpenFileFailed)
-                            .setMessage("File rejected: " + why)
-                            .setPositiveButton(android.R.string.ok, null)
-                            .show());
-                    return;
-                }
                 loadFile(f, false);
             } catch (Exception e) {
                 Log.e("MainActivity", "Failed to write cache file", e);

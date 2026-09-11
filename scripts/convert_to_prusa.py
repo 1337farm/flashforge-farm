@@ -105,6 +105,12 @@ class ConvertStats:
         self.transformed = 0
         self.unmapped = 0  # key absent from the dialect table
         self.warnings: list[str] = []
+        # Per-key disposition for --report auditing.
+        self.renamed_keys: dict[str, str] = {}
+        self.removed_keys: list[str] = []
+        self.remapped_values: list[str] = []
+        self.transformed_keys: list[str] = []
+        self.unknown_keys: list[str] = []
 
 
 def convert_entry(key: str, value: str, table: dict, dialect: str,
@@ -113,6 +119,7 @@ def convert_entry(key: str, value: str, table: dict, dialect: str,
     if row is None:
         stats.unmapped += 1
         stats.identity += 1
+        stats.unknown_keys.append(key)
         return [(key, _rewrite_gcode(key, value, gcode_renames))]
 
     kind = row.get("kind", "rename")
@@ -125,18 +132,22 @@ def convert_entry(key: str, value: str, table: dict, dialect: str,
         if fn is None:
             stats.warnings.append(f"[{dialect}] {key}: unknown transform '{row['transform']}'; dropped")
             stats.removed += 1
+            stats.removed_keys.append(key)
             return []
         stats.transformed += 1
+        stats.transformed_keys.append(key)
         return [(k, v) for k, v in fn(value)]
 
     if kind == "removed" or target is None:
         stats.removed += 1
+        stats.removed_keys.append(key)
         return []
 
     if target == key:
         stats.identity += 1
     else:
         stats.renamed += 1
+        stats.renamed_keys[key] = target
 
     if row.get("values"):
         trimmed = value.strip()
@@ -146,6 +157,7 @@ def convert_entry(key: str, value: str, table: dict, dialect: str,
                 f"[{dialect}] {key}: enum value '{trimmed}' not in map, passed through unremapped")
             return [(target, _rewrite_gcode(key, value, gcode_renames))]
         stats.value_remapped += 1
+        stats.remapped_values.append(key)
         return [(target, mapped)]
 
     return [(target, _rewrite_gcode(key, value, gcode_renames))]
@@ -187,6 +199,8 @@ def main() -> int:
     ap.add_argument("--out-dir", type=Path, default=None, help="output directory for --dir mode")
     ap.add_argument("--out", type=Path, default=None, help="output file for single-file mode")
     ap.add_argument("--base-dir", type=Path, default=None, help="extra dir scanned into the inheritance catalog")
+    ap.add_argument("--report", type=Path, default=None,
+                    help="write a JSON audit report of every key's disposition (renamed/removed/unknown/...)")
     args = ap.parse_args()
 
     # Default map location (committed generated artifact).
@@ -225,6 +239,7 @@ def main() -> int:
                         catalog[obj[idkey]] = obj
 
     failures = 0
+    report_entries: list[dict] = []
     for path in files:
         fmt = detect_format(path)
         if args.dialect == "auto":
@@ -275,6 +290,30 @@ def main() -> int:
         if stats.unmapped:
             print(f"  NOTE {path.name}: {stats.unmapped} keys not in the '{dialect}' dialect map "
                   f"(passed through unchanged; verify against the 3.0 print_config_def)", file=sys.stderr)
+
+        if args.report:
+            report_entries.append({
+                "file": str(path),
+                "dialect": dialect,
+                "counts": {
+                    "renamed": stats.renamed,
+                    "identity": stats.identity,
+                    "removed": stats.removed,
+                    "value_remapped": stats.value_remapped,
+                    "transformed": stats.transformed,
+                    "unmapped": stats.unmapped,
+                },
+                "renamed": dict(sorted(stats.renamed_keys.items())),
+                "removed": sorted(stats.removed_keys),
+                "remapped_values": sorted(stats.remapped_values),
+                "transformed": sorted(stats.transformed_keys),
+                "unknown": sorted(stats.unknown_keys),
+            })
+
+    if args.report:
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(json.dumps({"files": report_entries}, indent=2, sort_keys=True) + "\n")
+        print(f"report -> {args.report}", file=sys.stderr)
 
     return failures
 

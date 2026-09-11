@@ -234,7 +234,7 @@ dependencies {
     // derive the stable iroh NodeId from the node seed. Standard derivation, so
     // Java and the Rust engine agree byte-for-byte from the same seed.
     implementation 'com.bloxbean.cardano:net-i2p-crypto-eddsa:0.3.1'
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0'
     implementation 'com.github.instacart:truetime-android:4.0.0.alpha'
     implementation 'com.github.mrudultora:Colorpicker:1.2.0'
     implementation 'com.github.bumptech.glide:glide:5.0.9'

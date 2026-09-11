@@ -47,10 +47,18 @@ endif()
 # jthread/libslic3r/arrange/lua) is added unconditionally by upstream src/.
 add_subdirectory("${PRUSA30_SRC}" "${CMAKE_BINARY_DIR}/prusaslicer" EXCLUDE_FROM_ALL)
 
-# Our engine DSO: the headless slice driver + JNI bridge. Empty source list for
-# now; farm_driver.cpp + the bridge land in a follow-up PR.
-add_library(farm_prusa30 SHARED "")
+# Our engine DSO: the headless slice driver + JNI bridge.
+add_library(farm_prusa30 SHARED
+    farm_driver.cpp
+)
 
 # Link the 3.0 headless core. `libslic3r` is a STATIC lib upstream; link it and
-# its transitive domain/biz dependencies into our shared .so.
-target_link_libraries(farm_prusa30 PRIVATE libslic3r)
+# its transitive PUBLIC deps (slic3r-domain, slic3r-gcode-reader,
+# slic3r-biz-cgal-algorithms, ...).
+#
+# NOTE: the config/model-load glue the driver uses
+# (Slic3r/Biz/Config/ConfigLoad.hpp, Slic3r/Biz/FileLoadingLogic.hpp) lives in
+# the GUI-gated `slic3r-shared` module upstream — headless-buildable only after
+# the upstream "slic3r-shared split" lands. Until then `slic3r-shared` must be
+# added to the headless module set (see PRUSASLICER30_MIGRATION.md).
+target_link_libraries(farm_prusa30 PRIVATE libslic3r slic3r-shared)

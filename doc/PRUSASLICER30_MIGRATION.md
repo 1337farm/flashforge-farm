@@ -105,19 +105,46 @@ Exact pins are machine-extractable via `scripts/vendor_prusaslicer30.py --upstre
 This is a real dep surface change, not a drop-in swap; `scripts/build_all_deps_android.sh`
 must be extended and the prebuilt staging (`jniImports/`, `occt/`) re-bumped.
 
+## Ingestion strategy (decided)
+
+- **No copy of the 3.0 source is committed to this repo's git.** The upstream
+  tree is fetched at build time by `engine/prusa30/fetch_prusaslicer.sh`
+  (pinned via `PRUSA_REF`, default = latest 3.0-alpha) and patched with
+  `engine/prusa30/patches/0001-src-allow-headless-build.patch`.
+- **Replace-in-place**: `engine/` stops vendoring the Orca tree and points at
+  the fetched 3.0 headless build. The Orca source is removed as part of the
+  same swap; there is no parallel `engine30/` tree.
+- The swap breaks `engine`/`apk` on `main` until the headless build + driver go
+  green; that's accepted and driven to green via CI PRs.
+
+## Slicing API target (verified in tree)
+
+```
+Slic3r::Biz::Slicing::init_print(PrinterTechnology, IProcessCallbacks&, SlicingId)
+    -> std::unique_ptr<IPrint>
+  IPrint::update(Model&, ConfigPack&, BedInstance&, SelectedPresetMetadata&, serializer)
+    -> ApplyStatus::Status   (variant<InvalidData, Unchanged, Changed, Empty>)
+  IPrint::slice(SlicingId, IThumbnailImageGenerator&, optional<SliceUntilStep>)
+  IProcessCallbacks::on_fdm_result(FDMResult&&)   // FDMResult = libpgcode::ProcessorResult
+  IPrint::progress_callback / stop_token / append_warning_callback
+```
+
 ## Phased rollout
 
-1. **Vendoring + headless build enablement** — add `SLIC3R_GUI=OFF` headless
-   path to the module CMake, build only the headless set, and wire a minimal
-   headless slice driver (our JNI bridge's replacement for `slic3r-app-cli`).
-2. **Dep staging for NDK** — bump Boost→1.86.0, OCCT→7.6.1, TBB→2021.12.0; add
-   CGAL/OpenVDB/Lua/json/fmt/spdlog/etc. to `build_all_deps_android.sh`.
-3. **JNI bridge rewrite** — target `Domain::ConfigPack` / `ConfigContainer` /
-   `Model` / `Print` / `status_callback` for the offline slice path.
-4. **Feature port** — painting (`Biz::Algorithms::TriangleSelector`),
+1. **Headless enablement + ingestion** — `engine/prusa30` fetch harness +
+   headless patch (shipped).
+2. **Dep staging for NDK** — bump Boost→1.86.0, OCCT→7.6.1 (down), TBB→2021.12.0;
+   add CGAL 5.6.2, OpenVDB 11.0.0, Eigen 3.4.0, Lua 5.4.8, fmt/spdlog/json to
+   `build_all_deps_android.sh`.
+3. **Headless slice driver** — `engine/prusa30/farm_driver.cpp` implementing
+   `IProcessCallbacks` + `init_print` + `update`/`slice`; this replaces
+   `slic3r-app-cli` and the Orca `Print::apply/process` path.
+4. **JNI bridge rewrite** — target `Domain::ConfigPack`/`ConfigContainer`/
+   `Model`/`IPrint` for the offline slice path.
+5. **Feature port** — painting (`Biz::Algorithms::TriangleSelector`),
    arrange (`slic3r-biz-arrange`), 3MF/STEP (`slic3r-biz-parser` + `occt_wrapper`).
-5. **Validation** — golden G-code/3MF byte-compare (the shipped corpus harness).
+6. **Validation** — golden G-code/3MF byte-compare (the shipped corpus harness).
 
 The import/convert tooling already shipped (#107–#115) maps foreign profiles
-into the *old* Orca key space; step 3 re-points its target to the 3.0
+into the *old* Orca key space; step 4 re-points its target to the 3.0
 `ConfigDef`/`ConfigPack` so imports land natively.

@@ -119,6 +119,8 @@ must be extended and the prebuilt staging (`jniImports/`, `occt/`) re-bumped.
 
 ## Slicing API target (verified in tree)
 
+Two layers are involved. The **low-level slicing API** is:
+
 ```
 Slic3r::Biz::Slicing::init_print(PrinterTechnology, IProcessCallbacks&, SlicingId)
     -> std::unique_ptr<IPrint>
@@ -129,6 +131,22 @@ Slic3r::Biz::Slicing::init_print(PrinterTechnology, IProcessCallbacks&, SlicingI
   IPrint::progress_callback / stop_token / append_warning_callback
 ```
 
+But the CLI does **not** call `init_print` directly. It drives an **interactor
+layer** (verified in `slic3r-app-cli/LoadPrintData.cpp`):
+
+```
+FileLoadingLogic::read_model_from_file(path, nullptr)        -> tl::expected<Model>
+Biz::Config::ConfigLoad::load_preset_and_config(json)        -> tl::expected<PresetAndConfig>
+ProjectInteractor::new_project_with_preset(metadata, config) -> expected<SelectionId>
+SceneInteractor::add_new_objects(model.objects)
+```
+
+The driver risk: `ProjectInteractor`/`SceneInteractor`/`CLIRuntime` live in the
+app layer (`slic3r-app-cli`, still GUI-gated). A headless JNI driver must either
+(a) reuse the headless `Biz::{Config,FileLoadingLogic,Preset}` parts and
+re-implement the thin project orchestration, or (b) upstream the headless
+interactor split first. This is the real remaining unknown, not `IPrint`.
+
 ## Phased rollout
 
 1. **Headless enablement + ingestion** — `engine/prusa30` fetch harness +
@@ -136,8 +154,9 @@ Slic3r::Biz::Slicing::init_print(PrinterTechnology, IProcessCallbacks&, SlicingI
 2. **Dep staging for NDK** — bump Boost→1.86.0, OCCT→7.6.1 (down), TBB→2021.12.0;
    add CGAL 5.6.2, OpenVDB 11.0.0, Eigen 3.4.0, Lua 5.4.8, fmt/spdlog/json to
    `build_all_deps_android.sh`.
-3. **Headless slice driver** — `engine/prusa30/farm_driver.cpp` implementing
-   `IProcessCallbacks` + `init_print` + `update`/`slice`; this replaces
+3. **Headless slice driver** — `engine/prusa30/farm_driver.cpp` driving the
+   interactor layer (`FileLoadingLogic` + `ConfigLoad` + `init_print`/`update`/
+   `slice`) or re-implementing the thin project orchestration headless; replaces
    `slic3r-app-cli` and the Orca `Print::apply/process` path.
 4. **JNI bridge rewrite** — target `Domain::ConfigPack`/`ConfigContainer`/
    `Model`/`IPrint` for the offline slice path.

@@ -18,6 +18,9 @@ import java.security.MessageDigest;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import com.flashforge.farm.modelrepo.safety.SafetyPolicy;
+import com.flashforge.farm.modelrepo.safety.ZipGuard;
+
 public class ModelLibrary {
     private static final String TAG = "ModelLibrary";
     private static final String RELEASE_BASE =
@@ -103,11 +106,7 @@ public class ModelLibrary {
                 if (!e.isDirectory() && name.equals(filename)) {
                     target.getParentFile().mkdirs();
                     try (FileOutputStream fos = new FileOutputStream(target)) {
-                        byte[] buf = new byte[32768];
-                        int c;
-                        while ((c = zin.read(buf)) != -1) {
-                            fos.write(buf, 0, c);
-                        }
+                        ZipGuard.copyBounded(zin, fos, SafetyPolicy.MAX_PARSE_BYTES);
                     }
                     return;
                 }

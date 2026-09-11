@@ -14,12 +14,14 @@ on:
       - "engine/prusa30/**"
       - "scripts/build_boost.sh"
       - "scripts/build_prusa30_tbb.sh"
+      - "scripts/build_prusa30_nlopt.sh"
       - ".github/workflows/prusa30-headless.yml"
   pull_request:
     paths:
       - "engine/prusa30/**"
       - "scripts/build_boost.sh"
       - "scripts/build_prusa30_tbb.sh"
+      - "scripts/build_prusa30_nlopt.sh"
       - ".github/workflows/prusa30-headless.yml"
 
 env:
@@ -173,11 +175,79 @@ jobs:
           path: engine/prusa30/jniImports/tbb
           key: prusa30-tbb-v2021.12.0-${{ hashFiles('scripts/build_prusa30_tbb.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
 
+  build-nlopt:
+    name: nlopt
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged NLopt v2.5.0 from cache
+        id: nlopt-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/nlopt
+          key: prusa30-nlopt-v2.5.0-${{ hashFiles('scripts/build_prusa30_nlopt.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored NLopt
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.nlopt-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/nlopt/include/nlopt.hpp || OK=0
+            ls engine/prusa30/jniImports/nlopt/lib/libnlopt_cxx.* >/dev/null 2>&1 || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build NLopt v2.5.0 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_nlopt.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/nlopt" \
+            ./scripts/build_prusa30_nlopt.sh
+
+      - name: Verify staged NLopt exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/nlopt/include/nlopt.hpp \
+            || { echo "ERROR: nlopt.hpp missing"; exit 1; }
+          ls engine/prusa30/jniImports/nlopt/lib/libnlopt_cxx.* >/dev/null \
+            || { echo "ERROR: no libnlopt_cxx staged"; exit 1; }
+          echo "NLopt v2.5.0 staged and verified"
+
+      - name: Save staged NLopt v2.5.0
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/nlopt
+          key: prusa30-nlopt-v2.5.0-${{ hashFiles('scripts/build_prusa30_nlopt.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
   headless-build:
     name: headless
     runs-on: ubuntu-24.04
     timeout-minutes: 180
-    needs: [build-boost, build-tbb]
+    needs: [build-boost, build-tbb, build-nlopt]
     permissions:
       contents: read
       actions: read
@@ -253,7 +323,26 @@ jobs:
             || { echo "ERROR: staged oneTBB missing TBBConfig.cmake"; exit 1; }
           echo "oneTBB v2021.12.0 present and verified"
 
+      - name: Restore staged NLopt v2.5.0 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/nlopt
+          key: prusa30-nlopt-v2.5.0-${{ hashFiles('scripts/build_prusa30_nlopt.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged NLopt exactly
+        run: |
+          test -f engine/prusa30/jniImports/nlopt/include/nlopt.hpp \
+            || { echo "ERROR: staged NLopt missing nlopt.hpp"; exit 1; }
+          ls engine/prusa30/jniImports/nlopt/lib/libnlopt_cxx.* >/dev/null \
+            || { echo "ERROR: staged NLopt missing libnlopt_cxx"; exit 1; }
+          echo "NLopt v2.5.0 present and verified"
+
       - name: Configure headless 3.0 build (arm64-v8a)
+        env:
+          # Upstream FindNLopt reads the NLOPT *environment* variable:
+          # $NLOPT/include/nlopt.hpp + $NLOPT/lib/libnlopt_cxx.
+          NLOPT: ${{ github.workspace }}/engine/prusa30/jniImports/nlopt
         run: |
           # Configure upstream as the TOP-LEVEL project: its root CMakeLists
           # relies on CMAKE_SOURCE_DIR/module-path being the upstream tree.

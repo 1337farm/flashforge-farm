@@ -52,10 +52,10 @@
 
 namespace farm {
 
+namespace ApplyStatus = Slic3r::Biz::Slicing::ApplyStatus;
 using Slic3r::Biz::Config::PresetAndConfig;
 using Slic3r::Biz::Config::load_preset_and_config;
 using Slic3r::Biz::FileLoadingLogic::read_model_from_file;
-using Slic3r::Biz::Slicing::ApplyStatus;
 using Slic3r::Biz::Slicing::FDMResult;
 using Slic3r::Biz::Slicing::GeneratedSupportPointsSnapshot;
 using Slic3r::Biz::Slicing::IPrint;
@@ -63,6 +63,7 @@ using Slic3r::Biz::Slicing::IProcessCallbacks;
 using Slic3r::Biz::Slicing::IThumbnailImageGenerator;
 using Slic3r::Biz::Slicing::OptWipeTowerGeometry;
 using Slic3r::Biz::Slicing::SLAResult;
+using Slic3r::Biz::Slicing::SerializedConfig;
 using Slic3r::Biz::Slicing::StatusUpdate;
 using Slic3r::Biz::Slicing::StatusCode;
 using Slic3r::Biz::Slicing::ThumbnailImageRequests;
@@ -84,7 +85,7 @@ public:
     void on_sla_result(const SlicingId& id, SLAResult&& result) override {
         (void) id; (void) result;
     }
-    void on_sla_object(const SlicingId& id, Sla::Object&& object) override {
+    void on_sla_object(const SlicingId& id, Slic3r::Biz::Slicing::Sla::Object&& object) override {
         (void) id; (void) object;
     }
     void on_status(const StatusUpdate status, SlicingId id) override {
@@ -106,10 +107,10 @@ public:
     }
     StatusCode get_status(const SlicingId id) const override {
         (void) id;
-        return StatusCode::Count;
+        return StatusCode::Empty;
     }
 
-    const FDMResult& fdm_result() const { return fdm_result_; }
+    FDMResult take_result() { return std::move(fdm_result_); }
     std::exception_ptr exception() const { return exception_; }
 
 private:
@@ -160,9 +161,8 @@ FDMResult slice(const std::string& model_path, const std::string& config_json_pa
     Model model = load_model(model_path);
     PresetAndConfig pac = load_config(config_json_path);
 
-    // TODO(prusa30): construct a Bed from the config's bed shape, then
-    // BedInstance{bed}. Exact Bed warmth API resolved in the CI loop.
-    Bed bed{Bed::BedCreationData{}};  // TODO(prusa30): real shape from config
+    // TODO(prusa30): build the real bed shape from the config's printable area.
+    Bed bed = Bed::create(Slic3r::Domain::BedCreationData{});
     BedInstance bed_instance{bed};
 
     SelectedPresetMetadata metadata = pac.preset_metadata;
@@ -196,7 +196,7 @@ FDMResult slice(const std::string& model_path, const std::string& config_json_pa
         std::rethrow_exception(callbacks.exception());
     }
 
-    return callbacks.fdm_result();
+    return callbacks.take_result();
 }
 
 } // namespace farm

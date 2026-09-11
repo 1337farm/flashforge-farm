@@ -1,0 +1,80 @@
+{
+  "dependencies_pinned_in_upstream": {
+    "Boost": {
+      "cmake": "deps/+Boost/Boost.cmake",
+      "sha256": "a66084ec52c9dfa838b3b225a29f29869b2d11e201b3f9e4b989431d95b671c2",
+      "url": "https://github.com/boostorg/boost/releases/download/boost-1.86.0/boost-1.86.0-cmake.zip",
+      "version": "1.86.0"
+    },
+    "CGAL": {
+      "cmake": "deps/+CGAL/CGAL.cmake",
+      "sha256": "29acaeee5a76a95029fac23131bb1c3a4a75df9a0e7e43b465a1f32d0628f45d",
+      "url": "https://github.com/CGAL/cgal/archive/refs/tags/v5.6.2.zip",
+      "version": "5.6.2"
+    },
+    "Eigen": {
+      "cmake": "deps/+Eigen/Eigen.cmake",
+      "sha256": "eba3f3d414d2f8cba2919c78ec6daab08fc71ba2ba4ae502b7e5d4d99fc02cda",
+      "url": "https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.zip",
+      "version": "3.4.0"
+    },
+    "GMP": {
+      "cmake": "deps/+GMP/GMP.cmake",
+      "sha256": "eae9326beb4158c386e39a356818031bd28f3124cf915f8c5b1dc4c7a36b4d7c",
+      "url": "https://gmplib.org/download/gmp/gmp-6.2.1.tar.bz2",
+      "version": "6.2.1"
+    },
+    "Lua": {
+      "cmake": "deps/+Lua/Lua.cmake",
+      "sha256": "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae",
+      "url": "https://www.lua.org/ftp/lua-5.4.8.tar.gz",
+      "version": "5.4.8"
+    },
+    "MPFR": {
+      "cmake": "deps/+MPFR/MPFR.cmake",
+      "sha256": "cf4f4b2d80abb79e820e78c8077b6725bbbb4e8f41896783c899087be0e94068",
+      "url": "http://ftp.vim.org/ftp/gnu/mpfr/mpfr-3.1.6.tar.bz2",
+      "version": "3.1.6"
+    },
+    "OCCT": {
+      "cmake": "deps/+OCCT/OCCT.cmake",
+      "sha256": "b7cf65430d6f099adc9df1749473235de7941120b5b5dd356067d12d0909b1d3",
+      "url": "https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/V7_6_1.zip",
+      "version": "V7_6_1"
+    },
+    "OpenVDB": {
+      "cmake": "deps/+OpenVDB/OpenVDB.cmake",
+      "sha256": "db7e1aacd0a634195574b2e6a43d268d063830628501fd0a94a99bf252d01fb6",
+      "url": "https://github.com/AcademySoftwareFoundation/openvdb/archive/refs/tags/v11.0.0.zip",
+      "version": "11.0.0"
+    },
+    "TBB": {
+      "cmake": "deps/+TBB/TBB.cmake",
+      "sha256": "fe6ca052b5bdd2c6e0616b360c9b0dcbcc46e01bbd0aa8fd0517c17fc58931db",
+      "url": "https://github.com/oneapi-src/oneTBB/archive/refs/tags/v2021.12.0.zip",
+      "version": "2021.12.0"
+    }
+  },
+  "headless_modules": [
+    "slic3r-base",
+    "slic3r-domain",
+    "slic3r-biz-algorithms",
+    "slic3r-biz-cgal-algorithms",
+    "slic3r-biz-crypto",
+    "slic3r-biz-parser",
+    "slic3r-gcode-reader",
+    "libpgcode",
+    "slic3r-jthread",
+    "libslic3r",
+    "slic3r-biz-arrange",
+    "slic3r-biz-lua"
+  ],
+  "host_build_support": {
+    "headless_build": false,
+    "note": "src/CMakeLists.txt fatal-errors on SLIC3R_GUI=OFF; a headless path must be added + a slice driver written"
+  },
+  "pin": "6f510128d7c2e543b62919b74bea7e876f564205",
+  "repo": "https://github.com/prusa3d/PrusaSlicer",
+  "schema": "prusaslicer30-vendor-manifest",
+  "tag": "version_3.0.0-alpha11"
+}

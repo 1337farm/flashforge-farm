@@ -31,7 +31,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -47,6 +46,9 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+
+import com.flashforge.farm.modelrepo.safety.SafetyPolicy;
+import com.flashforge.farm.modelrepo.safety.ZipGuard;
 
 
 
@@ -479,14 +481,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String readZipEntryText(ZipFile zip, ZipEntry entry) throws IOException {
-        try (InputStream in = zip.getInputStream(entry); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[10240];
-            int c;
-            while ((c = in.read(buffer)) != -1) {
-                out.write(buffer, 0, c);
-            }
-            return out.toString("UTF-8");
-        }
+        return ZipGuard.readEntryText(zip, entry, SafetyPolicy.MAX_METADATA_BYTES);
     }
 
     private String embeddedPresetFallbackName(String path) {
@@ -645,7 +640,11 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         java.util.Enumeration<? extends ZipEntry> entries = zip.entries();
+        int seen = 0;
         while (entries.hasMoreElements()) {
+            if (++seen > SafetyPolicy.MAX_ZIP_ENTRIES) {
+                throw new java.io.IOException("too many zip entries");
+            }
             String name = entries.nextElement().getName();
             if (name.startsWith("Metadata/plate_") && (name.endsWith(".png") || name.endsWith(".json") || name.endsWith(".gcode"))) {
                 String num = name.substring("Metadata/plate_".length());
@@ -672,7 +671,11 @@ public class MainActivity extends AppCompatActivity {
         try (ZipFile zip = new ZipFile(file)) {
             result.plateCount = countPlates(zip);
             java.util.Enumeration<? extends ZipEntry> entries = zip.entries();
+            int seenEntries = 0;
             while (entries.hasMoreElements()) {
+                if (++seenEntries > SafetyPolicy.MAX_ZIP_ENTRIES) {
+                    throw new java.io.IOException("too many zip entries");
+                }
                 ZipEntry entry = entries.nextElement();
                 if (entry.isDirectory()) continue;
                 String name = entry.getName();

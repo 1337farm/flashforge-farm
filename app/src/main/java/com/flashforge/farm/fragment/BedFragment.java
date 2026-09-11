@@ -1001,7 +1001,9 @@ public class BedFragment extends Fragment {
             java.util.zip.ZipEntry en = zip.getEntry("Metadata/project_settings.config");
             if (en == null) return false;
             org.json.JSONObject cfg = new org.json.JSONObject(
-                    com.flashforge.farm.utils.IOUtils.readString(zip.getInputStream(en), true));
+                    com.flashforge.farm.modelrepo.safety.ZipGuard.readEntryText(
+                            zip, en,
+                            com.flashforge.farm.modelrepo.safety.SafetyPolicy.MAX_METADATA_BYTES));
             org.json.JSONArray area = cfg.optJSONArray("printable_area");
             if (area == null || area.length() == 0) return false;
             double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;

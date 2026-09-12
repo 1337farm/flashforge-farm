@@ -106,7 +106,7 @@ public class FarmApp extends Application {
             StringWriter sw = new StringWriter();
             PrintWriter pw = new PrintWriter(sw);
             pw.println("=== Java uncaught exception ===");
-            pw.println("thread: " + t.getName() + " (" + t.getId() + ")");
+            pw.println("thread: " + t.getName() + " (" + t.threadId() + ")");
             pw.println("time  : " + new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
                     .format(new java.util.Date()));
             pw.println("device: " + android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL +

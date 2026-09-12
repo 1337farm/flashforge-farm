@@ -66,7 +66,7 @@ public class ProfileDropdownView extends View implements IThemeView {
 
         if (title != null) {
             titleEllipsized = TextUtils.ellipsize(title, textPaint, MeasureSpec.getSize(widthMeasureSpec) - ViewUtils.dp(21) * 2 - ViewUtils.dp(24), TextUtils.TruncateAt.END);
-            layout = new StaticLayout(titleEllipsized, textPaint, Math.round(textPaint.measureText(titleEllipsized, 0, titleEllipsized.length())), Layout.Alignment.ALIGN_NORMAL, 0f, 0f, false);
+            layout = StaticLayout.Builder.obtain(titleEllipsized, 0, titleEllipsized.length(), textPaint, Math.round(textPaint.measureText(titleEllipsized, 0, titleEllipsized.length()))).setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(0f, 0f).setIncludePad(false).build();
         } else {
             titleEllipsized = null;
             layout = null;

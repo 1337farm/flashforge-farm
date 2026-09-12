@@ -46,7 +46,6 @@ public class SafeStartActivity extends AppCompatActivity {
 
         WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
         controller.setAppearanceLightStatusBars(true);
-        getWindow().setStatusBarColor(Color.WHITE);
 
         crashLog = Prefs.getPrefs().getString("crash", "");
 

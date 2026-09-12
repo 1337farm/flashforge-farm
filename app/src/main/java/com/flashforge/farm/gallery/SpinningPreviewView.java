@@ -10,7 +10,8 @@ import android.view.View;
 
 public class SpinningPreviewView extends View {
     private static final int MAX_BUF = 144;
-    private static final float STEP = 0.05f;
+    // ~0.7 rad/s at 60fps: a calm ~9s revolution. 0.05 was a half-second blur.
+    private static final float STEP = 0.012f;
     private static final float TILT = -0.35f;
 
     private GalleryMesh mesh;
@@ -132,7 +133,9 @@ public class SpinningPreviewView extends View {
         ly /= llen;
         lz /= llen;
         float k = (size / 2f - 4f) / radius;
-        float fl = 6f * radius;
+        // True perspective divide (not orthographic): closer verts project
+        // larger. fl ~2.5 radii gives visible depth; 6+ radii looks flat.
+        float fl = 2.5f * radius;
         float[] v = mesh.xyz;
         float[] xs = new float[3], ys = new float[3], zs = new float[3];
         for (int t = 0; t < mesh.triCount; t++) {

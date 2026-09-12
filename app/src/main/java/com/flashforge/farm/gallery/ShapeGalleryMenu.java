@@ -142,8 +142,17 @@ public class ShapeGalleryMenu extends UnfoldMenu {
     }
 
     private void loadItem(ShapeGallery.Item item) {
-        if (!fragment.getGlView().getRenderer().getBed().isValid()) {
-            Toast.makeText(fragment.getContext(), R.string.BedConfigurationError, Toast.LENGTH_SHORT).show();
+        // Every other getBed() caller null-checks: the bed is null before
+        // configuration loads. Dereferencing it here NPE-crashes the main
+        // thread on tap, with no toast. Guard the full chain instead.
+        com.flashforge.farm.slic3r.Bed3D bed = null;
+        if (fragment != null && fragment.getGlView() != null
+                && fragment.getGlView().getRenderer() != null) {
+            bed = fragment.getGlView().getRenderer().getBed();
+        }
+        if (bed == null || !bed.isValid()) {
+            Context ctx = fragment != null ? fragment.getContext() : null;
+            Toast.makeText(ctx != null ? ctx : FarmApp.INSTANCE, R.string.BedConfigurationError, Toast.LENGTH_SHORT).show();
             return;
         }
         new Thread(() -> {
@@ -154,11 +163,13 @@ public class ShapeGalleryMenu extends UnfoldMenu {
                         fragment.loadModel(f);
                         Bus.OBJECTS_LIST_CHANGED.postValue(new ObjectsListChangedEvent());
                         Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuFileOpenFileLoaded));
-                    } catch (Exception e) {
+                    } catch (Throwable e) {
+                        android.util.Log.e("ShapeGalleryMenu", "gallery load failed", e);
                         Toast.makeText(FarmApp.INSTANCE, R.string.MenuFileOpenFileFailed, Toast.LENGTH_SHORT).show();
                     }
                 });
-            } catch (Exception e) {
+            } catch (Throwable e) {
+                android.util.Log.e("ShapeGalleryMenu", "gallery file failed", e);
                 ViewUtils.postOnMainThread(() ->
                         Toast.makeText(FarmApp.INSTANCE, R.string.MenuFileOpenFileFailed, Toast.LENGTH_SHORT).show());
             }

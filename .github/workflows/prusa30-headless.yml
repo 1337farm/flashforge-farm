@@ -574,6 +574,10 @@ jobs:
           EIGEN_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/eigen" -name Eigen3Config.cmake -printf '%h\n' | head -1)"
           test -n "$EIGEN_CMAKE_DIR" || { echo "ERROR: Eigen3Config.cmake not staged"; exit 1; }
           echo "Eigen3 config dir: $EIGEN_CMAKE_DIR"
+          # Same for tl-expected (slic3r-base links tl::expected).
+          EXPECTED_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/expected" -name tl-expected-config.cmake -printf '%h\n' | head -1)"
+          test -n "$EXPECTED_CMAKE_DIR" || { echo "ERROR: tl-expected-config.cmake not staged"; exit 1; }
+          echo "tl-expected config dir: $EXPECTED_CMAKE_DIR"
           # Same for fmt: fmt 12.x no longer ships a Find module, only
           # fmt-config.cmake — resolve it exactly the same way.
           FMT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name fmt-config.cmake -printf '%h\n' | head -1)"
@@ -620,6 +624,7 @@ jobs:
             -Dfmt_DIR="$FMT_CMAKE_DIR" \
             -Dcereal_DIR="$CEREAL_CMAKE_DIR" \
             -DEigen3_DIR="$EIGEN_CMAKE_DIR" \
+            -Dtl-expected_DIR="$EXPECTED_CMAKE_DIR" \
             -DZLIB_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
             -DPNG_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
             -DZLIB_LIBRARY="$ZLIB_LIB" \

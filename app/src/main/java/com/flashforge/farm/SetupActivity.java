@@ -119,7 +119,6 @@ public class SetupActivity extends AppCompatActivity {
     private SimpleRecyclerAdapter adapter;
     private TextView title;
     private ImageView startupBackground;
-    private ActivityResultLauncher<Intent> profilePickerLauncher;
 
     private int titleY;
     private float backgroundProgress;
@@ -148,12 +147,13 @@ public class SetupActivity extends AppCompatActivity {
         client.setLoggingEnabled(false);
     }
 
+    private final ActivityResultLauncher<Intent> profilePickerLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            r -> { if (r.getResultCode() == Activity.RESULT_OK && r.getData() != null) loadProfileFromPicker(r.getData().getData()); });
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        profilePickerLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                r -> { if (r.getResultCode() == Activity.RESULT_OK && r.getData() != null) loadProfileFromPicker(r.getData().getData()); });
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
@@ -167,7 +167,6 @@ public class SetupActivity extends AppCompatActivity {
                 }
             }
         });
-        super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
 
         about = getIntent().getBooleanExtra(EXTRA_ABOUT, false);

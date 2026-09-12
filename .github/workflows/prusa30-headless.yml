@@ -570,6 +570,10 @@ jobs:
           CEREAL_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/cereal" -name cereal-config.cmake -printf '%h\n' | head -1)"
           test -n "$CEREAL_CMAKE_DIR" || { echo "ERROR: cereal-config.cmake not staged"; exit 1; }
           echo "cereal config dir: $CEREAL_CMAKE_DIR"
+          # Same for Eigen3: bundled find_package(Eigen3) is CONFIG-only.
+          EIGEN_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/eigen" -name Eigen3Config.cmake -printf '%h\n' | head -1)"
+          test -n "$EIGEN_CMAKE_DIR" || { echo "ERROR: Eigen3Config.cmake not staged"; exit 1; }
+          echo "Eigen3 config dir: $EIGEN_CMAKE_DIR"
           # Same for fmt: fmt 12.x no longer ships a Find module, only
           # fmt-config.cmake — resolve it exactly the same way.
           FMT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name fmt-config.cmake -printf '%h\n' | head -1)"
@@ -615,6 +619,7 @@ jobs:
             -DEXPAT_DIR="$EXPAT_CMAKE_DIR" \
             -Dfmt_DIR="$FMT_CMAKE_DIR" \
             -Dcereal_DIR="$CEREAL_CMAKE_DIR" \
+            -DEigen3_DIR="$EIGEN_CMAKE_DIR" \
             -DZLIB_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
             -DPNG_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
             -DZLIB_LIBRARY="$ZLIB_LIB" \

@@ -43,9 +43,7 @@ import com.flashforge.farm.config.ConfigObject;
 import com.flashforge.farm.events.NeedDismissCalibrationsMenu;
 import com.flashforge.farm.events.ObjectsListChangedEvent;
 import com.flashforge.farm.events.SelectedObjectChangedEvent;
-import com.flashforge.farm.gallery.Primitives;
 import com.flashforge.farm.gallery.ShapeGalleryMenu;
-import com.flashforge.farm.gallery.StlWriter;
 import com.flashforge.farm.recycler.PreferenceItem;
 import com.flashforge.farm.recycler.SimpleRecyclerAdapter;
 import com.flashforge.farm.recycler.SimpleRecyclerItem;
@@ -278,24 +276,31 @@ public class FileMenu extends ListBedMenu {
             return (int) (portrait ? into.getHeight() * 0.35f : into.getWidth() * 0.6f);
         }
 
-        private void ensurePaPlaceholder() {
-            if (FileMenu.this.fragment.getGlView().getRenderer().getModel() != null) return;
+        private void ensureCalibModel(int kind) {
             new Thread(() -> {
                 try {
-                    File f = new File(FarmApp.getModelCacheDir(), "pa_placeholder_cube.stl");
-                    StlWriter.writeBinary(f, Primitives.cube(20));
+                    com.flashforge.farm.gallery.ShapeGallery.Item item = calibItem(kind);
+                    File f = com.flashforge.farm.gallery.ShapeGallery.fileFor(item);
+                    FarmApp.PENDING_CALIB_ITEM = item.id;
                     ViewUtils.postOnMainThread(() -> {
                         try {
                             FileMenu.this.fragment.loadModel(f);
                             Bus.OBJECTS_LIST_CHANGED.postValue(new ObjectsListChangedEvent());
                         } catch (Exception e) {
-                            android.util.Log.e("FileMenu", "PA placeholder failed", e);
+                            android.util.Log.e("FileMenu", "PA calib model failed", e);
                         }
                     });
                 } catch (Exception e) {
-                    android.util.Log.e("FileMenu", "PA placeholder failed", e);
+                    android.util.Log.e("FileMenu", "PA calib model failed", e);
                 }
-            }, "pa-placeholder").start();
+            }, "pa-calib").start();
+        }
+
+        private com.flashforge.farm.gallery.ShapeGallery.Item calibItem(int kind) {
+            for (com.flashforge.farm.gallery.ShapeGallery.Item it : com.flashforge.farm.gallery.ShapeGallery.builtins()) {
+                if (it.kind == kind) return it;
+            }
+            throw new IllegalStateException("calib kind missing: " + kind);
         }
 
         private String loadJSLoader(String key) {
@@ -387,7 +392,7 @@ public class FileMenu extends ListBedMenu {
                         FarmApp.PENDING_CALIB_START = 0;
                         FarmApp.PENDING_CALIB_END = 0.1;
                         FarmApp.PENDING_CALIB_STEP = 0.002;
-                        ensurePaPlaceholder();
+                        ensureCalibModel(com.flashforge.farm.gallery.ShapeGallery.KIND_CALIB_PA_LINE);
                         Toast.makeText(ctx, "Pressure Advance armed — go to the Slice tab", Toast.LENGTH_LONG).show();
                         Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu());
                         dismiss(true);
@@ -422,7 +427,7 @@ public class FileMenu extends ListBedMenu {
                                     FarmApp.PENDING_CALIB_END = 0.1;
                                     FarmApp.PENDING_CALIB_STEP = 0.002;
                                 }
-                                ensurePaPlaceholder();
+                                ensureCalibModel(com.flashforge.farm.gallery.ShapeGallery.KIND_CALIB_PA_TOWER);
                                 Toast.makeText(ctx, "PA Tower armed — go to the Slice tab", Toast.LENGTH_LONG).show();
                                 Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu());
                                 dismiss(true);
@@ -435,7 +440,7 @@ public class FileMenu extends ListBedMenu {
                         FarmApp.PENDING_CALIB_START = 0;
                         FarmApp.PENDING_CALIB_END = 0.1;
                         FarmApp.PENDING_CALIB_STEP = 0.002;
-                        ensurePaPlaceholder();
+                        ensureCalibModel(com.flashforge.farm.gallery.ShapeGallery.KIND_CALIB_PA_PATTERN);
                         Toast.makeText(ctx, "PA Pattern armed — go to the Slice tab", Toast.LENGTH_LONG).show();
                         Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu());
                         dismiss(true);

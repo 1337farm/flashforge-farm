@@ -66,6 +66,11 @@ name: native
 # entirely, keeping re-runs fast.
 on:
   workflow_dispatch:
+    inputs:
+      allow_duplicate:
+        description: 'Bypass duplicate-dispatch guard (default false)'
+        required: false
+        default: 'false'
   push:
     branches: ["main", "master", "security-fix-remove-cloud-code"]
   pull_request:
@@ -74,7 +79,39 @@ on:
 env:
   NDK_VERSION: "23.1.7779620"
 
+concurrency:
+  group: native-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  guard-duplicate-dispatch:
+    name: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.allow_duplicate != 'true'
+    steps:
+      - name: Cancel stale duplicate manual dispatches on same ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          ME="${{ github.run_id }}"
+          REF="${{ github.ref }}"
+          echo "This run: $ME on $REF"
+          # Same-workflow, in-progress/queued manual dispatches on the same ref
+          # (excluding this run) are stale duplicates: cancel them so only the
+          # newest dispatch proceeds. PR/push events are untouched.
+          IDS=$(gh api "repos/${{ github.repository }}/actions/workflows/native-engine-build.yml/runs?branch=${REF#refs/heads/}&event=workflow_dispatch&status=in_progress&per_page=20" \
+            --jq ".workflow_runs[] | select(.id != ($ME | tonumber)) | .id")
+          if [ -z "$IDS" ]; then
+            echo "No stale duplicates; proceeding."
+            exit 0
+          fi
+          for ID in $IDS; do
+            echo "Cancelling stale duplicate dispatch $ID"
+            gh api -X POST "repos/${{ github.repository }}/actions/runs/$ID/cancel" >/dev/null || true
+          done
+          echo "Stale duplicates cancelled; newest dispatch ($ME) proceeds."
   sync-head:
     name: sync
     runs-on: ubuntu-24.04
@@ -1181,5 +1218,13 @@ jobs:
           # (engine-latest / farm-apk-latest / dep-*-latest) would silently
           # go stale on every auto-merge. Dispatch refresh deliberately:
           # farm-apk-latest is only published when github.ref is main.
-          gh workflow run native-engine-build.yml --repo "${{ github.repository }}" --ref main
-          echo "dispatched main pipeline; rolling releases will refresh with the merged changes"
+          # --auto only queues the merge: the PR may still be open when this
+          # step runs, so confirm the merge actually landed before dispatching
+          # (otherwise every green PR run spawns a duplicate main run).
+          MERGED=$(gh pr view "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --json state --jq .state)
+          if [ "$MERGED" = "MERGED" ]; then
+            gh workflow run native-engine-build.yml --repo "${{ github.repository }}" --ref main
+            echo "PR merged; dispatched main pipeline refresh."
+          else
+            echo "PR not yet merged (state=$MERGED); skipping dispatch — merge will trigger main via push."
+          fi

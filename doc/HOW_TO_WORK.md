@@ -49,6 +49,12 @@ through merge (see §3). If blocked, hand off exact state, never silence.
   the real run appears separately. Pushes must authenticate as a trusted
   actor (`gh` auth / `SYNC_PAT`), never bare `GITHUB_TOKEN`, or PR runs
   gate behind manual approval.
+- The sync-head trust gate verifies `SYNC_PAT` authenticates as the repo
+  owner (`gh api user`) before pushing and fails loudly otherwise. A dead
+  PAT (expired/revoked) previously fell back to `GITHUB_TOKEN` and silently
+  spawned gated zombies for days — never restore that fallback. Rotation:
+  owner creates a classic PAT (`contents:write`, no expiry) and updates the
+  `SYNC_PAT` repo secret.
 
 ## 4. Evidence standards
 

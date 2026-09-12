@@ -638,7 +638,11 @@ jobs:
       - name: Set up Android SDK env
         uses: 1337farm/actions/setup-android-env@v1
       - name: Install NDK ${{ env.NDK_VERSION }}
-        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        # UNCONDITIONAL: Publish engine release's strip needs the LLVM
+        # prebuilt dir's llvm-strip on EVERY path including release/artifact
+        # reuse (2026-09-12: reuse-path dispatches died at the strip on bare
+        # runners). The action is idempotent on warm runners (~seconds when
+        # the NDK is already present).
         uses: 1337farm/actions/setup-android-ndk@v1
         with:
           ndk-version: ${{ env.NDK_VERSION }}

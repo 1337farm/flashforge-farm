@@ -666,6 +666,11 @@ jobs:
         run: |
           "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android23-clang" --version \
             || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
+          # setup-android-ndk only *downloads* the NDK package; Guard the
+          # publish-time llvm-strip the same way (2026-09-12: Publish engine
+          # release hard-failed on a bare runner whose default NDK lacked it).
+          test -x "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" \
+            || { echo "ERROR: llvm-strip missing from installed NDK $ANDROID_NDK_ROOT"; exit 1; }
 
       - name: Setup sccache (distributed compiler cache)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'

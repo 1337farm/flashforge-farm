@@ -1240,6 +1240,12 @@ jobs:
           if [ "$MERGED" = "MERGED" ]; then
             gh workflow run native-engine-build.yml --repo "${{ github.repository }}" --ref main
             echo "PR merged; dispatched main pipeline refresh."
+            # Same GITHUB_TOKEN suppression applies to prusa30-headless.yml
+            # (push trigger): without this, the 3.0 compile-fix loop stalls
+            # on main after every auto-merge (seen 2026-09-12: zero main runs
+            # across #131-#176 despite matching paths).
+            gh workflow run prusa30-headless.yml --repo "${{ github.repository }}" --ref main
+            echo "PR merged; dispatched prusa30-headless on main."
           else
             echo "PR not yet merged (state=$MERGED); skipping dispatch — merge will trigger main via push."
           fi

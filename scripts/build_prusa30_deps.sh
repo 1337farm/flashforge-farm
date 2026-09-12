@@ -136,6 +136,30 @@ else()
 endif()
 EOF
 
+# Same for Eigen 3.4.0: bundled_deps/slic3r-domain-types calls
+# find_package(Eigen3) (CONFIG only — no Find module ships it), so provide
+# a minimal config exposing Eigen3::Eigen over the staged headers.
+mkdir -p "$STAGE_ROOT/eigen/lib/cmake/eigen3"
+cat > "$STAGE_ROOT/eigen/lib/cmake/eigen3/Eigen3Config.cmake" <<'EOF'
+# Staged Eigen 3.4.0 headers (header-only, no lib to link).
+if(NOT TARGET Eigen3::Eigen)
+  add_library(Eigen3::Eigen INTERFACE IMPORTED)
+  set_target_properties(Eigen3::Eigen PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../../include")
+endif()
+EOF
+cat > "$STAGE_ROOT/eigen/lib/cmake/eigen3/Eigen3ConfigVersion.cmake" <<'EOF'
+set(PACKAGE_VERSION "3.4.0")
+if(PACKAGE_FIND_VERSION VERSION_GREATER PACKAGE_VERSION)
+  set(PACKAGE_VERSION_COMPATIBLE FALSE)
+else()
+  set(PACKAGE_VERSION_COMPATIBLE TRUE)
+  if(PACKAGE_FIND_VERSION VERSION_EQUAL PACKAGE_VERSION)
+    set(PACKAGE_VERSION_EXACT TRUE)
+  endif()
+endif()
+EOF
+
 echo "======================================================================="
 echo " PrusaSlicer 3.0 header-only deps staged under $STAGE_ROOT"
 echo ""

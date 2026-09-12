@@ -16,6 +16,9 @@ on:
       - "scripts/build_prusa30_tbb.sh"
       - "scripts/build_prusa30_nlopt.sh"
       - "scripts/build_prusa30_expat.sh"
+      - "scripts/build_prusa30_png.sh"
+      - "scripts/build_prusa30_fmt.sh"
+      - "scripts/build_prusa30_tracy.sh"
       - ".github/workflows/prusa30-headless.yml"
   pull_request:
     paths:
@@ -24,6 +27,9 @@ on:
       - "scripts/build_prusa30_tbb.sh"
       - "scripts/build_prusa30_nlopt.sh"
       - "scripts/build_prusa30_expat.sh"
+      - "scripts/build_prusa30_png.sh"
+      - "scripts/build_prusa30_fmt.sh"
+      - "scripts/build_prusa30_tracy.sh"
       - ".github/workflows/prusa30-headless.yml"
 
 env:
@@ -316,11 +322,96 @@ jobs:
           path: engine/prusa30/jniImports/expat
           key: prusa30-expat-R_2_8_2-${{ hashFiles('scripts/build_prusa30_expat.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
 
+  build-pngfmt:
+    name: pngfmt
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged zlib+libpng from cache
+        id: pf-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/pngfmt
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored pngfmt
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.pf-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/pngfmt/include/zlib.h || OK=0
+            test -f engine/prusa30/jniImports/pngfmt/include/png.h || OK=0
+            find engine/prusa30/jniImports/pngfmt -name 'libz.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/pngfmt -name 'libpng*.a' | grep -q . || OK=0
+            test -f engine/prusa30/jniImports/pngfmt/include/fmt/core.h || OK=0
+            find engine/prusa30/jniImports/pngfmt -name 'libfmt.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/pngfmt -name 'TracyClient.cpp' -o -name 'libTracyClient.a' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build zlib+libpng+fmt+Tracy from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_png.sh scripts/build_prusa30_fmt.sh scripts/build_prusa30_tracy.sh
+          PFX="$(pwd)/engine/prusa30/jniImports/pngfmt"
+          ABI="$ABI" API_LEVEL="23" STAGE_ROOT="$PFX" ./scripts/build_prusa30_png.sh
+          ABI="$ABI" API_LEVEL="23" STAGE_ROOT="$PFX" ./scripts/build_prusa30_fmt.sh
+          ABI="$ABI" API_LEVEL="23" STAGE_ROOT="$PFX" NDK_ZLIB_ROOT="$PFX" ./scripts/build_prusa30_png.sh --libpng-only
+          ABI="$ABI" API_LEVEL="23" STAGE_ROOT="$PFX" ./scripts/build_prusa30_tracy.sh
+
+      - name: Verify staged pngfmt exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/pngfmt/include/zlib.h \
+            || { echo "ERROR: zlib.h missing"; exit 1; }
+          test -f engine/prusa30/jniImports/pngfmt/include/png.h \
+            || { echo "ERROR: png.h missing"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'libz.a' | grep -q . \
+            || { echo "ERROR: no libz.a staged"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'libpng*.a' | grep -q . \
+            || { echo "ERROR: no libpng staged"; exit 1; }
+          test -f engine/prusa30/jniImports/pngfmt/include/fmt/core.h \
+            || { echo "ERROR: fmt/core.h missing"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'libfmt.a' | grep -q . \
+            || { echo "ERROR: no libfmt.a staged"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'TracyClient.cpp' -o -name 'libTracyClient.a' | grep -q . \
+            || { echo "ERROR: no TracyClient staged"; exit 1; }
+          echo "pngfmt staged and verified"
+
+      - name: Save staged zlib+libpng+fmt+Tracy
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/pngfmt
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
   headless-build:
     name: headless
     runs-on: ubuntu-24.04
     timeout-minutes: 180
-    needs: [build-boost, build-tbb, build-nlopt, build-expat]
+    needs: [build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt]
     permissions:
       contents: read
       actions: read
@@ -428,6 +519,29 @@ jobs:
             || { echo "ERROR: staged expat missing expat-config.cmake"; exit 1; }
           echo "expat R_2_8_2 present and verified"
 
+      - name: Restore staged pngfmt from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/pngfmt
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged pngfmt exactly
+        run: |
+          test -f engine/prusa30/jniImports/pngfmt/include/zlib.h \
+            || { echo "ERROR: staged zlib.h missing"; exit 1; }
+          test -f engine/prusa30/jniImports/pngfmt/include/png.h \
+            || { echo "ERROR: staged png.h missing"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'libz.a' | grep -q . \
+            || { echo "ERROR: staged libz.a missing"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'libpng*.a' | grep -q . \
+            || { echo "ERROR: staged libpng missing"; exit 1; }
+          test -f engine/prusa30/jniImports/pngfmt/include/fmt/core.h \
+            || { echo "ERROR: staged fmt/core.h missing"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'libfmt.a' | grep -q . \
+            || { echo "ERROR: staged libfmt.a missing"; exit 1; }
+          echo "pngfmt present and verified"
+
       - name: Configure headless 3.0 build (arm64-v8a)
         env:
           # Upstream FindNLopt reads the NLOPT *environment* variable:
@@ -447,6 +561,20 @@ jobs:
           EXPAT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/expat" -name expat-config.cmake -printf '%h\n' | head -1)"
           test -n "$EXPAT_CMAKE_DIR" || { echo "ERROR: expat-config.cmake not staged"; exit 1; }
           echo "EXPAT config dir: $EXPAT_CMAKE_DIR"
+          # Same for fmt: fmt 12.x no longer ships a Find module, only
+          # fmt-config.cmake — resolve it exactly the same way.
+          FMT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name fmt-config.cmake -printf '%h\n' | head -1)"
+          test -n "$FMT_CMAKE_DIR" || { echo "ERROR: fmt-config.cmake not staged"; exit 1; }
+          echo "fmt config dir: $FMT_CMAKE_DIR"
+          # Tracy: slic3r_add_tracy needs target Tracy::TracyClient with an
+          # INTERFACE_INCLUDE_DIRECTORIES property even when profiling is OFF
+          # (sources only get compiled with SLIC3R_ENABLE_PROFILING=ON, off by
+          # default). The CONFIG package may not cross-resolve, so pre-seed a
+          # Tracy_DIR hint file is unnecessary — instead pass the staged source
+          # root and let a 0004 patch provide the imported target fallback.
+          TRACY_ROOT_DIR="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name Tracy.hpp | head -1)")"
+          test -n "$TRACY_ROOT_DIR" || { echo "ERROR: Tracy.hpp not staged"; exit 1; }
+          echo "Tracy root dir: $TRACY_ROOT_DIR"
           cmake -S "$(pwd)/engine/build/prusaslicer-src" -B build/prusa30 \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a \
@@ -462,7 +590,11 @@ jobs:
             -DBoost_ARCHITECTURE="-a64" \
             -DBoost_COMPILER="-clang" \
             -DTBB_DIR="$TBB_CMAKE_DIR" \
-            -DEXPAT_DIR="$EXPAT_CMAKE_DIR"
+            -DEXPAT_DIR="$EXPAT_CMAKE_DIR" \
+            -Dfmt_DIR="$FMT_CMAKE_DIR" \
+            -DZLIB_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
+            -DPNG_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
+            -DTracy_INCLUDE_DIR="$TRACY_ROOT_DIR"
 
       - name: Build headless core (libslic3r)
         run: |

@@ -179,7 +179,12 @@ public class BedFragment extends Fragment {
     }
 
     public void showUnfoldMenu(UnfoldMenu menu, View from) {
-        if (currentUnfoldMenu != null) return;
+        if (menu == null) return;
+        if (currentUnfoldMenu != null) {
+            if (currentUnfoldMenu == menu && menu.isAttached()) return;
+            currentUnfoldMenu.dismiss(true);
+            currentUnfoldMenu = null;
+        }
 
         menu.setOnDismiss(()-> {
             if (menu.isAttached()) return;

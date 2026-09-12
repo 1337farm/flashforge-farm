@@ -47,11 +47,22 @@ echo "$TRACY_SHA  tracy-$TRACY_VER.tar.gz" | sha256sum -c --status - \
 
 rm -rf "tracy-$TRACY_VER"
 mkdir -p "tracy-$TRACY_VER" && tar xzf "tracy-$TRACY_VER.tar.gz" -C "tracy-$TRACY_VER"
-TSRC="$(find "tracy-$TRACY_VER" -maxdepth 2 -name Tracy.hpp | head -1 | xargs dirname)"
-[ -n "$TSRC" ] || { echo "[tracy] ERROR: no Tracy.hpp in tarball" >&2; exit 1; }
-# Stage the public/ tree (Tracy.hpp + TracyClient.cpp + common/) verbatim.
+TSRC=""
+# v0.13.1 layout: public/TracyClient.cpp + public/tracy/Tracy.hpp (+common/).
+# Anchor on the uniquely-placed TracyClient.cpp: a Tracy.hpp search lands in
+# the nested tracy/ subdir (and GitHub tarballs add another nesting level),
+# which misses the .cpp. Dump the layout on miss instead of dying inside
+# `xargs dirname` with a cryptic operand error.
+TCPP="$(find "tracy-$TRACY_VER" -maxdepth 4 -name TracyClient.cpp | head -1)"
+if [ -z "$TCPP" ]; then
+    echo "[tracy] ERROR: no TracyClient.cpp in tarball; top-level layout:" >&2
+    find "tracy-$TRACY_VER" -maxdepth 3 | head -20 >&2
+    exit 1
+fi
+TSRC="$(dirname "$TCPP")"
+# Stage the public/ tree verbatim.
 cp -r "$TSRC"/. "$STAGE_ROOT/tracy/"
 
-test -f "$STAGE_ROOT/tracy/Tracy.hpp" || { echo "[tracy] ERROR: Tracy.hpp missing" >&2; exit 1; }
+test -f "$STAGE_ROOT/tracy/tracy/Tracy.hpp" || { echo "[tracy] ERROR: tracy/Tracy.hpp missing" >&2; exit 1; }
 test -f "$STAGE_ROOT/tracy/TracyClient.cpp" || { echo "[tracy] ERROR: TracyClient.cpp missing" >&2; exit 1; }
 echo "[tracy] done -> $STAGE_ROOT/tracy"

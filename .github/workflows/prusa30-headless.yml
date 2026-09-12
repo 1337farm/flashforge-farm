@@ -583,6 +583,10 @@ jobs:
           FMT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name fmt-config.cmake -printf '%h\n' | head -1)"
           test -n "$FMT_CMAKE_DIR" || { echo "ERROR: fmt-config.cmake not staged"; exit 1; }
           echo "fmt config dir: $FMT_CMAKE_DIR"
+          # Same for spdlog (header-only shim exposing spdlog::spdlog).
+          SPDLOG_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/spdlog" -name spdlogConfig.cmake -printf '%h\n' | head -1)"
+          test -n "$SPDLOG_CMAKE_DIR" || { echo "ERROR: spdlogConfig.cmake not staged"; exit 1; }
+          echo "spdlog config dir: $SPDLOG_CMAKE_DIR"
           # Tracy: slic3r_add_tracy needs target Tracy::TracyClient with an
           # INTERFACE_INCLUDE_DIRECTORIES property even when profiling is OFF
           # (sources only get compiled with SLIC3R_ENABLE_PROFILING=ON, off by
@@ -622,6 +626,7 @@ jobs:
             -DTBB_DIR="$TBB_CMAKE_DIR" \
             -DEXPAT_DIR="$EXPAT_CMAKE_DIR" \
             -Dfmt_DIR="$FMT_CMAKE_DIR" \
+            -Dspdlog_DIR="$SPDLOG_CMAKE_DIR" \
             -Dcereal_DIR="$CEREAL_CMAKE_DIR" \
             -DEigen3_DIR="$EIGEN_CMAKE_DIR" \
             -Dtl-expected_DIR="$EXPECTED_CMAKE_DIR" \

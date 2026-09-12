@@ -15,6 +15,7 @@ on:
       - "scripts/build_boost.sh"
       - "scripts/build_prusa30_tbb.sh"
       - "scripts/build_prusa30_nlopt.sh"
+      - "scripts/build_prusa30_expat.sh"
       - ".github/workflows/prusa30-headless.yml"
   pull_request:
     paths:
@@ -22,6 +23,7 @@ on:
       - "scripts/build_boost.sh"
       - "scripts/build_prusa30_tbb.sh"
       - "scripts/build_prusa30_nlopt.sh"
+      - "scripts/build_prusa30_expat.sh"
       - ".github/workflows/prusa30-headless.yml"
 
 env:
@@ -243,11 +245,82 @@ jobs:
           path: engine/prusa30/jniImports/nlopt
           key: prusa30-nlopt-v2.5.0-${{ hashFiles('scripts/build_prusa30_nlopt.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
 
+  build-expat:
+    name: expat
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged expat R_2_8_2 from cache
+        id: expat-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/expat
+          key: prusa30-expat-R_2_8_2-${{ hashFiles('scripts/build_prusa30_expat.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored expat
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.expat-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/expat/include/expat.h || OK=0
+            find engine/prusa30/jniImports/expat -name 'libexpat.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/expat -name 'expat-config.cmake' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build expat R_2_8_2 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_expat.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/expat" \
+            ./scripts/build_prusa30_expat.sh
+
+      - name: Verify staged expat exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/expat/include/expat.h \
+            || { echo "ERROR: expat.h missing"; exit 1; }
+          find engine/prusa30/jniImports/expat -name 'libexpat.a' | grep -q . \
+            || { echo "ERROR: no libexpat.a staged"; exit 1; }
+          find engine/prusa30/jniImports/expat -name 'expat-config.cmake' | grep -q . \
+            || { echo "ERROR: expat-config.cmake missing"; exit 1; }
+          echo "expat R_2_8_2 staged and verified"
+
+      - name: Save staged expat R_2_8_2
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/expat
+          key: prusa30-expat-R_2_8_2-${{ hashFiles('scripts/build_prusa30_expat.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
   headless-build:
     name: headless
     runs-on: ubuntu-24.04
     timeout-minutes: 180
-    needs: [build-boost, build-tbb, build-nlopt]
+    needs: [build-boost, build-tbb, build-nlopt, build-expat]
     permissions:
       contents: read
       actions: read
@@ -338,6 +411,23 @@ jobs:
             || { echo "ERROR: staged NLopt missing libnlopt_cxx"; exit 1; }
           echo "NLopt v2.5.0 present and verified"
 
+      - name: Restore staged expat R_2_8_2 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/expat
+          key: prusa30-expat-R_2_8_2-${{ hashFiles('scripts/build_prusa30_expat.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged expat exactly
+        run: |
+          test -f engine/prusa30/jniImports/expat/include/expat.h \
+            || { echo "ERROR: staged expat missing expat.h"; exit 1; }
+          find engine/prusa30/jniImports/expat -name 'libexpat.a' | grep -q . \
+            || { echo "ERROR: staged expat missing libexpat.a"; exit 1; }
+          find engine/prusa30/jniImports/expat -name 'expat-config.cmake' | grep -q . \
+            || { echo "ERROR: staged expat missing expat-config.cmake"; exit 1; }
+          echo "expat R_2_8_2 present and verified"
+
       - name: Configure headless 3.0 build (arm64-v8a)
         env:
           # Upstream FindNLopt reads the NLOPT *environment* variable:
@@ -365,7 +455,8 @@ jobs:
             -DBoost_LIBRARY_DIR="$(pwd)/engine/prusa30/jniImports/boost/lib/arm64-v8a/lib" \
             -DBoost_ARCHITECTURE="-a64" \
             -DBoost_COMPILER="-clang" \
-            -DTBB_DIR="$TBB_CMAKE_DIR"
+            -DTBB_DIR="$TBB_CMAKE_DIR" \
+            -DEXPAT_DIR="$(pwd)/engine/prusa30/jniImports/expat"
 
       - name: Build headless core (libslic3r)
         run: |

@@ -20,6 +20,9 @@ public final class ShapeGallery {
     public static final int KIND_DISK = 5;
     public static final int KIND_TAG = 6;
     public static final int KIND_CUSTOM = 7;
+    public static final int KIND_CALIB_PA_LINE = 8;
+    public static final int KIND_CALIB_PA_PATTERN = 9;
+    public static final int KIND_CALIB_PA_TOWER = 10;
 
     public static final class Item {
         public final String id;
@@ -49,6 +52,9 @@ public final class ShapeGallery {
         for (String m : Tags.MATERIALS) {
             out.add(new Item("tag_" + m.toLowerCase(), m + " tag", "Recycling tag", KIND_TAG, m, null));
         }
+        out.add(new Item("calib_pa_line", "PA Line test", "Pressure Advance lines", KIND_CALIB_PA_LINE, null, null));
+        out.add(new Item("calib_pa_pattern", "PA Pattern test", "Pressure Advance grid", KIND_CALIB_PA_PATTERN, null, null));
+        out.add(new Item("calib_pa_tower", "PA Tower test", "Pressure Advance tower", KIND_CALIB_PA_TOWER, null, null));
         return out;
     }
 
@@ -74,6 +80,12 @@ public final class ShapeGallery {
                 return Primitives.cylinder(12, 0.8f, 32);
             case KIND_TAG:
                 return Tags.buildTag(item.tag);
+            case KIND_CALIB_PA_LINE:
+                return CalibModels.paLine();
+            case KIND_CALIB_PA_PATTERN:
+                return CalibModels.paPattern();
+            case KIND_CALIB_PA_TOWER:
+                return CalibModels.paTower();
             default:
                 throw new IOException("not a built-in");
         }

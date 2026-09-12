@@ -60,6 +60,7 @@ public class FarmApp extends Application {
     // 5+ = other calibration modes
     public static int PENDING_CALIB_MODE = 0;
     public static double PENDING_CALIB_START = 0, PENDING_CALIB_END = 0, PENDING_CALIB_STEP = 0;
+    public static String PENDING_CALIB_ITEM = null;
 
     public static void clearLiveDiffs() {
         LIVE_DIFF_PRINTER.values.clear();

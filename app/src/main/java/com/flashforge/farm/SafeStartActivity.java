@@ -1,6 +1,5 @@
 package com.flashforge.farm;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -8,34 +7,46 @@ import android.os.Build;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.Gravity;
-import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.ColorUtils;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.flashforge.farm.theme.ThemesRepo;
 import com.flashforge.farm.utils.Prefs;
 import com.flashforge.farm.utils.ViewUtils;
 import com.flashforge.farm.view.FarmButton;
 
-public class SafeStartActivity extends Activity {
-    private static final int REQ_SAF_CREATE = 1002;
+public class SafeStartActivity extends AppCompatActivity {
+    private ActivityResultLauncher<Intent> safCreateLauncher;
     private String crashLog = "";
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        safCreateLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                r -> {
+                    if (r.getResultCode() == RESULT_OK && r.getData() != null && r.getData().getData() != null) {
+                        boolean ok = FarmApp.writeToUri(this, r.getData().getData(), crashLog);
+                        Toast.makeText(this,
+                                ok ? R.string.AppCrashedSaved : R.string.AppCrashedSaveFailed,
+                                Toast.LENGTH_LONG).show();
+                    }
+                });
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            getWindow().setStatusBarColor(Color.WHITE);
-            View v = getWindow().getDecorView();
-            v.setSystemUiVisibility(v.getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-        }
+        WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        controller.setAppearanceLightStatusBars(true);
+        getWindow().setStatusBarColor(Color.WHITE);
 
         crashLog = Prefs.getPrefs().getString("crash", "");
 
@@ -122,7 +133,7 @@ public class SafeStartActivity extends Activity {
                 .format(new java.util.Date());
         create.putExtra(Intent.EXTRA_TITLE, "farm_crash_" + stamp + ".log");
         try {
-            startActivityForResult(create, REQ_SAF_CREATE);
+            safCreateLauncher.launch(create);
         } catch (Exception e) {
             Toast.makeText(this, R.string.AppCrashedSaveFailed, Toast.LENGTH_LONG).show();
         }
@@ -132,16 +143,5 @@ public class SafeStartActivity extends Activity {
         String stamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
                 .format(new java.util.Date());
         return FarmApp.saveToDownloads(this, "farm_crash_" + stamp + ".log", crashLog);
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQ_SAF_CREATE && resultCode == RESULT_OK && data != null && data.getData() != null) {
-            boolean ok = FarmApp.writeToUri(this, data.getData(), crashLog);
-            Toast.makeText(this,
-                    ok ? R.string.AppCrashedSaved : R.string.AppCrashedSaveFailed,
-                    Toast.LENGTH_LONG).show();
-        }
     }
 }

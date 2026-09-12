@@ -49,7 +49,7 @@ public class FilamentConfigFragment extends ProfileListFragment {
                 return compatItems;
             }
 
-            List<ConfigObject> nList = new ArrayList<>(list.size());
+            List<ProfileListItem> nList = new ArrayList<>(list.size());
             ConfigObject printerObj = FarmApp.CONFIG.findPrinter(printer);
             String model = printerObj != null ? printerObj.get("printer_model") : null;
             String nozzle = printerObj != null ? printerObj.get("printer_variant") : null;
@@ -72,9 +72,9 @@ public class FilamentConfigFragment extends ProfileListFragment {
             lastPrinter = printer;
             lastPrint = print;
             lastUid = FarmApp.CONFIG_UID;
-            return compatItems = (List) nList;
+            return compatItems = nList;
         }
-        return (List) list;
+        return new ArrayList<ProfileListItem>(list);
     }
 
     @Override

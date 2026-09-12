@@ -20,12 +20,17 @@ import android.util.SparseArray;
 import android.view.View;
 import android.view.WindowManager;
 
+import androidx.activity.OnBackPressedCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.ColorUtils;
-import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -76,13 +81,18 @@ import com.flashforge.farm.utils.ViewUtils;
 import com.flashforge.farm.view.SnackbarsLayout;
 
 public class MainActivity extends AppCompatActivity {
-    // Activity result
     public final static int REQUEST_CODE_OPEN_FILE = 1, REQUEST_CODE_EXPORT_GCODE = 2,
                             REQUEST_CODE_IMPORT_PROFILES = 3, REQUEST_CODE_EXPORT_PROFILES = 4,
                             REQUEST_CODE_EXPORT_3MF = 5,
                             REQUEST_CODE_PROVISION_USB = 6, REQUEST_CODE_UNINSTALL_USB = 7,
                             REQUEST_CODE_BACKUP = 8, REQUEST_CODE_RESTORE = 9,
                             REQUEST_CODE_IMPORT_GALLERY = 10;
+    /** Single SAF/file entry point: every file open/save intent routes through here. */
+    private ActivityResultLauncher<Intent> filePickerLauncher;
+    private int pendingFileRequest;
+    /** SAF tree picker for USB provisioning deploy targets. */
+    private ActivityResultLauncher<Intent> usbTreeLauncher;
+    private boolean usbTreeInstall;
 
     private static MainActivity activeInstance;
 
@@ -102,11 +112,43 @@ public class MainActivity extends AppCompatActivity {
     private boolean landscape;
     private UnfoldMenu unfoldMenu;
 
+    /** Launches a SAF/file intent and tags the result with its request code. */
+    public void pickFile(Intent intent, int requestCode) {
+        pendingFileRequest = requestCode;
+        filePickerLauncher.launch(intent);
+    }
+
+    /** Launches the SAF tree picker for USB provisioning deploy targets. */
+    public void pickUsbTree(Intent intent, boolean install) {
+        usbTreeInstall = install;
+        usbTreeLauncher.launch(intent);
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        filePickerLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                r -> { if (r.getResultCode() == Activity.RESULT_OK) onFilePicked(r.getData()); });
+        usbTreeLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                r -> { if (r.getResultCode() == Activity.RESULT_OK) onUsbTreePicked(r.getData(), usbTreeInstall); });
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (unfoldMenu != null) {
+                    unfoldMenu.dismiss();
+                    return;
+                }
+                if (delegate != null && delegate.onBackPressed()) {
+                    return;
+                }
+                setEnabled(false);
+                getOnBackPressedDispatcher().onBackPressed();
+            }
+        });
         startService(new android.content.Intent(this, com.flashforge.farm.api.AutoDispatchService.class));
 
-        super.onCreate(savedInstanceState);
         // No on-load crash screen: crash dumps are pushed straight to Downloads
         // (Java handler at crash exit; native dumps auto-exported on next launch).
         if (FarmApp.CONFIG == null) {
@@ -151,9 +193,9 @@ public class MainActivity extends AppCompatActivity {
             throw new IllegalArgumentException("Delegate hasn't created container view!");
         }
         ViewCompat.setOnApplyWindowInsetsListener(v, (v2, insets) -> {
-            Insets systemBars = insets.getSystemWindowInsets();
+            androidx.core.graphics.Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v2.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
-            return insets.consumeSystemWindowInsets();
+            return WindowInsetsCompat.CONSUMED;
         });
         setContentView(v);
 
@@ -166,7 +208,9 @@ public class MainActivity extends AppCompatActivity {
         landscape = dm.widthPixels > dm.heightPixels;
         View decorView = getWindow().getDecorView();
         decorView.setBackgroundColor(ThemesRepo.getColor(android.R.attr.windowBackground));
-        decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        WindowInsetsControllerCompat insetsController = WindowCompat.getInsetsController(getWindow(), decorView);
+        insetsController.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -174,29 +218,10 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (landscape) {
-            int uiOptions = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN;
-            decorView.setSystemUiVisibility(uiOptions);
-
-            decorView.setOnSystemUiVisibilityChangeListener(visibility -> {
-                if ((visibility & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0) {
-                    visibility |= View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN;
-                    int finalVisibility = visibility;
-                    ViewUtils.postOnMainThread(() -> decorView.setSystemUiVisibility(finalVisibility), 500);
-                }
-            });
+            insetsController.hide(WindowInsetsCompat.Type.navigationBars() | WindowInsetsCompat.Type.statusBars());
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                getWindow().setStatusBarContrastEnforced(false);
-                getWindow().setNavigationBarContrastEnforced(false);
-            }
-            if (ColorUtils.calculateLuminance(ThemesRepo.getColor(android.R.attr.windowBackground)) >= 0.9f) {
-                decorView.setSystemUiVisibility(decorView.getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-            } else {
-                decorView.setSystemUiVisibility(decorView.getSystemUiVisibility() & ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-            }
-        }
+        applyStatusBarContrast(decorView);
 
         if (!Objects.equals(Prefs.getLastCommit(), BuildConfig.COMMIT) && FarmApp.hasUpdateInfo) {
             Prefs.setLastCommit();
@@ -218,11 +243,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /** @noinspection ResultOfMethodCallIgnored*/
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-
-        if (resultCode == Activity.RESULT_OK) {
+    private void onFilePicked(@Nullable Intent data) {
+        if (data == null || data.getData() == null) return;
+        int requestCode = pendingFileRequest;
+        pendingFileRequest = 0;
             if (requestCode == MainActivity.REQUEST_CODE_EXPORT_3MF) {
                 Fragment fragment = getNavigationDelegate().getCurrentFragment();
                 if (fragment instanceof BedFragment) {
@@ -385,7 +409,6 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
             } else if (requestCode == MainActivity.REQUEST_CODE_IMPORT_GALLERY) {
-                if (data == null || data.getData() == null) return;
                 Uri importUri = data.getData();
                 IOUtils.IO_POOL.submit(() -> {
                     InputStream in = null;
@@ -406,20 +429,20 @@ public class MainActivity extends AppCompatActivity {
                         if (in != null) try { in.close(); } catch (IOException ignored) {}
                     }
                 });
-            } else if (requestCode == MainActivity.REQUEST_CODE_PROVISION_USB
-                    || requestCode == MainActivity.REQUEST_CODE_UNINSTALL_USB) {
-                Fragment cur = getNavigationDelegate().getCurrentFragment();
-                if (cur instanceof FleetFragment) {
-                    boolean install = requestCode == MainActivity.REQUEST_CODE_PROVISION_USB;
-                    ((FleetFragment) cur).onUsbDeployResult(data.getData(), install);
-                } else {
-                    new FarmAlertDialogBuilder(this)
-                            .setTitle(R.string.MenuFileImportProfilesFailed)
-                            .setMessage(R.string.FleetProvisioningDone)
-                            .setPositiveButton(android.R.string.ok, null)
-                            .show();
-                }
             }
+    }
+
+    private void onUsbTreePicked(@Nullable Intent data, boolean install) {
+        if (data == null || data.getData() == null) return;
+        Fragment cur = getNavigationDelegate().getCurrentFragment();
+        if (cur instanceof FleetFragment) {
+            ((FleetFragment) cur).onUsbDeployResult(data.getData(), install);
+        } else {
+            new FarmAlertDialogBuilder(this)
+                    .setTitle(R.string.MenuFileImportProfilesFailed)
+                    .setMessage(R.string.FleetProvisioningDone)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show();
         }
     }
 
@@ -1272,13 +1295,7 @@ public class MainActivity extends AppCompatActivity {
         delegate.onApplyTheme();
 
         View decorView = getWindow().getDecorView();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (ColorUtils.calculateLuminance(ThemesRepo.getColor(android.R.attr.windowBackground)) >= 0.9f) {
-                decorView.setSystemUiVisibility(decorView.getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-            } else {
-                decorView.setSystemUiVisibility(decorView.getSystemUiVisibility() & ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-            }
-        }
+        applyStatusBarContrast(decorView);
         decorView.setBackgroundColor(ThemesRepo.getColor(android.R.attr.windowBackground));
     }
 
@@ -1299,24 +1316,21 @@ public class MainActivity extends AppCompatActivity {
         return new MobileNavigationDelegate();
     }
 
+    private void applyStatusBarContrast(View decorView) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            getWindow().setStatusBarContrastEnforced(false);
+            getWindow().setNavigationBarContrastEnforced(false);
+        }
+        WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), decorView);
+        boolean light = ColorUtils.calculateLuminance(ThemesRepo.getColor(android.R.attr.windowBackground)) >= 0.9f;
+        controller.setAppearanceLightStatusBars(light);
+    }
+
     public void showUnfoldMenu(UnfoldMenu menu, View v) {
         if (unfoldMenu != null) return;
         menu.setOnDismiss(() -> unfoldMenu = null);
         menu.show(v, delegate.getOverlayView());
         unfoldMenu = menu;
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (unfoldMenu != null) {
-            unfoldMenu.dismiss();
-            return;
-        }
-        if (delegate.onBackPressed()) {
-            return;
-        }
-
-        super.onBackPressed();
     }
 
     @Override

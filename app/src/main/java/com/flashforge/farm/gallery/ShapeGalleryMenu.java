@@ -115,7 +115,7 @@ public class ShapeGalleryMenu extends UnfoldMenu {
                         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                         i.addCategory(Intent.CATEGORY_OPENABLE);
                         i.setType("*/*");
-                        ((Activity) ctx).startActivityForResult(i, MainActivity.REQUEST_CODE_IMPORT_GALLERY);
+                        ((com.flashforge.farm.MainActivity) ctx).pickFile(i, MainActivity.REQUEST_CODE_IMPORT_GALLERY);
                     }
                 }));
         ArrayList<ShapeGallery.Item> items = new ArrayList<ShapeGallery.Item>();

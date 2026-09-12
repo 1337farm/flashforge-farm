@@ -11,7 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class SimpleRecyclerAdapter extends RecyclerView.Adapter {
+public class SimpleRecyclerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private Map<Class<?>, Integer> viewType = new HashMap<>();
     private Map<Integer, SimpleRecyclerItem> viewCreator = new HashMap<>();
     private int lastType;
@@ -24,7 +24,6 @@ public class SimpleRecyclerAdapter extends RecyclerView.Adapter {
         return new RecyclerView.ViewHolder(viewCreator.get(viewType).onCreateView(parent.getContext())) {};
     }
 
-    /** @noinspection unchecked*/
     @Override
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         items.get(position).onBindView(holder.itemView);

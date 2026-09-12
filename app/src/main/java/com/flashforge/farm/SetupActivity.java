@@ -32,13 +32,16 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.activity.OnBackPressedCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
-import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.dynamicanimation.animation.FloatValueHolder;
 import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
@@ -105,7 +108,6 @@ public class SetupActivity extends AppCompatActivity {
     public final static String EXTRA_ADD_PRINTER = "add_printer";
 
     private final static String TAG = "SetupActivity";
-    private final static int REQUEST_CODE_IMPORT_SETUP_PROFILE = 1001;
 
     private static final String ORCA_ASSET_DIR = "orca_profiles";
 
@@ -117,6 +119,7 @@ public class SetupActivity extends AppCompatActivity {
     private SimpleRecyclerAdapter adapter;
     private TextView title;
     private ImageView startupBackground;
+    private ActivityResultLauncher<Intent> profilePickerLauncher;
 
     private int titleY;
     private float backgroundProgress;
@@ -147,6 +150,23 @@ public class SetupActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        profilePickerLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                r -> { if (r.getResultCode() == Activity.RESULT_OK && r.getData() != null) loadProfileFromPicker(r.getData().getData()); });
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (pager.getCurrentItem() == PROFILES_INDEX + 1 && profilesItem != null && profilesItem.useCustomProfile) {
+                    pager.setCurrentItem(1, true);
+                } else if (pager.getCurrentItem() > 0) {
+                    pager.setCurrentItem(pager.getCurrentItem() - 1, true);
+                } else {
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                }
+            }
+        });
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
 
@@ -351,14 +371,14 @@ public class SetupActivity extends AppCompatActivity {
 
         fl.addView(pager, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         ViewCompat.setOnApplyWindowInsetsListener(fl, (v2, insets) -> {
-            Insets systemBars = insets.getSystemWindowInsets();
+            androidx.core.graphics.Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             pager.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) title.getLayoutParams();
             params.leftMargin = systemBars.left;
             params.topMargin = systemBars.top;
             params.rightMargin = systemBars.right;
             params.bottomMargin = systemBars.bottom;
-            return insets.consumeSystemWindowInsets();
+            return WindowInsetsCompat.CONSUMED;
         });
         setContentView(fl);
 
@@ -369,14 +389,6 @@ public class SetupActivity extends AppCompatActivity {
         orcaRepo.localAssets = true;
         orcaRepo.checked = true;
         repos.add(orcaRepo);
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_CODE_IMPORT_SETUP_PROFILE && resultCode == Activity.RESULT_OK && data != null) {
-            loadProfileFromPicker(data.getData());
-        }
     }
 
     private void openProfilePicker() {
@@ -390,7 +402,7 @@ public class SetupActivity extends AppCompatActivity {
                 "application/zip"
         });
         try {
-            startActivityForResult(intent, REQUEST_CODE_IMPORT_SETUP_PROFILE);
+            profilePickerLauncher.launch(intent);
         } catch (Exception e) {
             new FarmAlertDialogBuilder(this)
                     .setTitle(R.string.MenuFileImportProfilesFailed)
@@ -779,17 +791,6 @@ public class SetupActivity extends AppCompatActivity {
 
             items.add(new FinishItem());
             adapter.setItems(items);
-        }
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (pager.getCurrentItem() == PROFILES_INDEX + 1 && profilesItem != null && profilesItem.useCustomProfile) {
-            pager.setCurrentItem(1, true);
-        } else if (pager.getCurrentItem() > 0) {
-            pager.setCurrentItem(pager.getCurrentItem() - 1, true);
-        } else {
-            super.onBackPressed();
         }
     }
 

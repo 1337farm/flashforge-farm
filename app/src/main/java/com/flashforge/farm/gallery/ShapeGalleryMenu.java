@@ -165,11 +165,13 @@ public class ShapeGalleryMenu extends UnfoldMenu {
                         Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuFileOpenFileLoaded));
                     } catch (Throwable e) {
                         android.util.Log.e("ShapeGalleryMenu", "gallery load failed", e);
+                        FarmApp.writeCrashDump("gallery-load", android.util.Log.getStackTraceString(e));
                         Toast.makeText(FarmApp.INSTANCE, R.string.MenuFileOpenFileFailed, Toast.LENGTH_SHORT).show();
                     }
                 });
             } catch (Throwable e) {
                 android.util.Log.e("ShapeGalleryMenu", "gallery file failed", e);
+                FarmApp.writeCrashDump("gallery-file", android.util.Log.getStackTraceString(e));
                 ViewUtils.postOnMainThread(() ->
                         Toast.makeText(FarmApp.INSTANCE, R.string.MenuFileOpenFileFailed, Toast.LENGTH_SHORT).show());
             }

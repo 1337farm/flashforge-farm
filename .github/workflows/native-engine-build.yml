@@ -166,8 +166,11 @@ jobs:
           # gated zombies for days before anyone noticed. Verify the PAT
           # authenticates as the repo owner BEFORE pushing; fail loudly with
           # rotation instructions otherwise. No GITHUB_TOKEN fallback.
+          # Normalize the identity probe: error documents have no .login
+          # (yield empty), quotes are stripped, first line only — so a dead
+          # PAT and a format quirk can never be confused.
           if [ -n "${{ secrets.SYNC_PAT }}" ]; then
-            SYNC_WHO="$(GH_TOKEN='${{ secrets.SYNC_PAT }}' gh api user --jq .login 2>/dev/null || true)"
+            SYNC_WHO="$(GH_TOKEN='${{ secrets.SYNC_PAT }}' gh api user --jq '.login // empty' 2>/dev/null | tr -d '\"' | head -1 || true)"
           else
             SYNC_WHO=""
           fi

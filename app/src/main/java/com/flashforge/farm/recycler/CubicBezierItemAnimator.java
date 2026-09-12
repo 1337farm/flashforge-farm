@@ -22,7 +22,6 @@ import android.view.View;
 import android.view.ViewPropertyAnimator;
 
 import androidx.annotation.NonNull;
-import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.SimpleItemAnimator;
 
@@ -140,7 +139,7 @@ public class CubicBezierItemAnimator extends SimpleItemAnimator {
             };
             if (removalsPending) {
                 View view = moves.get(0).holder.itemView;
-                ViewCompat.postOnAnimationDelayed(view, mover, getRemoveDuration());
+                view.postOnAnimationDelayed(mover, getRemoveDuration());
             } else {
                 mover.run();
             }
@@ -163,7 +162,7 @@ public class CubicBezierItemAnimator extends SimpleItemAnimator {
             };
             if (removalsPending) {
                 RecyclerView.ViewHolder holder = changes.get(0).oldHolder;
-                ViewCompat.postOnAnimationDelayed(holder.itemView, changer, getRemoveDuration());
+                holder.itemView.postOnAnimationDelayed(changer, getRemoveDuration());
             } else {
                 changer.run();
             }
@@ -190,7 +189,7 @@ public class CubicBezierItemAnimator extends SimpleItemAnimator {
                 long changeDuration = changesPending ? getChangeDuration() : 0;
                 long totalDelay = removeDuration + Math.max(moveDuration, changeDuration);
                 View view = additions.get(0).itemView;
-                ViewCompat.postOnAnimationDelayed(view, adder, totalDelay);
+                view.postOnAnimationDelayed(adder, totalDelay);
             } else {
                 adder.run();
             }

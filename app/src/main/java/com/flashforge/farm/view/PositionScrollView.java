@@ -112,7 +112,7 @@ public class PositionScrollView extends View implements IThemeView {
             @Override
             public boolean onFling(@Nullable MotionEvent e1, @NonNull MotionEvent e2, float velocityX, float velocityY) {
                 gestureScroller.fling(lastX = 0, 0, (int) (-velocityX * 2f), 0, Integer.MIN_VALUE, Integer.MAX_VALUE, 0, 0);
-                ViewCompat.postInvalidateOnAnimation(PositionScrollView.this);
+                PositionScrollView.this.postInvalidateOnAnimation();
 
                 return true;
             }

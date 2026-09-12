@@ -24,9 +24,10 @@ public class SimpleRecyclerAdapter extends RecyclerView.Adapter<RecyclerView.Vie
         return new RecyclerView.ViewHolder(viewCreator.get(viewType).onCreateView(parent.getContext())) {};
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
-        items.get(position).onBindView(holder.itemView);
+        ((SimpleRecyclerItem<android.view.View>) items.get(position)).onBindView(holder.itemView);
     }
 
     @Override
@@ -35,8 +36,8 @@ public class SimpleRecyclerAdapter extends RecyclerView.Adapter<RecyclerView.Vie
     }
 
     @SuppressLint("NotifyDataSetChanged")
-    public void setItems(List<SimpleRecyclerItem> items) {
-        this.items = items;
+    public void setItems(List<? extends SimpleRecyclerItem> items) {
+        this.items = new ArrayList<SimpleRecyclerItem>(items);
         notifyDataSetChanged();
     }
 

@@ -39,6 +39,7 @@ public class PrintConfigDef {
     private final static Map<Pair<Class<?>, String>, Field> fieldMap = new HashMap<Pair<Class<?>, String>, Field>() {
         @Nullable
         @Override
+        @SuppressWarnings("unchecked")
         public Field get(@Nullable Object key) {
             Field f = super.get(key);
             if (f == null) {

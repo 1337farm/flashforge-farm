@@ -17,6 +17,8 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
@@ -584,7 +586,19 @@ public class BedFragment extends Fragment {
             panelWebView.getSettings().setJavaScriptEnabled(true);
             panelWebView.setWebViewClient(new WebViewClient() {
                 @Override
+                @SuppressWarnings("deprecation")
                 public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
+                    onWebError(description);
+                }
+
+                @Override
+                public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                    if (request.isForMainFrame()) {
+                        onWebError(error.getDescription().toString());
+                    }
+                }
+
+                private void onWebError(CharSequence description) {
                     hasWebError = true;
                     webViewErrDescription.setText(description);
                     panelWebViewError.setVisibility(View.VISIBLE);

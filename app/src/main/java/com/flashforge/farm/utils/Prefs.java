@@ -1,8 +1,8 @@
 package com.flashforge.farm.utils;
 
 import android.app.Application;
+import android.content.Context;
 import android.content.SharedPreferences;
-import android.preference.PreferenceManager;
 
 import com.flashforge.farm.BuildConfig;
 import com.flashforge.farm.R;
@@ -16,7 +16,7 @@ public class Prefs {
     private static SharedPreferences mPrefs;
 
     public static void init(Application ctx) {
-        mPrefs = PreferenceManager.getDefaultSharedPreferences(ctx);
+        mPrefs = ctx.getSharedPreferences(ctx.getPackageName() + "_preferences", Context.MODE_PRIVATE);
     }
 
     public static SharedPreferences getPrefs() {

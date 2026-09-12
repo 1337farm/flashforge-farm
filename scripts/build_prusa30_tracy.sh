@@ -64,4 +64,19 @@ cp -r "$TSRC"/. "$STAGE_ROOT/tracy/"
 
 test -f "$STAGE_ROOT/tracy/tracy/Tracy.hpp" || { echo "[tracy] ERROR: tracy/Tracy.hpp missing" >&2; exit 1; }
 test -f "$STAGE_ROOT/tracy/TracyClient.cpp" || { echo "[tracy] ERROR: TracyClient.cpp missing" >&2; exit 1; }
+# Profiling stays OFF (SLIC3R_ENABLE_PROFILING default): nothing is compiled,
+# but find_package(Tracy) + slic3r_add_tracy() need target Tracy::TracyClient
+# with an INTERFACE_INCLUDE_DIRECTORIES property. Provide a minimal CONFIG
+# package pointing at the staged sources (relative path: portable across
+# runners, unlike absolute stage paths baked at build time).
+mkdir -p "$STAGE_ROOT/lib/cmake/Tracy"
+cat > "$STAGE_ROOT/lib/cmake/Tracy/TracyConfig.cmake" <<'EOF'
+# Staged Tracy sources (profiling-OFF build: headers only, no lib).
+if(NOT TARGET Tracy::TracyClient)
+  add_library(Tracy::TracyClient INTERFACE IMPORTED)
+  set_target_properties(Tracy::TracyClient PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../../tracy")
+endif()
+EOF
+test -f "$STAGE_ROOT/lib/cmake/Tracy/TracyConfig.cmake" || { echo "[tracy] ERROR: config write failed" >&2; exit 1; }
 echo "[tracy] done -> $STAGE_ROOT/tracy"

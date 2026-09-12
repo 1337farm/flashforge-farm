@@ -338,7 +338,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: engine/prusa30/jniImports/pngfmt
-          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh', 'scripts/build_prusa30_tracy.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
 
       - name: Validate restored pngfmt
         id: validate
@@ -353,6 +353,7 @@ jobs:
             test -f engine/prusa30/jniImports/pngfmt/include/fmt/core.h || OK=0
             find engine/prusa30/jniImports/pngfmt -name 'libfmt.a' | grep -q . || OK=0
             find engine/prusa30/jniImports/pngfmt -name 'TracyClient.cpp' -o -name 'libTracyClient.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/pngfmt -name 'TracyConfig.cmake' | grep -q . || OK=0
             [ "$OK" = "1" ] && NEED=0
           fi
           echo "need=$NEED" >> "$GITHUB_OUTPUT"
@@ -398,6 +399,8 @@ jobs:
             || { echo "ERROR: no libfmt.a staged"; exit 1; }
           find engine/prusa30/jniImports/pngfmt -name 'TracyClient.cpp' -o -name 'libTracyClient.a' | grep -q . \
             || { echo "ERROR: no TracyClient staged"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'TracyConfig.cmake' | grep -q . \
+            || { echo "ERROR: no TracyConfig.cmake staged"; exit 1; }
           echo "pngfmt staged and verified"
 
       - name: Save staged zlib+libpng+fmt+Tracy
@@ -405,7 +408,7 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: engine/prusa30/jniImports/pngfmt
-          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh', 'scripts/build_prusa30_tracy.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
 
   headless-build:
     name: headless
@@ -523,7 +526,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: engine/prusa30/jniImports/pngfmt
-          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh', 'scripts/build_prusa30_tracy.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
           fail-on-cache-miss: true
 
       - name: Validate staged pngfmt exactly
@@ -569,18 +572,25 @@ jobs:
           # Tracy: slic3r_add_tracy needs target Tracy::TracyClient with an
           # INTERFACE_INCLUDE_DIRECTORIES property even when profiling is OFF
           # (sources only get compiled with SLIC3R_ENABLE_PROFILING=ON, off by
-          # default). The CONFIG package may not cross-resolve, so pre-seed a
-          # Tracy_DIR hint file is unnecessary — instead pass the staged source
-          # root and let a 0004 patch provide the imported target fallback.
-          # Staged layout is <root>/tracy/Tracy.hpp (include spelling
-          # <tracy/Tracy.hpp>); fall back to plain dirname for flat layouts.
-          TRACY_HPP="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name Tracy.hpp | head -1)"
-          case "$TRACY_HPP" in
-            */tracy/Tracy.hpp) TRACY_ROOT_DIR="${TRACY_HPP%/tracy/Tracy.hpp}" ;;
-            *) TRACY_ROOT_DIR="$(dirname "$TRACY_HPP")" ;;
-          esac
-          test -n "$TRACY_ROOT_DIR" || { echo "ERROR: Tracy.hpp not staged"; exit 1; }
-          echo "Tracy root dir: $TRACY_ROOT_DIR"
+          # default). The staged TracyConfig.cmake provides exactly that
+          # imported target; resolve its dir like the other CONFIG packages.
+          TRACY_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name TracyConfig.cmake -printf '%h\n' | head -1)"
+          test -n "$TRACY_CMAKE_DIR" || { echo "ERROR: TracyConfig.cmake not staged"; exit 1; }
+          echo "Tracy config dir: $TRACY_CMAKE_DIR"
+          # PNG/ZLIB: stock FindPNG/FindZLIB honor PNG_ROOT/ZLIB_ROOT, but
+          # pre-seeding the exact lib+include paths is immune to GNUInstallDirs
+          # nesting (lib/ vs lib/<triplet>/) and NDK-sysroot shadowing
+          # (configure once grabbed sysroot libz.so 1.2.11 over staged 1.3.1).
+          PNG_LIB="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name 'libpng16.a' -o -name 'libpng.a' | head -1)"
+          test -n "$PNG_LIB" || { echo "ERROR: staged libpng not found"; exit 1; }
+          PNG_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name png.h | head -1)")"
+          test -n "$PNG_INC" || { echo "ERROR: staged png.h not found"; exit 1; }
+          echo "PNG lib: $PNG_LIB inc: $PNG_INC"
+          ZLIB_LIB="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name 'libz.a' | head -1)"
+          test -n "$ZLIB_LIB" || { echo "ERROR: staged libz.a not found"; exit 1; }
+          ZLIB_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name zlib.h | head -1)")"
+          test -n "$ZLIB_INC" || { echo "ERROR: staged zlib.h not found"; exit 1; }
+          echo "ZLIB lib: $ZLIB_LIB inc: $ZLIB_INC"
           cmake -S "$(pwd)/engine/build/prusaslicer-src" -B build/prusa30 \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a \
@@ -600,7 +610,11 @@ jobs:
             -Dfmt_DIR="$FMT_CMAKE_DIR" \
             -DZLIB_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
             -DPNG_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
-            -DTracy_INCLUDE_DIR="$TRACY_ROOT_DIR"
+            -DZLIB_LIBRARY="$ZLIB_LIB" \
+            -DZLIB_INCLUDE_DIR="$ZLIB_INC" \
+            -DPNG_LIBRARY="$PNG_LIB" \
+            -DPNG_PNG_INCLUDE_DIR="$PNG_INC" \
+            -DTracy_DIR="$TRACY_CMAKE_DIR"
 
       - name: Build headless core (libslic3r)
         run: |

@@ -2,9 +2,9 @@
 
 When a task is finished (code complete, verified locally):
 
-1. Commit on a feature/fix branch (never push straight to main).
+1. Commit every code fix on a NEW branch (never push straight to main, never reuse a merged branch).
 2. Push the branch to origin.
-3. Open a PR with `gh pr create --base main` and return the PR URL.
+3. ALWAYS open a PR against `main` with `gh pr create --base main` and return the PR URL — no exceptions, every time.
 4. Do not leave finished work uncommitted/unpushed without telling the user.
 
 After opening a PR, babysit it through merge:

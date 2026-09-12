@@ -187,6 +187,35 @@ else()
 endif()
 EOF
 
+# Same for spdlog v1.15.3 (slic3r-base links spdlog::spdlog): upstream builds
+# it with SPDLOG_FMT_EXTERNAL=ON against its fmt, so expose the staged
+# headers header-only (SPDLOG_HEADER_ONLY) with external fmt, linked to our
+# staged compiled fmt::fmt. No lib to compile here.
+mkdir -p "$STAGE_ROOT/spdlog/lib/cmake/spdlog"
+cat > "$STAGE_ROOT/spdlog/lib/cmake/spdlog/spdlogConfig.cmake" <<'EOF'
+# Staged spdlog v1.15.3 headers, header-only + external fmt (mirrors
+# upstream SPDLOG_FMT_EXTERNAL=ON; SPDLOG_COMPILED_LIB intentionally unset
+# everywhere so all TUs share one header-only instantiation).
+if(NOT TARGET spdlog::spdlog)
+  add_library(spdlog::spdlog INTERFACE IMPORTED)
+  set_target_properties(spdlog::spdlog PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../../include"
+    INTERFACE_COMPILE_DEFINITIONS "SPDLOG_HEADER_ONLY;SPDLOG_FMT_EXTERNAL"
+    INTERFACE_LINK_LIBRARIES "fmt::fmt")
+endif()
+EOF
+cat > "$STAGE_ROOT/spdlog/lib/cmake/spdlog/spdlogConfigVersion.cmake" <<'EOF'
+set(PACKAGE_VERSION "1.15.3")
+if(PACKAGE_FIND_VERSION VERSION_GREATER PACKAGE_VERSION)
+  set(PACKAGE_VERSION_COMPATIBLE FALSE)
+else()
+  set(PACKAGE_VERSION_COMPATIBLE TRUE)
+  if(PACKAGE_FIND_VERSION VERSION_EQUAL PACKAGE_VERSION)
+    set(PACKAGE_VERSION_EXACT TRUE)
+  endif()
+endif()
+EOF
+
 echo "======================================================================="
 echo " PrusaSlicer 3.0 header-only deps staged under $STAGE_ROOT"
 echo ""

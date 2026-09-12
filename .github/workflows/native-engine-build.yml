@@ -629,18 +629,6 @@ jobs:
           fi
           echo "hit=$HIT" >> "$GITHUB_OUTPUT"
 
-      - name: Compute native build need (engine and/or GMP)
-        id: build-needed
-        run: |
-          NEED=0
-          if [ "${{ steps.engine-rel.outputs.hit }}" != "1" ] && [ "${{ steps.engine-art.outputs.art_hit }}" != "1" ]; then
-            NEED=1
-          fi
-          if [ "${{ steps.gmp-rel.outputs.hit }}" != "1" ]; then
-            NEED=1
-          fi
-          echo "needed=$NEED" >> "$GITHUB_OUTPUT"
-
       - name: Set up JDK 17
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         uses: 1337farm/actions/setup-jdk@v1
@@ -648,27 +636,29 @@ jobs:
           java-version: '17'
 
       - name: Set up Android SDK env
-        if: steps.build-needed.outputs.needed == '1'
         uses: 1337farm/actions/setup-android-env@v1
       - name: Install NDK ${{ env.NDK_VERSION }}
-        if: steps.build-needed.outputs.needed == '1'
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         uses: 1337farm/actions/setup-android-ndk@v1
         with:
           ndk-version: ${{ env.NDK_VERSION }}
       - name: Install Android platform / CMake
-        if: steps.build-needed.outputs.needed == '1'
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |
           sdkmanager "platforms;android-37.0" "cmake;3.22.1"
           # API 37 ships as android-37.0 only; builds resolve android-37.
           ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
       - name: Smoke-test NDK compiler
-        if: steps.build-needed.outputs.needed == '1'
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |
           "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android23-clang" --version \
             || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
-          # setup-android-ndk only *downloads* the NDK package; Guard the
-          # publish-time llvm-strip the same way (2026-09-12: Publish engine
-          # release hard-failed on a bare runner whose default NDK lacked it).
+          # setup-android-ndk only *downloads* the NDK package; the publish
+          # step's strip needs the LLVM prebuilt dir to actually contain
+          # llvm-strip (2026-09-12: Publish engine release hard-failed at the
+          # strip on a bare reuse-path runner whose NDK lacked it — the .so
+          # was good and the size gate runs AFTER the strip, so a missing
+          # stripper must fail loudly here, never silently ship unstripped).
           test -x "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" \
             || { echo "ERROR: llvm-strip missing from installed NDK $ANDROID_NDK_ROOT"; exit 1; }
 

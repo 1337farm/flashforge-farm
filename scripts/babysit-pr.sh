@@ -118,7 +118,8 @@ while [ "$poll" -lt "$MAX_POLLS" ]; do
     poll=$((poll + 1))
     STATE="$(gh pr view "$PR" --json state --jq .state 2>/dev/null || echo UNKNOWN)"
     if [ "$STATE" = "MERGED" ]; then
-        echo "babysit: PR #$PR is MERGED."
+        MERGED_AT="$(gh pr view "$PR" --json mergedAt --jq .mergedAt 2>/dev/null || echo unknown)"
+        echo "babysit: PR #$PR is MERGED (at $MERGED_AT)."
         if [ "$WANT_APK" = "1" ]; then
             fetch_merge_apk "$PR"
             exit $?

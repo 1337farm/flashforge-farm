@@ -564,6 +564,12 @@ jobs:
           EXPAT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/expat" -name expat-config.cmake -printf '%h\n' | head -1)"
           test -n "$EXPAT_CMAKE_DIR" || { echo "ERROR: expat-config.cmake not staged"; exit 1; }
           echo "EXPAT config dir: $EXPAT_CMAKE_DIR"
+          # Same for cereal: the staged tree carries a minimal CONFIG package
+          # (the header-fallback bakes a source-relative include dir that
+          # never resolves for staged headers).
+          CEREAL_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/cereal" -name cereal-config.cmake -printf '%h\n' | head -1)"
+          test -n "$CEREAL_CMAKE_DIR" || { echo "ERROR: cereal-config.cmake not staged"; exit 1; }
+          echo "cereal config dir: $CEREAL_CMAKE_DIR"
           # Same for fmt: fmt 12.x no longer ships a Find module, only
           # fmt-config.cmake — resolve it exactly the same way.
           FMT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name fmt-config.cmake -printf '%h\n' | head -1)"
@@ -608,6 +614,7 @@ jobs:
             -DTBB_DIR="$TBB_CMAKE_DIR" \
             -DEXPAT_DIR="$EXPAT_CMAKE_DIR" \
             -Dfmt_DIR="$FMT_CMAKE_DIR" \
+            -Dcereal_DIR="$CEREAL_CMAKE_DIR" \
             -DZLIB_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
             -DPNG_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
             -DZLIB_LIBRARY="$ZLIB_LIB" \

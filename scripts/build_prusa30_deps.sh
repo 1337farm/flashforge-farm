@@ -111,6 +111,31 @@ stage_include eigen "https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4
     eba3f3d414d2f8cba2919c78ec6daab08fc71ba2ba4ae502b7e5d4d99fc02cda \
     eigen.zip "Eigen"
 
+# cereal is header-only, but upstream find_package(cereal 1.3.2) needs a
+# CONFIG package: its header-fallback bakes a relative `include` dir that
+# only works inside a source tree, and CHECK_INCLUDE_FILE_CXX never sees
+# our staged prefix. Provide a minimal config exposing cereal::cereal.
+mkdir -p "$STAGE_ROOT/cereal/lib/cmake/cereal"
+cat > "$STAGE_ROOT/cereal/lib/cmake/cereal/cereal-config.cmake" <<'EOF'
+# Staged cereal v1.3.2 headers (header-only, no lib to link).
+if(NOT TARGET cereal::cereal)
+  add_library(cereal::cereal INTERFACE IMPORTED)
+  set_target_properties(cereal::cereal PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../../include")
+endif()
+EOF
+cat > "$STAGE_ROOT/cereal/lib/cmake/cereal/cereal-config-version.cmake" <<'EOF'
+set(PACKAGE_VERSION "1.3.2")
+if(PACKAGE_FIND_VERSION VERSION_GREATER PACKAGE_VERSION)
+  set(PACKAGE_VERSION_COMPATIBLE FALSE)
+else()
+  set(PACKAGE_VERSION_COMPATIBLE TRUE)
+  if(PACKAGE_FIND_VERSION VERSION_EQUAL PACKAGE_VERSION)
+    set(PACKAGE_VERSION_EXACT TRUE)
+  endif()
+endif()
+EOF
+
 echo "======================================================================="
 echo " PrusaSlicer 3.0 header-only deps staged under $STAGE_ROOT"
 echo ""

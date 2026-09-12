@@ -47,8 +47,16 @@ echo "$TRACY_SHA  tracy-$TRACY_VER.tar.gz" | sha256sum -c --status - \
 
 rm -rf "tracy-$TRACY_VER"
 mkdir -p "tracy-$TRACY_VER" && tar xzf "tracy-$TRACY_VER.tar.gz" -C "tracy-$TRACY_VER"
-TSRC="$(find "tracy-$TRACY_VER" -maxdepth 2 -name Tracy.hpp | head -1 | xargs dirname)"
-[ -n "$TSRC" ] || { echo "[tracy] ERROR: no Tracy.hpp in tarball" >&2; exit 1; }
+# GitHub tarballs nest one extra level (tracy-<ver>/tracy-<ver>/public/),
+# so search deep — and dump the layout on miss instead of dying inside
+# `xargs dirname` with a cryptic operand error.
+TSRC="$(find "tracy-$TRACY_VER" -maxdepth 4 -name Tracy.hpp | head -1)"
+if [ -z "$TSRC" ]; then
+    echo "[tracy] ERROR: no Tracy.hpp in tarball; top-level layout:" >&2
+    find "tracy-$TRACY_VER" -maxdepth 3 | head -20 >&2
+    exit 1
+fi
+TSRC="$(dirname "$TSRC")"
 # Stage the public/ tree (Tracy.hpp + TracyClient.cpp + common/) verbatim.
 cp -r "$TSRC"/. "$STAGE_ROOT/tracy/"
 

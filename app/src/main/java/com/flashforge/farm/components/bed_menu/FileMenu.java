@@ -277,6 +277,17 @@ public class FileMenu extends ListBedMenu {
         }
 
         private void ensureCalibModel(int kind) {
+            // Same guard as the gallery tap path: a null/unconfigured bed
+            // must toast, never NPE-crash the tap.
+            com.flashforge.farm.slic3r.Bed3D bed = null;
+            if (FileMenu.this.fragment != null && FileMenu.this.fragment.getGlView() != null
+                    && FileMenu.this.fragment.getGlView().getRenderer() != null) {
+                bed = FileMenu.this.fragment.getGlView().getRenderer().getBed();
+            }
+            if (bed == null || !bed.isValid()) {
+                android.widget.Toast.makeText(FarmApp.INSTANCE, R.string.BedConfigurationError, android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
             new Thread(() -> {
                 try {
                     com.flashforge.farm.gallery.ShapeGallery.Item item = calibItem(kind);

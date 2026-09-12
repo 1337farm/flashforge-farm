@@ -1,5 +1,9 @@
 # Agent working agreement
 
+Full operating procedure (branch discipline, babysitting cadence, NDK
+find-module playbook, evidence standards): `doc/HOW_TO_WORK.md`. Read it
+before starting engine/CI work; the summary below does not substitute it.
+
 When a task is finished (code complete, verified locally):
 
 1. Commit every code fix on a NEW branch (never push straight to main, never reuse a merged branch).

@@ -572,7 +572,13 @@ jobs:
           # default). The CONFIG package may not cross-resolve, so pre-seed a
           # Tracy_DIR hint file is unnecessary — instead pass the staged source
           # root and let a 0004 patch provide the imported target fallback.
-          TRACY_ROOT_DIR="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name Tracy.hpp | head -1)")"
+          # Staged layout is <root>/tracy/Tracy.hpp (include spelling
+          # <tracy/Tracy.hpp>); fall back to plain dirname for flat layouts.
+          TRACY_HPP="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name Tracy.hpp | head -1)"
+          case "$TRACY_HPP" in
+            */tracy/Tracy.hpp) TRACY_ROOT_DIR="${TRACY_HPP%/tracy/Tracy.hpp}" ;;
+            *) TRACY_ROOT_DIR="$(dirname "$TRACY_HPP")" ;;
+          esac
           test -n "$TRACY_ROOT_DIR" || { echo "ERROR: Tracy.hpp not staged"; exit 1; }
           echo "Tracy root dir: $TRACY_ROOT_DIR"
           cmake -S "$(pwd)/engine/build/prusaslicer-src" -B build/prusa30 \

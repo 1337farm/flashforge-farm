@@ -93,6 +93,11 @@ fetch_merge_apk() {
         return 1
     }
     mkdir -p "$APK_DIR"
+    # gh stages artifact zips through $TMPDIR; when the inherited TMPDIR is
+    # missing or not writable (restricted sandboxes/CI), point it at the
+    # output dir instead of failing with a zip permission error.
+    _TMP="${TMPDIR:-/tmp}"
+    [ -w "$_TMP" ] || export TMPDIR="$APK_DIR"
     if gh run download "$run_id" -n "$APK_ARTIFACT" -D "$APK_DIR" 2>/dev/null; then
         echo "babysit: APK downloaded to $APK_DIR:"
         ls -la "$APK_DIR"/*.apk

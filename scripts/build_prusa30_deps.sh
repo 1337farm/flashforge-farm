@@ -111,6 +111,10 @@ stage_include eigen "https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4
     eba3f3d414d2f8cba2919c78ec6daab08fc71ba2ba4ae502b7e5d4d99fc02cda \
     eigen.zip "Eigen"
 
+stage_include expected "https://github.com/TartanLlama/expected/archive/refs/tags/v1.1.0.zip" \
+    4b2a347cf5450e99f7624247f7d78f86f3adb5e6acd33ce307094e9507615b78 \
+    expected.zip "tl"
+
 # cereal is header-only, but upstream find_package(cereal 1.3.2) needs a
 # CONFIG package: its header-fallback bakes a relative `include` dir that
 # only works inside a source tree, and CHECK_INCLUDE_FILE_CXX never sees
@@ -150,6 +154,29 @@ endif()
 EOF
 cat > "$STAGE_ROOT/eigen/lib/cmake/eigen3/Eigen3ConfigVersion.cmake" <<'EOF'
 set(PACKAGE_VERSION "3.4.0")
+if(PACKAGE_FIND_VERSION VERSION_GREATER PACKAGE_VERSION)
+  set(PACKAGE_VERSION_COMPATIBLE FALSE)
+else()
+  set(PACKAGE_VERSION_COMPATIBLE TRUE)
+  if(PACKAGE_FIND_VERSION VERSION_EQUAL PACKAGE_VERSION)
+    set(PACKAGE_VERSION_EXACT TRUE)
+  endif()
+endif()
+EOF
+
+# Same for tl-expected v1.1.0 (slic3r-base links tl::expected): header-only,
+# CONFIG-only consumption. Target name per upstream: tl::expected.
+mkdir -p "$STAGE_ROOT/expected/lib/cmake/tl-expected"
+cat > "$STAGE_ROOT/expected/lib/cmake/tl-expected/tl-expected-config.cmake" <<'EOF'
+# Staged tl-expected v1.1.0 headers (header-only, no lib to link).
+if(NOT TARGET tl::expected)
+  add_library(tl::expected INTERFACE IMPORTED)
+  set_target_properties(tl::expected PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../../include")
+endif()
+EOF
+cat > "$STAGE_ROOT/expected/lib/cmake/tl-expected/tl-expected-config-version.cmake" <<'EOF'
+set(PACKAGE_VERSION "1.1.0")
 if(PACKAGE_FIND_VERSION VERSION_GREATER PACKAGE_VERSION)
   set(PACKAGE_VERSION_COMPATIBLE FALSE)
 else()

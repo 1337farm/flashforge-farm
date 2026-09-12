@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# scripts/build_prusa30_tracy.sh — Tracy v0.13.1 SOURCES for the Android NDK.
+#
+# Upstream pins Tracy v0.13.1 via deps/+Tracy (add_cmake_project,
+# -DTRACY_ENABLE=ON) and consumes it with find_package(Tracy) +
+# slic3r_add_tracy(), which needs target Tracy::TracyClient with an
+# INTERFACE_INCLUDE_DIRECTORIES property — even when profiling is OFF
+# (SLIC3R_ENABLE_PROFILING defaults OFF; only the include dir is used then).
+# TracyClient.cpp is compiled into the lib only with TRACY_ENABLE=ON, which
+# the headless Android build does not want, so do NOT build a Tracy lib:
+# stage the pristine sources (public/ tree with Tracy.hpp + TracyClient.cpp)
+# and let a 0004 patch provide the imported-target fallback when the CONFIG
+# package does not cross-resolve. Source staging needs no NDK at all, but
+# keep the env surface identical to the sibling scripts.
+#
+# Pin (exact, from upstream deps/+Tracy/Tracy.cmake):
+#   https://github.com/wolfpld/tracy/archive/refs/tags/v0.13.1.tar.gz
+#   SHA256=d4efc50ebcb0bfcfdbba148995aeb75044c0d80f5d91223aebfaa8fa9e563d2b
+#
+# Env inputs (all optional; defaults shown):
+#   WORK_DIR      build scratch dir (default /tmp/build_prusa30_deps)
+#   STAGE_ROOT    stage root (default $(pwd)/engine/prusa30/jniImports/pngfmt;
+#                 sources land in $STAGE_ROOT/tracy/)
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+TRACY_VER="0.13.1"
+TRACY_URL="https://github.com/wolfpld/tracy/archive/refs/tags/v${TRACY_VER}.tar.gz"
+TRACY_SHA="d4efc50ebcb0bfcfdbba148995aeb75044c0d80f5d91223aebfaa8fa9e563d2b"
+
+WORK_DIR="${WORK_DIR:-/tmp/build_prusa30_deps}"
+STAGE_ROOT="${STAGE_ROOT:-$ROOT/engine/prusa30/jniImports/pngfmt}"
+
+echo "======================================================================="
+echo " [tracy] Staging Tracy v$TRACY_VER sources (no compile)"
+echo " [tracy] stage: $STAGE_ROOT/tracy"
+echo "======================================================================="
+
+mkdir -p "$WORK_DIR" "$STAGE_ROOT/tracy"
+cd "$WORK_DIR"
+[ -f "tracy-$TRACY_VER.tar.gz" ] || curl -fsSL --connect-timeout 20 --max-time 300 \
+    --retry 2 --retry-all-errors -o "tracy-$TRACY_VER.tar.gz" "$TRACY_URL"
+echo "$TRACY_SHA  tracy-$TRACY_VER.tar.gz" | sha256sum -c --status - \
+    || { echo "[tracy] ERROR: sha256 mismatch" >&2; exit 1; }
+
+rm -rf "tracy-$TRACY_VER"
+mkdir -p "tracy-$TRACY_VER" && tar xzf "tracy-$TRACY_VER.tar.gz" -C "tracy-$TRACY_VER"
+TSRC="$(find "tracy-$TRACY_VER" -maxdepth 2 -name Tracy.hpp | head -1 | xargs dirname)"
+[ -n "$TSRC" ] || { echo "[tracy] ERROR: no Tracy.hpp in tarball" >&2; exit 1; }
+# Stage the public/ tree (Tracy.hpp + TracyClient.cpp + common/) verbatim.
+cp -r "$TSRC"/. "$STAGE_ROOT/tracy/"
+
+test -f "$STAGE_ROOT/tracy/Tracy.hpp" || { echo "[tracy] ERROR: Tracy.hpp missing" >&2; exit 1; }
+test -f "$STAGE_ROOT/tracy/TracyClient.cpp" || { echo "[tracy] ERROR: TracyClient.cpp missing" >&2; exit 1; }
+echo "[tracy] done -> $STAGE_ROOT/tracy"

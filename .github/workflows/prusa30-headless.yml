@@ -441,6 +441,12 @@ jobs:
           TBB_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/tbb" -name TBBConfig.cmake -printf '%h\n' | head -1)"
           test -n "$TBB_CMAKE_DIR" || { echo "ERROR: TBBConfig.cmake not staged"; exit 1; }
           echo "TBB config dir: $TBB_CMAKE_DIR"
+          # Same for expat: its CONFIG file may sit at lib/cmake/expat or
+          # lib/<triplet>/cmake/expat. Upstream FindEXPAT passes EXPAT_DIR
+          # into find_package(EXPAT CONFIG), so give it the exact dir.
+          EXPAT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/expat" -name expat-config.cmake -printf '%h\n' | head -1)"
+          test -n "$EXPAT_CMAKE_DIR" || { echo "ERROR: expat-config.cmake not staged"; exit 1; }
+          echo "EXPAT config dir: $EXPAT_CMAKE_DIR"
           cmake -S "$(pwd)/engine/build/prusaslicer-src" -B build/prusa30 \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a \
@@ -456,7 +462,7 @@ jobs:
             -DBoost_ARCHITECTURE="-a64" \
             -DBoost_COMPILER="-clang" \
             -DTBB_DIR="$TBB_CMAKE_DIR" \
-            -DEXPAT_DIR="$(pwd)/engine/prusa30/jniImports/expat"
+            -DEXPAT_DIR="$EXPAT_CMAKE_DIR"
 
       - name: Build headless core (libslic3r)
         run: |

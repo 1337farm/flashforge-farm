@@ -165,7 +165,7 @@ public class FleetFragment extends Fragment {
                 Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
                 i.setType("application/json");
                 i.putExtra(Intent.EXTRA_TITLE, FarmBackup.BACKUP_FILE_NAME);
-                act.startActivityForResult(i, MainActivity.REQUEST_CODE_BACKUP);
+                ((com.flashforge.farm.MainActivity) act).pickFile(i, MainActivity.REQUEST_CODE_BACKUP);
             });
             contentLayout.addView(backupBtn, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -175,7 +175,7 @@ public class FleetFragment extends Fragment {
                 Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
                 i.setType("*/*");
-                act.startActivityForResult(i, MainActivity.REQUEST_CODE_RESTORE);
+                ((com.flashforge.farm.MainActivity) act).pickFile(i, MainActivity.REQUEST_CODE_RESTORE);
             });
             contentLayout.addView(restoreBtn, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
@@ -406,8 +406,7 @@ public class FleetFragment extends Fragment {
                         .setMessage(R.string.FleetNoUsbDetected)
                         .setPositiveButton(android.R.string.ok, (d, w) -> {
                             pendingSaveTarget = "FILE";
-                            act.startActivityForResult(UsbProvisioningManager.buildUsbPickerIntent(),
-                                    install ? MainActivity.REQUEST_CODE_PROVISION_USB : MainActivity.REQUEST_CODE_UNINSTALL_USB);
+                            ((com.flashforge.farm.MainActivity) act).pickUsbTree(UsbProvisioningManager.buildUsbPickerIntent(), install);
                         })
                         .setNegativeButton(android.R.string.cancel, null)
                         .show();
@@ -435,8 +434,7 @@ public class FleetFragment extends Fragment {
         }
 
         // "FILE" (or USB fallback): launch the SAF tree picker.
-        act.startActivityForResult(UsbProvisioningManager.buildUsbPickerIntent(),
-                install ? MainActivity.REQUEST_CODE_PROVISION_USB : MainActivity.REQUEST_CODE_UNINSTALL_USB);
+        ((com.flashforge.farm.MainActivity) act).pickUsbTree(UsbProvisioningManager.buildUsbPickerIntent(), install);
     }
 
     /** Callback for both USB-direct and share-target provisioning completions. */

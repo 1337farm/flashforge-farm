@@ -82,7 +82,7 @@ public class SliceProgressBottomSheet extends BottomSheetDialog {
 
         boolean portrait = dm.widthPixels < dm.heightPixels;
         recyclerView.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (dm.heightPixels * (portrait ? 0.4f : 0.6f))));
-        recyclerView.setAdapter(new RecyclerView.Adapter() {
+        recyclerView.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             @NonNull
             @Override
             public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {

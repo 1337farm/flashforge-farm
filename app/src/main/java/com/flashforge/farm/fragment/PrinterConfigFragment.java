@@ -33,7 +33,7 @@ public class PrinterConfigFragment extends ProfileListFragment {
 
     @Override
     protected List<ProfileListItem> getItems(boolean filter) {
-        return (List) FarmApp.CONFIG.printerConfigs;
+        return new ArrayList<>(FarmApp.CONFIG.printerConfigs);
     }
 
     @Override

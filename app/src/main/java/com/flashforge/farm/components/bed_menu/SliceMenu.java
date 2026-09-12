@@ -104,7 +104,7 @@ public class SliceMenu extends ListBedMenu {
                         Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
                         i.setType("application/x-gcode");
                         i.putExtra(Intent.EXTRA_TITLE, fragment.getGlView().getRenderer().getGcodeResult().getRecommendedName());
-                        act.startActivityForResult(i, MainActivity.REQUEST_CODE_EXPORT_GCODE);
+                        ((com.flashforge.farm.MainActivity) act).pickFile(i, MainActivity.REQUEST_CODE_EXPORT_GCODE);
                     }
                 }),
                 new BedMenuItem(R.string.MenuSliceShare, R.drawable.share_external_28).onClick(v -> {

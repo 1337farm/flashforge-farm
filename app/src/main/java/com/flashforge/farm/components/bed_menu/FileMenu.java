@@ -147,7 +147,7 @@ public class FileMenu extends ListBedMenu {
                         // server's Content-Type, often application/zip for .3mf), which greys the file out
                         // in the picker. Allow any file; loadFile() validates by extension afterward.
                         i.setType("*/*");
-                        act.startActivityForResult(i, MainActivity.REQUEST_CODE_OPEN_FILE);
+                        ((com.flashforge.farm.MainActivity) act).pickFile(i, MainActivity.REQUEST_CODE_OPEN_FILE);
                     }
                 }),
                 new BedMenuItem(R.string.MenuFileDelete, R.drawable.delete_outline_android_28).setEnabled(hasSelection()).onClick(v -> {
@@ -177,7 +177,7 @@ public class FileMenu extends ListBedMenu {
                         i.addCategory(Intent.CATEGORY_OPENABLE);
                         i.setType("*/*");
                         i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/zip", "application/x-zip-compressed", "application/octet-stream", "text/plain"});
-                        act.startActivityForResult(i, MainActivity.REQUEST_CODE_IMPORT_PROFILES);
+                        ((com.flashforge.farm.MainActivity) act).pickFile(i, MainActivity.REQUEST_CODE_IMPORT_PROFILES);
                     }
                 }),
                 new BedMenuItem(R.string.MenuFileExportProfiles, R.drawable.folder_simple_arrow_right_outline_28).onClick(v -> {
@@ -248,7 +248,7 @@ public class FileMenu extends ListBedMenu {
                                                     Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
                                                     i.setType("application/ini");
                                                     i.putExtra(Intent.EXTRA_TITLE, "FlashForgeFarm_config_bundle.ini");
-                                                    act.startActivityForResult(i, MainActivity.REQUEST_CODE_EXPORT_PROFILES);
+                                                    ((com.flashforge.farm.MainActivity) act).pickFile(i, MainActivity.REQUEST_CODE_EXPORT_PROFILES);
                                                 }
                                             })
                                             .setNegativeButton(android.R.string.cancel, null)
@@ -264,7 +264,7 @@ public class FileMenu extends ListBedMenu {
                         Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
                         i.setType("application/3mf");
                         i.putExtra(Intent.EXTRA_TITLE, "FlashForgeFarm_project.3mf");
-                        act.startActivityForResult(i, MainActivity.REQUEST_CODE_EXPORT_3MF);
+                        ((com.flashforge.farm.MainActivity) act).pickFile(i, MainActivity.REQUEST_CODE_EXPORT_3MF);
                     }
                 })
         ));

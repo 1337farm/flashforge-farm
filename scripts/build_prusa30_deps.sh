@@ -164,7 +164,6 @@ else()
 endif()
 EOF
 
-<<<<<<< HEAD
 # Same for tl-expected v1.1.0 (slic3r-base links tl::expected): header-only,
 # CONFIG-only consumption. Target name per upstream: tl::expected.
 mkdir -p "$STAGE_ROOT/expected/lib/cmake/tl-expected"

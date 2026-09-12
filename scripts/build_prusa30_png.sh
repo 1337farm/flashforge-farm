@@ -14,11 +14,9 @@
 # With --libpng-only, only the libpng step runs against the zlib already in
 # STAGE_ROOT (used by the pngfmt CI job which builds zlib first).
 #
-# Pins (exact, from upstream deps/):
-#   zlib:      NDK sysroot zlib is linkable but ships no zlib.h-compatible
-#              config certainty across API levels; build from source.
-#              https://zlib.net/zlib-1.3.1.tar.gz
-#              SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede92e1ef76f3c77e02d1e
+# Pins (exact, from upstream deps/+ZLIB and deps/+PNG):
+#   zlib:      https://github.com/madler/zlib/releases/download/v1.3.1/zlib131.zip
+#              SHA256=72af66d44fcc14c22013b46b814d5d2514673dda3d115e64b690c1ad636e7b17
 #   libpng:    https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.58.zip
 #              SHA256=ad8fc23d75a76f352989bbec9e905bdfe8f2d2e77b32e4f2070a4bb1849802ee
 #
@@ -36,8 +34,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 ZLIB_VER="1.3.1"
-ZLIB_URL="https://zlib.net/zlib-${ZLIB_VER}.tar.gz"
-ZLIB_SHA="9a93b2b7dfdac77ceba5a558a580e74667dd6fede92e1ef76f3c77e02d1e"
+ZLIB_URL="https://github.com/madler/zlib/releases/download/v${ZLIB_VER}/zlib131.zip"
+ZLIB_SHA="72af66d44fcc14c22013b46b814d5d2514673dda3d115e64b690c1ad636e7b17"
 PNG_VER="1.6.58"
 PNG_URL="https://github.com/pnggroup/libpng/archive/refs/tags/v${PNG_VER}.zip"
 PNG_SHA="ad8fc23d75a76f352989bbec9e905bdfe8f2d2e77b32e4f2070a4bb1849802ee"
@@ -65,20 +63,25 @@ mkdir -p "$WORK_DIR" "$STAGE_ROOT/include" "$STAGE_ROOT/lib"
 cd "$WORK_DIR"
 
 if [ "$LIBPNG_ONLY" = "0" ]; then
-    [ -f "zlib-$ZLIB_VER.tar.gz" ] || curl -fsSL --connect-timeout 20 --max-time 300 \
-        --retry 2 --retry-all-errors -o "zlib-$ZLIB_VER.tar.gz" "$ZLIB_URL"
-    echo "$ZLIB_SHA  zlib-$ZLIB_VER.tar.gz" | sha256sum -c --status - \
+    [ -f "zlib-$ZLIB_VER.zip" ] || curl -fsSL --connect-timeout 20 --max-time 300 \
+        --retry 2 --retry-all-errors -o "zlib-$ZLIB_VER.zip" "$ZLIB_URL"
+    echo "$ZLIB_SHA  zlib-$ZLIB_VER.zip" | sha256sum -c --status - \
         || { echo "[png] ERROR: zlib sha256 mismatch" >&2; exit 1; }
     rm -rf "zlib-$ZLIB_VER" "zlib-build"
-    mkdir -p "zlib-$ZLIB_VER" && tar xzf "zlib-$ZLIB_VER.tar.gz" -C "zlib-$ZLIB_VER"
+    mkdir -p "zlib-$ZLIB_VER" && unzip -q -o "zlib-$ZLIB_VER.zip" -d "zlib-$ZLIB_VER"
     ZSRC="$(find "zlib-$ZLIB_VER" -maxdepth 2 -name CMakeLists.txt | head -1 | xargs dirname)"
     cmake -S "$ZSRC" -B "zlib-build" \
         -DCMAKE_TOOLCHAIN_FILE="$TC" -DANDROID_ABI="$ABI" \
         -DANDROID_PLATFORM="android-$API_LEVEL" -DANDROID_STL=c++_shared \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$STAGE_ROOT" \
-        -DBUILD_SHARED_LIBS=OFF -DSKIP_INSTALL_FILES=OFF
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF -DSKIP_INSTALL_FILES=ON
     cmake --build "zlib-build" -j"$N_CORES"
     cmake --install "zlib-build"
+    # Stock zlib CMake ignores BUILD_SHARED_LIBS (upstream carries its own
+    # Respect-BUILD_SHARED_LIBS patch); drop any shared objects so FindZLIB
+    # can only resolve the static lib.
+    find "$STAGE_ROOT" -name 'libz.so*' -delete
 fi
 
 [ -f "libpng-$PNG_VER.zip" ] || curl -fsSL --connect-timeout 20 --max-time 300 \

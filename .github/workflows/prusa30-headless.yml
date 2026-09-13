@@ -23,6 +23,7 @@ on:
       - "scripts/build_prusa30_fmt.sh"
       - "scripts/build_prusa30_tracy.sh"
       - "scripts/build_prusa30_gmp.sh"
+      - "scripts/build_prusa30_openssl.sh"
       - ".github/workflows/prusa30-headless.yml"
   pull_request:
     branches: ["main", "master"]
@@ -717,11 +718,87 @@ jobs:
           path: engine/prusa30/jniImports/gmpcgal
           key: prusa30-gmpcgal-cgal5.6.2-${{ hashFiles('scripts/build_prusa30_gmp.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
 
+  build-openssl:
+    name: openssl
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged OpenSSL 4.0.1 from cache
+        id: ssl-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/openssl
+          key: prusa30-openssl4.0.1-${{ hashFiles('scripts/build_prusa30_openssl.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored OpenSSL
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.ssl-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/openssl/include/openssl/ssl.h || OK=0
+            grep -q "OPENSSL_VERSION_NUMBER" engine/prusa30/jniImports/openssl/include/openssl/opensslv.h 2>/dev/null || OK=0
+            ls engine/prusa30/jniImports/openssl/lib/libcrypto.a >/dev/null 2>&1 || OK=0
+            ls engine/prusa30/jniImports/openssl/lib/libssl.a >/dev/null 2>&1 || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build OpenSSL 4.0.1 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_openssl.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/openssl" \
+            ./scripts/build_prusa30_openssl.sh
+
+      - name: Verify staged OpenSSL exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/openssl/include/openssl/ssl.h \
+            || { echo "ERROR: ssl.h missing"; exit 1; }
+          grep -q "OPENSSL_VERSION_NUMBER" engine/prusa30/jniImports/openssl/include/openssl/opensslv.h \
+            || { echo "ERROR: staged headers not OpenSSL"; exit 1; }
+          test -f engine/prusa30/jniImports/openssl/lib/libcrypto.a \
+            || { echo "ERROR: libcrypto.a missing"; exit 1; }
+          test -f engine/prusa30/jniImports/openssl/lib/libssl.a \
+            || { echo "ERROR: libssl.a missing"; exit 1; }
+          echo "OpenSSL 4.0.1 staged and verified"
+
+      - name: Save staged OpenSSL 4.0.1
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/openssl
+          key: prusa30-openssl4.0.1-${{ hashFiles('scripts/build_prusa30_openssl.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
   headless-build:
     name: headless
     runs-on: ubuntu-24.04
     timeout-minutes: 180
-    needs: [prusa30-changes, build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix, build-gmpcgal]
+    needs: [prusa30-changes, build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix, build-gmpcgal, build-openssl]
     if: needs.prusa30-changes.outputs.prusa30 == 'true'
     permissions:
       contents: read
@@ -910,6 +987,23 @@ jobs:
             || { echo "ERROR: staged CGAL config missing"; exit 1; }
           echo "GMP + MPFR + CGAL present and verified"
 
+      - name: Restore staged OpenSSL 4.0.1 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/openssl
+          key: prusa30-openssl4.0.1-${{ hashFiles('scripts/build_prusa30_openssl.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged OpenSSL exactly
+        run: |
+          test -f engine/prusa30/jniImports/openssl/include/openssl/ssl.h \
+            || { echo "ERROR: staged openssl missing ssl.h"; exit 1; }
+          test -f engine/prusa30/jniImports/openssl/lib/libcrypto.a \
+            || { echo "ERROR: staged openssl missing libcrypto.a"; exit 1; }
+          test -f engine/prusa30/jniImports/openssl/lib/libssl.a \
+            || { echo "ERROR: staged openssl missing libssl.a"; exit 1; }
+          echo "OpenSSL 4.0.1 present and verified"
+
       - name: Configure headless 3.0 build (arm64-v8a)
         env:
           # Upstream FindNLopt reads the NLOPT *environment* variable:
@@ -1022,6 +1116,21 @@ jobs:
           ZLIB_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name zlib.h | head -1)")"
           test -n "$ZLIB_INC" || { echo "ERROR: staged zlib.h not found"; exit 1; }
           echo "ZLIB lib: $ZLIB_LIB inc: $ZLIB_INC"
+          # OpenSSL: slic3r-biz-crypto hard-requires find_package(OpenSSL).
+          # Pre-seed the exact staged libs+include (PNG/ZLIB pattern) so the
+          # NDK MODE=ONLY re-rooting (playbook §5) can't shadow them with the
+          # sysroot's header-only 3.0.13 tree.
+          OPENSSL_ROOT="$(pwd)/engine/prusa30/jniImports/openssl"
+          test -f "$OPENSSL_ROOT/include/openssl/ssl.h" \
+            || { echo "ERROR: staged ssl.h missing"; exit 1; }
+          OPENSSL_INCLUDE_DIR="$OPENSSL_ROOT/include"
+          OPENSSL_CRYPTO_LIBRARY="$OPENSSL_ROOT/lib/libcrypto.a"
+          test -f "$OPENSSL_CRYPTO_LIBRARY" \
+            || { echo "ERROR: staged libcrypto.a missing"; exit 1; }
+          OPENSSL_SSL_LIBRARY="$OPENSSL_ROOT/lib/libssl.a"
+          test -f "$OPENSSL_SSL_LIBRARY" \
+            || { echo "ERROR: staged libssl.a missing"; exit 1; }
+          echo "OpenSSL libcrypto: $OPENSSL_CRYPTO_LIBRARY inc: $OPENSSL_INCLUDE_DIR"
           cmake -S "$(pwd)/engine/build/prusaslicer-src" -B build/prusa30 \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a \
@@ -1065,7 +1174,11 @@ jobs:
             -DZLIB_INCLUDE_DIR="$ZLIB_INC" \
             -DPNG_LIBRARY="$PNG_LIB" \
             -DPNG_PNG_INCLUDE_DIR="$PNG_INC" \
-            -DTracy_DIR="$TRACY_CMAKE_DIR"
+            -DTracy_DIR="$TRACY_CMAKE_DIR" \
+            -DOPENSSL_ROOT_DIR="$OPENSSL_ROOT" \
+            -DOPENSSL_INCLUDE_DIR="$OPENSSL_INCLUDE_DIR" \
+            -DOPENSSL_CRYPTO_LIBRARY="$OPENSSL_CRYPTO_LIBRARY" \
+            -DOPENSSL_SSL_LIBRARY="$OPENSSL_SSL_LIBRARY"
 
       - name: Build headless core (libslic3r)
         run: |

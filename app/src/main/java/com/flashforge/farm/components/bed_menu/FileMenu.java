@@ -291,8 +291,8 @@ public class FileMenu extends ListBedMenu {
             new Thread(() -> {
                 try {
                     com.flashforge.farm.gallery.ShapeGallery.Item item = calibItem(kind);
-                    File f = com.flashforge.farm.gallery.ShapeGallery.fileFor(item);
                     FarmApp.PENDING_CALIB_ITEM = item.id;
+                    File f = com.flashforge.farm.gallery.ShapeGallery.fileFor(item);
                     ViewUtils.postOnMainThread(() -> {
                         try {
                             FileMenu.this.fragment.loadModel(f);

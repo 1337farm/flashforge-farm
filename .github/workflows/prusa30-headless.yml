@@ -670,6 +670,11 @@ jobs:
           ASSERT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/assert" \( -name libassert-config.cmake -o -name libassertConfig.cmake \) -printf '%h\n' | head -1)"
           test -n "$ASSERT_CMAKE_DIR" || { echo "ERROR: libassert config not staged"; exit 1; }
           echo "libassert config dir: $ASSERT_CMAKE_DIR"
+          # libassert's config find_dependency()s cpptrace, which lives in
+          # the same stage tree but off CMAKE_PREFIX_PATH — resolve it too.
+          CPPTRACE_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/assert" -name cpptrace-config.cmake -printf '%h\n' | head -1)"
+          test -n "$CPPTRACE_CMAKE_DIR" || { echo "ERROR: cpptrace-config.cmake not staged"; exit 1; }
+          echo "cpptrace config dir: $CPPTRACE_CMAKE_DIR"
           # Same for fmt: fmt 12.x no longer ships a Find module, only
           # fmt-config.cmake — resolve it exactly the same way.
           FMT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name fmt-config.cmake -printf '%h\n' | head -1)"
@@ -719,6 +724,7 @@ jobs:
             -DEXPAT_DIR="$EXPAT_CMAKE_DIR" \
             -Dfmt_DIR="$FMT_CMAKE_DIR" \
             -Dlibassert_DIR="$ASSERT_CMAKE_DIR" \
+            -Dcpptrace_DIR="$CPPTRACE_CMAKE_DIR" \
             -Dspdlog_DIR="$SPDLOG_CMAKE_DIR" \
             -Dcereal_DIR="$CEREAL_CMAKE_DIR" \
             -DEigen3_DIR="$EIGEN_CMAKE_DIR" \

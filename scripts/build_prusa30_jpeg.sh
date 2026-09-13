@@ -4,8 +4,9 @@
 # Required by find_package(JPEG) in src/libslic3r/CMakeLists.txt (configure
 # fails with "Could NOT find JPEG (missing: JPEG_LIBRARY JPEG_INCLUDE_DIR)"
 # otherwise). Built static with upstream's exact deps/+JPEG/JPEG.cmake
-# CMAKE_ARGS (shared OFF, static ON, policy 3.5, INSTALL_LIBDIR pinned to
-# lib because turbo forces lib64). Depends on ZLIB (staged in pngfmt).
+# CMAKE_ARGS (shared OFF, static ON, policy 3.5, INSTALL_LIBDIR pinned to an
+# ABSOLUTE path under the prefix because turbo forces lib64 AND a relative
+# -D CMAKE_INSTALL_LIBDIR is resolved against the process cwd by CMake). Depends on ZLIB (staged in pngfmt).
 #
 # Pins (exact, from upstream deps/+JPEG/JPEG.cmake):
 #   libjpeg-turbo: https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.0.1.zip
@@ -73,7 +74,7 @@ cmake -S "$JSRC" -B "jpeg-build" \
     -DCMAKE_TOOLCHAIN_FILE="$TC" -DANDROID_ABI="$ABI" \
     -DANDROID_PLATFORM="android-$API_LEVEL" -DANDROID_STL=c++_shared \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$STAGE_ROOT" \
-    -DCMAKE_INSTALL_LIBDIR=lib \
+    -DCMAKE_INSTALL_LIBDIR:PATH="$STAGE_ROOT/lib" \
     -DENABLE_SHARED=OFF -DENABLE_STATIC=ON \
     -DWITH_TURBOJPEG=OFF -DWITH_TOOLS=OFF -DWITH_TESTS=OFF -DWITH_SIMD=ON \
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \

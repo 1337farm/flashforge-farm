@@ -666,6 +666,10 @@ jobs:
           EXPECTED_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/expected" -name tl-expected-config.cmake -printf '%h\n' | head -1)"
           test -n "$EXPECTED_CMAKE_DIR" || { echo "ERROR: tl-expected-config.cmake not staged"; exit 1; }
           echo "tl-expected config dir: $EXPECTED_CMAKE_DIR"
+          # Same for NanoSVG (header-only nanosvg + nanosvgrast targets).
+          NANOSVG_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/nanosvg" -name NanoSVGConfig.cmake -printf '%h\n' | head -1)"
+          test -n "$NANOSVG_CMAKE_DIR" || { echo "ERROR: NanoSVGConfig.cmake not staged"; exit 1; }
+          echo "NanoSVG config dir: $NANOSVG_CMAKE_DIR"
           # Same for libassert: resolve whichever config name its install used.
           ASSERT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/assert" \( -name libassert-config.cmake -o -name libassertConfig.cmake \) -printf '%h\n' | head -1)"
           test -n "$ASSERT_CMAKE_DIR" || { echo "ERROR: libassert config not staged"; exit 1; }
@@ -729,6 +733,7 @@ jobs:
             -Dcereal_DIR="$CEREAL_CMAKE_DIR" \
             -DEigen3_DIR="$EIGEN_CMAKE_DIR" \
             -Dtl-expected_DIR="$EXPECTED_CMAKE_DIR" \
+            -DNanoSVG_DIR="$NANOSVG_CMAKE_DIR" \
             -DZLIB_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
             -DPNG_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
             -DZLIB_LIBRARY="$ZLIB_LIB" \

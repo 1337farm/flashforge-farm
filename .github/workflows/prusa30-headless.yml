@@ -27,6 +27,8 @@ on:
       - "scripts/build_prusa30_zstd.sh"
       - "scripts/build_prusa30_blosc.sh"
       - "scripts/build_prusa30_openvdb.sh"
+      - "scripts/build_prusa30_heatshrink.sh"
+      - "scripts/build_prusa30_libbgcode.sh"
       - ".github/workflows/prusa30-headless.yml"
   pull_request:
     branches: ["main", "master"]
@@ -1074,11 +1076,192 @@ jobs:
           path: engine/prusa30/jniImports/openvdb
           key: prusa30-openvdb-11.0.0-${{ hashFiles('scripts/build_prusa30_openvdb.sh', 'scripts/build_prusa30_blosc.sh', 'scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
 
+  build-heatshrink:
+    name: heatshrink
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged heatshrink 0.4.1 from cache
+        id: hs-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/heatshrink
+          key: prusa30-heatshrink-0.4.1-${{ hashFiles('scripts/build_prusa30_heatshrink.sh', 'engine/prusa30/heatshrink/CMakeLists.txt', 'engine/prusa30/heatshrink/Config.cmake.in') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored heatshrink
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.hs-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/heatshrink/include/heatshrink/heatshrink_decoder.h || OK=0
+            find engine/prusa30/jniImports/heatshrink -name 'libheatshrink_dynalloc.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/heatshrink -name heatshrinkConfig.cmake | grep -q . || OK=0
+            grep -rq "heatshrink::heatshrink_dynalloc" engine/prusa30/jniImports/heatshrink || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build heatshrink 0.4.1 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_heatshrink.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/heatshrink" \
+            ./scripts/build_prusa30_heatshrink.sh
+
+      - name: Verify staged heatshrink exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/heatshrink/include/heatshrink/heatshrink_decoder.h \
+            || { echo "ERROR: heatshrink headers missing"; exit 1; }
+          find engine/prusa30/jniImports/heatshrink -name 'libheatshrink_dynalloc.a' | grep -q . \
+            || { echo "ERROR: no libheatshrink_dynalloc.a staged"; exit 1; }
+          find engine/prusa30/jniImports/heatshrink -name heatshrinkConfig.cmake | grep -q . \
+            || { echo "ERROR: heatshrinkConfig.cmake missing"; exit 1; }
+          grep -rq "heatshrink::heatshrink_dynalloc" engine/prusa30/jniImports/heatshrink \
+            || { echo "ERROR: heatshrink::heatshrink_dynalloc target missing"; exit 1; }
+          echo "heatshrink 0.4.1 staged and verified"
+
+      - name: Save staged heatshrink 0.4.1
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/heatshrink
+          key: prusa30-heatshrink-0.4.1-${{ hashFiles('scripts/build_prusa30_heatshrink.sh', 'engine/prusa30/heatshrink/CMakeLists.txt', 'engine/prusa30/heatshrink/Config.cmake.in') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-libbgcode:
+    name: libbgcode
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [prusa30-changes, build-boost, build-heatshrink, build-pngfmt]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged Boost ${{ env.BOOST_VER }} from cache (libbgcode input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/boost
+          key: prusa30-boost-${{ env.BOOST_VER }}-${{ hashFiles('scripts/build_boost.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged heatshrink 0.4.1 from cache (libbgcode input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/heatshrink
+          key: prusa30-heatshrink-0.4.1-${{ hashFiles('scripts/build_prusa30_heatshrink.sh', 'engine/prusa30/heatshrink/CMakeLists.txt', 'engine/prusa30/heatshrink/Config.cmake.in') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged zlib+libpng from cache (libbgcode input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/pngfmt
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh', 'scripts/build_prusa30_tracy.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged LibBGCode 0.3.0 from cache
+        id: bgcode-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/bgcode
+          key: prusa30-libbgcode-0.3.0-${{ hashFiles('scripts/build_prusa30_libbgcode.sh', 'scripts/build_prusa30_heatshrink.sh', 'engine/prusa30/heatshrink/CMakeLists.txt', 'engine/prusa30/heatshrink/Config.cmake.in') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored LibBGCode
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.bgcode-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/bgcode/include/LibBGCode/convert/convert.hpp || OK=0
+            find engine/prusa30/jniImports/bgcode -name 'libbgcode_convert.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/bgcode -name 'libbgcode_binarize.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/bgcode -name 'libbgcode_core.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/bgcode -name LibBGCodeConfig.cmake | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build LibBGCode 0.3.0 from source (static, external boost/zlib/heatshrink)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_libbgcode.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/bgcode" \
+            BOOST_STAGE="$(pwd)/engine/prusa30/jniImports/boost" \
+            ZLIB_STAGE="$(pwd)/engine/prusa30/jniImports/pngfmt" \
+            HEATSHRINK_STAGE="$(pwd)/engine/prusa30/jniImports/heatshrink" \
+            ./scripts/build_prusa30_libbgcode.sh
+
+      - name: Verify staged LibBGCode exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/bgcode/include/LibBGCode/core/core.hpp \
+            || { echo "ERROR: LibBGCode core headers missing"; exit 1; }
+          test -f engine/prusa30/jniImports/bgcode/include/LibBGCode/convert/convert.hpp \
+            || { echo "ERROR: LibBGCode convert headers missing"; exit 1; }
+          find engine/prusa30/jniImports/bgcode -name 'libbgcode_convert.a' | grep -q . \
+            || { echo "ERROR: no libbgcode_convert.a staged"; exit 1; }
+          find engine/prusa30/jniImports/bgcode -name 'libbgcode_binarize.a' | grep -q . \
+            || { echo "ERROR: no libbgcode_binarize.a staged"; exit 1; }
+          find engine/prusa30/jniImports/bgcode -name 'libbgcode_core.a' | grep -q . \
+            || { echo "ERROR: no libbgcode_core.a staged"; exit 1; }
+          find engine/prusa30/jniImports/bgcode -name LibBGCodeConfig.cmake | grep -q . \
+            || { echo "ERROR: LibBGCodeConfig.cmake missing"; exit 1; }
+          echo "LibBGCode 0.3.0 staged and verified"
+
+      - name: Save staged LibBGCode 0.3.0
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/bgcode
+          key: prusa30-libbgcode-0.3.0-${{ hashFiles('scripts/build_prusa30_libbgcode.sh', 'scripts/build_prusa30_heatshrink.sh', 'engine/prusa30/heatshrink/CMakeLists.txt', 'engine/prusa30/heatshrink/Config.cmake.in') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
   headless-build:
     name: headless
     runs-on: ubuntu-24.04
     timeout-minutes: 180
-    needs: [prusa30-changes, build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix, build-gmpcgal, build-openssl, build-zstd, build-blosc, build-openvdb]
+    needs: [prusa30-changes, build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix, build-gmpcgal, build-openssl, build-zstd, build-blosc, build-openvdb, build-heatshrink, build-libbgcode]
     if: needs.prusa30-changes.outputs.prusa30 == 'true'
     permissions:
       contents: read
@@ -1333,6 +1516,38 @@ jobs:
             || { echo "ERROR: staged openvdb version.h lacks OPENVDB_USE_BLOSC"; exit 1; }
           echo "OpenVDB 11.0.0 present and verified"
 
+      - name: Restore staged heatshrink 0.4.1 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/heatshrink
+          key: prusa30-heatshrink-0.4.1-${{ hashFiles('scripts/build_prusa30_heatshrink.sh', 'engine/prusa30/heatshrink/CMakeLists.txt', 'engine/prusa30/heatshrink/Config.cmake.in') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged heatshrink exactly
+        run: |
+          find engine/prusa30/jniImports/heatshrink -name 'libheatshrink_dynalloc.a' | grep -q . \
+            || { echo "ERROR: staged heatshrink missing libheatshrink_dynalloc.a"; exit 1; }
+          find engine/prusa30/jniImports/heatshrink -name heatshrinkConfig.cmake | grep -q . \
+            || { echo "ERROR: staged heatshrink missing heatshrinkConfig.cmake"; exit 1; }
+          echo "heatshrink 0.4.1 present and verified"
+
+      - name: Restore staged LibBGCode 0.3.0 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/bgcode
+          key: prusa30-libbgcode-0.3.0-${{ hashFiles('scripts/build_prusa30_libbgcode.sh', 'scripts/build_prusa30_heatshrink.sh', 'engine/prusa30/heatshrink/CMakeLists.txt', 'engine/prusa30/heatshrink/Config.cmake.in') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged LibBGCode exactly
+        run: |
+          test -f engine/prusa30/jniImports/bgcode/include/LibBGCode/convert/convert.hpp \
+            || { echo "ERROR: staged libbgcode missing convert headers"; exit 1; }
+          find engine/prusa30/jniImports/bgcode -name 'libbgcode_convert.a' | grep -q . \
+            || { echo "ERROR: staged libbgcode missing libbgcode_convert.a"; exit 1; }
+          find engine/prusa30/jniImports/bgcode -name LibBGCodeConfig.cmake | grep -q . \
+            || { echo "ERROR: staged libbgcode missing LibBGCodeConfig.cmake"; exit 1; }
+          echo "LibBGCode 0.3.0 present and verified"
+
       - name: Configure headless 3.0 build (arm64-v8a)
         env:
           # Upstream FindNLopt reads the NLOPT *environment* variable:
@@ -1488,6 +1703,18 @@ jobs:
           grep -q "zstd::libzstd" "$ZSTD_CMAKE_DIR/zstdTargets.cmake" \
             || { echo "ERROR: zstd::libzstd target missing"; exit 1; }
           echo "zstd config dir: $ZSTD_CMAKE_DIR"
+          # LibBGCode: find_package(LibBGCode REQUIRED COMPONENTS Convert)
+          # resolves via our staged config package. Its Config.cmake.in
+          # find_dependency()s heatshrink/ZLIB/Boost at OUR configure time
+          # (Binarize -> heatshrink 0.4 + ZLIB 1.0; Convert -> Boost 1.78), so
+          # heatshrink needs the exact config dir too (same TBB/EXPAT pattern).
+          # ZLIB + Boost are already pre-seeded below/above.
+          HEATSHRINK_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/heatshrink" -name heatshrinkConfig.cmake -printf '%h\n' | head -1)"
+          test -n "$HEATSHRINK_CMAKE_DIR" || { echo "ERROR: heatshrinkConfig.cmake not staged"; exit 1; }
+          echo "heatshrink config dir: $HEATSHRINK_CMAKE_DIR"
+          BGCODE_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/bgcode" -name LibBGCodeConfig.cmake -printf '%h\n' | head -1)"
+          test -n "$BGCODE_CMAKE_DIR" || { echo "ERROR: LibBGCodeConfig.cmake not staged"; exit 1; }
+          echo "LibBGCode config dir: $BGCODE_CMAKE_DIR"
           cmake -S "$(pwd)/engine/build/prusaslicer-src" -B build/prusa30 \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a \
@@ -1546,7 +1773,9 @@ jobs:
             -DBlosc_INCLUDE_DIR="$BLOSC_INC" \
             -DBlosc_LIBRARY="$BLOSC_LIB" \
             -DBlosc_LIBRARY_RELEASE="$BLOSC_LIB" \
-            -Dzstd_DIR="$ZSTD_CMAKE_DIR"
+            -Dzstd_DIR="$ZSTD_CMAKE_DIR" \
+            -Dheatshrink_DIR="$HEATSHRINK_CMAKE_DIR" \
+            -DLibBGCode_DIR="$BGCODE_CMAKE_DIR"
 
       - name: Build headless core (libslic3r)
         run: |
@@ -1580,6 +1809,8 @@ jobs:
       - build-zstd
       - build-blosc
       - build-openvdb
+      - build-heatshrink
+      - build-libbgcode
       - headless-build
     steps:
       - name: Gate every prusa30 stage result
@@ -1603,6 +1834,8 @@ jobs:
             "zstd=${{ needs.build-zstd.result }}" \
             "blosc=${{ needs.build-blosc.result }}" \
             "openvdb=${{ needs.build-openvdb.result }}" \
+            "heatshrink=${{ needs.build-heatshrink.result }}" \
+            "libbgcode=${{ needs.build-libbgcode.result }}" \
             "headless=${{ needs.headless-build.result }}" \
           ; do
             name="${kv%%=*}"; res="${kv#*=}"
@@ -1612,4 +1845,4 @@ jobs:
             echo "ERROR: prusa30 pipeline red:$BAD"
             exit 1
           fi
-          echo "prusa30 pipeline fully green (all 13 stages success)"
+          echo "prusa30 pipeline fully green (all 15 stages success)"

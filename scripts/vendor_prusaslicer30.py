@@ -62,6 +62,8 @@ DEP_CMAKE = {
     "OpenVDB": "OpenVDB.cmake",
     "Blosc": "Blosc.cmake",
     "zstd": "zstd.cmake",
+    "heatshrink": "heatshrink.cmake",
+    "LibBGCode": "LibBGCode.cmake",
     "Eigen": "Eigen.cmake",
     "Lua": "Lua.cmake",
 }

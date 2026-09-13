@@ -30,6 +30,18 @@
       "url": "https://gmplib.org/download/gmp/gmp-6.2.1.tar.bz2",
       "version": "6.2.1"
     },
+    "heatshrink": {
+      "cmake": "deps/+heatshrink/heatshrink.cmake",
+      "sha256": "2e2db2366bdf36cb450f0b3229467cbc6ea81a8c690723e4227b0b46f92584fe",
+      "url": "https://github.com/atomicobject/heatshrink/archive/refs/tags/v0.4.1.zip",
+      "version": "0.4.1"
+    },
+    "LibBGCode": {
+      "cmake": "deps/+LibBGCode/LibBGCode.cmake",
+      "sha256": "73076348e80315d1c2584f883c6b07637cd847c74bca7e9279e42b56a308f948",
+      "url": "https://github.com/prusa3d/libbgcode/archive/d4da9073616d70a43c151e8c1d7fbff879d2e08a.zip",
+      "version": "0.3.0"
+    },
     "Lua": {
       "cmake": "deps/+Lua/Lua.cmake",
       "sha256": "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae",

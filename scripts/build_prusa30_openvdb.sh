@@ -100,7 +100,7 @@ echo "$OPENVDB_SHA  openvdb-$OPENVDB_VER.zip" | sha256sum -c --status - \
 rm -rf "openvdb-$OPENVDB_VER" "openvdb-build"
 mkdir -p "openvdb-$OPENVDB_VER"
 unzip -q -o "openvdb-$OPENVDB_VER.zip" -d "openvdb-$OPENVDB_VER"
-SRC="$(find "openvdb-$OPENVDB_VER" -maxdepth 1 -name CMakeLists.txt \
+SRC="$(find "openvdb-$OPENVDB_VER" -maxdepth 2 -name CMakeLists.txt \
     -printf '%h\n' | head -1)"
 [ -n "$SRC" ] || { echo "[openvdb] ERROR: no OpenVDB CMakeLists" >&2; exit 1; }
 

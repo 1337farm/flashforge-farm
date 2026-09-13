@@ -5,5 +5,8 @@
 APK_ARTIFACT="FlashForgeFarm-Debug-APK"
 MAIN_WORKFLOW="native-engine-build.yml"
 RELEASE_TAG="farm-apk-latest"
+# Prune is scoped to --apk output dirs (only script downloads live there),
+# so keep the apk pattern broad but the log pattern exact: farm crash
+# exports are farm_crash_<commit>.log; a bare *.log would eat unrelated logs.
 APK_GLOB="FlashForgeFarm_*.apk"
-LOG_GLOB="*.log"
+LOG_GLOB="farm_crash_*.log"

@@ -2031,6 +2031,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
             -DSLIC3R_GUI=OFF \
+            -DSLIC3R_ENABLE_FORMAT_STEP=OFF \
             -DSLIC3R_BUILD_TESTS=OFF \
             -DCMAKE_PREFIX_PATH="$(pwd)/engine/prusa30/jniImports" \
             -DBOOST_ROOT="$(pwd)/engine/prusa30/jniImports/boost" \

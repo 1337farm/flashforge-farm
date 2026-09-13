@@ -1,0 +1,9 @@
+# .babysitrc values for flashforge-farm (KEY=VALUE, sourced by babysit-pr.sh
+# from 1337farm/pr-babysitter; install: curl -fsSL
+# https://raw.githubusercontent.com/1337farm/pr-babysitter/v1/babysit-pr.sh).
+# CLI flags (--artifact=… etc.) override these.
+APK_ARTIFACT="FlashForgeFarm-Debug-APK"
+MAIN_WORKFLOW="native-engine-build.yml"
+RELEASE_TAG="farm-apk-latest"
+APK_GLOB="FlashForgeFarm_*.apk"
+LOG_GLOB="*.log"

@@ -45,16 +45,45 @@ through merge (see §3). If blocked, hand off exact state, never silence.
   debug flag in the fix PR.
 - Do not push to a branch while its CI is running (cache save/restore
   races). Batch deliberately or wait for green/red first.
-- `action_required` (0s, bot actor) is a gated duplicate, not a result —
-  the real run appears separately. Pushes must authenticate as a trusted
-  actor (`gh` auth / `SYNC_PAT`), never bare `GITHUB_TOKEN`, or PR runs
-  gate behind manual approval.
+- Workflow runs held for approval land as `action_required` (0 jobs,
+  "awaiting approval from a maintainer") — an UNRUN, not a result. This is
+  GitHub's public-repo supply-chain gate (flags recently-changed workflow
+  files triggered by bot pushes). Unblock with
+  `scripts/babysit.sh approve <run-id>` (POSTs the approvals endpoint; the
+  run re-attempts). Pushes must authenticate as a trusted actor (`gh` auth /
+  `SYNC_PAT`), never bare `GITHUB_TOKEN`, or PR runs gate behind approval.
+- Pushing a branch while automerge is enabled can make the bot's own sync
+  push re-trigger these holds; approve held runs before re-checking.
+- **Main has no post-merge CI.** Since 2026-09-11 a squash merge to main
+  creates NO runs (push triggers verified dead: empty run list on merge
+  commits). Green branch protection is NOT evidence of CI on main. After
+  every merge, validate main explicitly (see §3.1).
 - The sync-head trust gate verifies `SYNC_PAT` authenticates as the repo
   owner (`gh api user`) before pushing and fails loudly otherwise. A dead
   PAT (expired/revoked) previously fell back to `GITHUB_TOKEN` and silently
   spawned gated zombies for days — never restore that fallback. Rotation:
   owner creates a classic PAT (`contents:write`, no expiry) and updates the
   `SYNC_PAT` repo secret.
+
+### §3.1 Babysitting tooling (`scripts/babysit.sh`)
+
+Run the babysitting flow with the dedicated tool — never ad-hoc gh one-liners
+for the two failure modes above. It is non-interactive, deterministic, and
+documents its own exit codes (0 green / 1 red / 2 usage / 3 blocked);
+`--dry-run` previews every side effect without POSTing or dispatching.
+
+- Held runs: `scripts/babysit.sh held` lists them;
+  `scripts/babysit.sh approve <run-id>` (or `--sha <sha>`) approves them;
+  `scripts/babysit.sh pr <N> --approve --wait-min M` palms the PR, approving
+  held runs as they appear, until merged or checks settle.
+- Post-merge main validation (push triggers are dead, §3):
+  `scripts/babysit.sh main --workflow native-engine-build.yml --dispatch --approve --wait-min 60`
+  and, when the merge touched 3.0 inputs/workflows, also
+  `--workflow prusa30-headless.yml`. Without `--dispatch`, missing evidence
+  is BLOCKED (exit 3) — never silent.
+- `scripts/babysit.sh status <pr>` prints a snapshot (state, held runs,
+  required-check coverage) and `main` reports observed runs per workflow on
+  a commit; trust its exit code, not the wall of text.
 
 ## 4. Evidence standards
 

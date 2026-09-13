@@ -25,20 +25,7 @@ on:
       - "scripts/build_prusa30_gmp.sh"
       - ".github/workflows/prusa30-headless.yml"
   pull_request:
-    paths:
-      - "engine/prusa30/**"
-      - "scripts/build_boost.sh"
-      - "scripts/build_prusa30_tbb.sh"
-      - "scripts/build_prusa30_nlopt.sh"
-      - "scripts/build_prusa30_qhull.sh"
-      - "scripts/build_prusa30_mixer.sh"
-      - "scripts/build_prusa30_libassert.sh"
-      - "scripts/build_prusa30_expat.sh"
-      - "scripts/build_prusa30_png.sh"
-      - "scripts/build_prusa30_fmt.sh"
-      - "scripts/build_prusa30_tracy.sh"
-      - "scripts/build_prusa30_gmp.sh"
-      - ".github/workflows/prusa30-headless.yml"
+    branches: ["main", "master"]
 
 env:
   NDK_VERSION: "23.1.7779620"
@@ -47,10 +34,45 @@ env:
   ABI: "arm64-v8a"
 
 jobs:
+  # Runs on EVERY PR (no paths filter): decides whether the heavy stages are
+  # needed. PRs without 3.0 inputs skip them in seconds; the skips satisfy
+  # branch protection ("green if not skipped"). Pushes to main and manual
+  # dispatches always build full (main must validate; no file list to diff).
+  # Job name is prusa30-prefixed: the native workflow already reports a
+  # check named `changes`, and required-check matching is by name.
+  prusa30-changes:
+    name: prusa30-changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      prusa30: ${{ steps.filter.outputs.prusa30 }}
+    steps:
+      - name: Detect prusa30-affecting changes
+        id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "prusa30=true (non-PR: always full build)"
+            echo "prusa30=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # File list via API: immune to shallow-checkout merge-base issues.
+          # No checkout needed at all. Patterns mirror the old paths filter.
+          FILES="$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --paginate --jq '.[].filename')"
+          echo "$FILES" | grep -qE '^(engine/prusa30/|scripts/build_boost\.sh|scripts/build_prusa30_.*\.sh|\.github/workflows/prusa30-headless\.yml)' \
+            && { echo "prusa30=true (3.0 inputs changed)"; echo "prusa30=true" >> "$GITHUB_OUTPUT"; } \
+            || { echo "prusa30=false (no 3.0 inputs changed; heavy stages skip)"; echo "prusa30=false" >> "$GITHUB_OUTPUT"; }
+
   build-boost:
     name: boost
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
     permissions:
       contents: read
       actions: write
@@ -123,6 +145,8 @@ jobs:
     name: tbb
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
     permissions:
       contents: read
       actions: write
@@ -195,6 +219,8 @@ jobs:
     name: nlopt
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
     permissions:
       contents: read
       actions: write
@@ -263,6 +289,8 @@ jobs:
     name: expat
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
     permissions:
       contents: read
       actions: write
@@ -334,6 +362,8 @@ jobs:
     name: pngfmt
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
     permissions:
       contents: read
       actions: write
@@ -422,6 +452,8 @@ jobs:
     name: assert
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
     permissions:
       contents: read
       actions: write
@@ -493,6 +525,8 @@ jobs:
     name: qhullmix
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
     permissions:
       contents: read
       actions: write
@@ -585,7 +619,8 @@ jobs:
     name: gmpcgal
     runs-on: ubuntu-24.04
     timeout-minutes: 180
-    needs: [build-boost]
+    needs: [prusa30-changes, build-boost]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
     permissions:
       contents: read
       actions: write
@@ -686,7 +721,8 @@ jobs:
     name: headless
     runs-on: ubuntu-24.04
     timeout-minutes: 180
-    needs: [build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix, build-gmpcgal]
+    needs: [prusa30-changes, build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix, build-gmpcgal]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
     permissions:
       contents: read
       actions: read
@@ -954,6 +990,14 @@ jobs:
           # CGAL's config re-probes GMP/MPFR via its own FindGMP/FindMPFR at
           # OUR configure time: pre-seed the exact staged libs+headers (same
           # PNG/ZLIB pattern) so no NDK-sysroot probing is needed.
+          # NDK quirk (playbook section 5): the toolchain forces
+          # CMAKE_FIND_ROOT_PATH_MODE_*=ONLY, so absolute HINTS get re-rooted
+          # under the sysroot and staged-prefix header finds miss. Top-level
+          # calls never notice (-DBoost_INCLUDE_DIR cache-hits), but CGAL's
+          # tweak changes Boost_ADDITIONAL_VERSIONS, invalidating the cache
+          # and forcing a re-search that misses. BOTH searches re-rooted
+          # first, then original paths: strictly more than ONLY, so existing
+          # exact pre-seeds (PNG/ZLIB/GMP/MPFR/_DIRs) resolve identically.
           GMP_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/gmpcgal" -name gmp.h | head -1)")"
           test -n "$GMP_INC" || { echo "ERROR: staged gmp.h not found"; exit 1; }
           GMP_LIB="$(find "$(pwd)/engine/prusa30/jniImports/gmpcgal" -name 'libgmp.so' | head -1)"
@@ -984,14 +1028,18 @@ jobs:
             -DANDROID_STL=c++_shared \
             -DANDROID_PLATFORM=android-23 \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
             -DSLIC3R_GUI=OFF \
             -DSLIC3R_BUILD_TESTS=OFF \
             -DCMAKE_PREFIX_PATH="$(pwd)/engine/prusa30/jniImports" \
             -DBOOST_ROOT="$(pwd)/engine/prusa30/jniImports/boost" \
+            -DBoost_ROOT="$(pwd)/engine/prusa30/jniImports/boost" \
             -DBoost_INCLUDE_DIR="$(pwd)/engine/prusa30/jniImports/boost/include" \
             -DBoost_LIBRARY_DIR="$(pwd)/engine/prusa30/jniImports/boost/lib/arm64-v8a/lib" \
             -DBoost_ARCHITECTURE="-a64" \
             -DBoost_COMPILER="-clang" \
+            -DBOOST_INCLUDEDIR="$(pwd)/engine/prusa30/jniImports/boost/include" \
+            -DBOOST_LIBRARYDIR="$(pwd)/engine/prusa30/jniImports/boost/lib/arm64-v8a/lib" \
             -DTBB_DIR="$TBB_CMAKE_DIR" \
             -DEXPAT_DIR="$EXPAT_CMAKE_DIR" \
             -Dfmt_DIR="$FMT_CMAKE_DIR" \

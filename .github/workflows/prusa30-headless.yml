@@ -15,6 +15,7 @@ on:
       - "scripts/build_boost.sh"
       - "scripts/build_prusa30_tbb.sh"
       - "scripts/build_prusa30_nlopt.sh"
+      - "scripts/build_prusa30_libassert.sh"
       - "scripts/build_prusa30_expat.sh"
       - "scripts/build_prusa30_png.sh"
       - "scripts/build_prusa30_fmt.sh"
@@ -26,6 +27,7 @@ on:
       - "scripts/build_boost.sh"
       - "scripts/build_prusa30_tbb.sh"
       - "scripts/build_prusa30_nlopt.sh"
+      - "scripts/build_prusa30_libassert.sh"
       - "scripts/build_prusa30_expat.sh"
       - "scripts/build_prusa30_png.sh"
       - "scripts/build_prusa30_fmt.sh"
@@ -410,11 +412,82 @@ jobs:
           path: engine/prusa30/jniImports/pngfmt
           key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh', 'scripts/build_prusa30_tracy.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
 
+  build-assert:
+    name: assert
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged libassert from cache
+        id: assert-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/assert
+          key: prusa30-assert-${{ hashFiles('scripts/build_prusa30_libassert.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored libassert
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.assert-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            find engine/prusa30/jniImports/assert -name 'libassert*.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/assert -name 'libassert/assert.hpp' | grep -q . || OK=0
+            find engine/prusa30/jniImports/assert -name 'libassert-config.cmake' -o -name 'libassertConfig.cmake' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build cpptrace+libassert from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_libassert.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/assert" \
+            ./scripts/build_prusa30_libassert.sh
+
+      - name: Verify staged libassert exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          find engine/prusa30/jniImports/assert -name 'libassert*.a' | grep -q . \
+            || { echo "ERROR: no libassert archive staged"; exit 1; }
+          find engine/prusa30/jniImports/assert -name 'libassert/assert.hpp' | grep -q . \
+            || { echo "ERROR: libassert headers missing"; exit 1; }
+          find engine/prusa30/jniImports/assert -name 'libassert-config.cmake' -o -name 'libassertConfig.cmake' | grep -q . \
+            || { echo "ERROR: no libassert config staged"; exit 1; }
+          echo "libassert v2.2.1 staged and verified"
+
+      - name: Save staged libassert
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/assert
+          key: prusa30-assert-${{ hashFiles('scripts/build_prusa30_libassert.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
   headless-build:
     name: headless
     runs-on: ubuntu-24.04
     timeout-minutes: 180
-    needs: [build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt]
+    needs: [build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert]
     permissions:
       contents: read
       actions: read
@@ -545,6 +618,21 @@ jobs:
             || { echo "ERROR: staged libfmt.a missing"; exit 1; }
           echo "pngfmt present and verified"
 
+      - name: Restore staged libassert from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/assert
+          key: prusa30-assert-${{ hashFiles('scripts/build_prusa30_libassert.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged libassert exactly
+        run: |
+          find engine/prusa30/jniImports/assert -name 'libassert*.a' | grep -q . \
+            || { echo "ERROR: staged libassert missing archive"; exit 1; }
+          find engine/prusa30/jniImports/assert -name 'libassert-config.cmake' -o -name 'libassertConfig.cmake' | grep -q . \
+            || { echo "ERROR: staged libassert missing config"; exit 1; }
+          echo "libassert v2.2.1 present and verified"
+
       - name: Configure headless 3.0 build (arm64-v8a)
         env:
           # Upstream FindNLopt reads the NLOPT *environment* variable:
@@ -578,6 +666,10 @@ jobs:
           EXPECTED_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/expected" -name tl-expected-config.cmake -printf '%h\n' | head -1)"
           test -n "$EXPECTED_CMAKE_DIR" || { echo "ERROR: tl-expected-config.cmake not staged"; exit 1; }
           echo "tl-expected config dir: $EXPECTED_CMAKE_DIR"
+          # Same for libassert: resolve whichever config name its install used.
+          ASSERT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/assert" \( -name libassert-config.cmake -o -name libassertConfig.cmake \) -printf '%h\n' | head -1)"
+          test -n "$ASSERT_CMAKE_DIR" || { echo "ERROR: libassert config not staged"; exit 1; }
+          echo "libassert config dir: $ASSERT_CMAKE_DIR"
           # Same for fmt: fmt 12.x no longer ships a Find module, only
           # fmt-config.cmake — resolve it exactly the same way.
           FMT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name fmt-config.cmake -printf '%h\n' | head -1)"
@@ -626,6 +718,7 @@ jobs:
             -DTBB_DIR="$TBB_CMAKE_DIR" \
             -DEXPAT_DIR="$EXPAT_CMAKE_DIR" \
             -Dfmt_DIR="$FMT_CMAKE_DIR" \
+            -Dlibassert_DIR="$ASSERT_CMAKE_DIR" \
             -Dspdlog_DIR="$SPDLOG_CMAKE_DIR" \
             -Dcereal_DIR="$CEREAL_CMAKE_DIR" \
             -DEigen3_DIR="$EIGEN_CMAKE_DIR" \

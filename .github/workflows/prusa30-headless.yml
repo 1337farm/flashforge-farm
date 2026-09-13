@@ -993,6 +993,7 @@ jobs:
             -DBoost_LIBRARY_DIR="$(pwd)/engine/prusa30/jniImports/boost/lib/arm64-v8a/lib" \
             -DBoost_ARCHITECTURE="-a64" \
             -DBoost_COMPILER="-clang" \
+            -DBoost_DEBUG=ON \
             -DTBB_DIR="$TBB_CMAKE_DIR" \
             -DEXPAT_DIR="$EXPAT_CMAKE_DIR" \
             -Dfmt_DIR="$FMT_CMAKE_DIR" \

@@ -115,6 +115,40 @@ stage_include expected "https://github.com/TartanLlama/expected/archive/refs/tag
     4b2a347cf5450e99f7624247f7d78f86f3adb5e6acd33ce307094e9507615b78 \
     expected.zip "tl"
 
+# NanoSVG (fltk fork with nsvgRasterizeXY): header-only nanosvg.h +
+# nanosvgrast.h, consumed as NanoSVG::nanosvg + NanoSVG::nanosvgrast via
+# find_package(NanoSVG) (CONFIG only). Upstream includes spell
+# <nanosvg/nanosvg.h>, so stage under include/nanosvg/.
+NSVG_VER="abcd277ea45e9098bed752cf9c6875b533c0892f"
+NSVG_URL="https://github.com/fltk/nanosvg/archive/${NSVG_VER}.zip"
+NSVG_SHA="e859938fbaee4b351bd8a8b3d3c7a75b40c36885ce00b73faa1ce0b98aa0ad34"
+NSVG_DL="$WORK_DIR/nanosvg.zip"
+fetch "$NSVG_DL" "$NSVG_URL"
+sha256_verify "$NSVG_DL" "$NSVG_SHA"
+rm -rf "$WORK_DIR/nanosvg"; mkdir -p "$WORK_DIR/nanosvg"
+unzip -q -o "$NSVG_DL" -d "$WORK_DIR/nanosvg"
+NSVG_SRC="$(find "$WORK_DIR/nanosvg" -name nanosvg.h | head -1 | xargs dirname)"
+if [ -z "$NSVG_SRC" ]; then
+    echo "--- [stage] ERROR: nanosvg.h not found ---" >&2
+    exit 1
+fi
+mkdir -p "$STAGE_ROOT/nanosvg/include/nanosvg"
+cp "$NSVG_SRC/nanosvg.h" "$NSVG_SRC/nanosvgrast.h" "$STAGE_ROOT/nanosvg/include/nanosvg/"
+mkdir -p "$STAGE_ROOT/nanosvg/lib/cmake/NanoSVG"
+cat > "$STAGE_ROOT/nanosvg/lib/cmake/NanoSVG/NanoSVGConfig.cmake" <<'EOF'
+# Staged NanoSVG headers (header-only, no lib to link).
+if(NOT TARGET NanoSVG::nanosvg)
+  add_library(NanoSVG::nanosvg INTERFACE IMPORTED)
+  set_target_properties(NanoSVG::nanosvg PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../../include")
+endif()
+if(NOT TARGET NanoSVG::nanosvgrast)
+  add_library(NanoSVG::nanosvgrast INTERFACE IMPORTED)
+  set_target_properties(NanoSVG::nanosvgrast PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../../include")
+endif()
+EOF
+
 # cereal is header-only, but upstream find_package(cereal 1.3.2) needs a
 # CONFIG package: its header-fallback bakes a relative `include` dir that
 # only works inside a source tree, and CHECK_INCLUDE_FILE_CXX never sees

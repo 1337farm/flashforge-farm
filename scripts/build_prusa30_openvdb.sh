@@ -76,6 +76,9 @@ TBB_LIB="$(find "$TBB_STAGE" -name 'libtbb.a' | head -1)"
 BOOST_IOSTREAMS_LIB="$(find "$BOOST_LIBDIR" -name 'libboost_iostreams*.a' | head -1)"
 [ -n "$BOOST_IOSTREAMS_LIB" ] \
     || { echo "[openvdb] ERROR: libboost_iostreams*.a missing" >&2; exit 1; }
+BOOST_REGEX_LIB="$(find "$BOOST_LIBDIR" -name 'libboost_regex*.a' | head -1)"
+[ -n "$BOOST_REGEX_LIB" ] \
+    || { echo "[openvdb] ERROR: libboost_regex*.a missing" >&2; exit 1; }
 BLOSC_INC="$(dirname "$(find "$BLOSC_STAGE" -name blosc.h | head -1)")"
 [ -n "$BLOSC_INC" ] || { echo "[openvdb] ERROR: blosc.h missing" >&2; exit 1; }
 BLOSC_LIB="$(find "$BLOSC_STAGE" -name 'libblosc.a' | head -1)"
@@ -142,6 +145,9 @@ cmake -S "$SRC" -B "openvdb-build" \
     -DBoost_NO_SYSTEM_PATHS=ON -DBoost_USE_STATIC_LIBS=ON \
     -DBoost_IOSTREAMS_LIBRARY_RELEASE="$BOOST_IOSTREAMS_LIB" \
     -DBoost_IOSTREAMS_LIBRARY_DEBUG="$BOOST_IOSTREAMS_LIB" \
+    -DBoost_REGEX_LIBRARY_RELEASE="$BOOST_REGEX_LIB" \
+    -DBoost_REGEX_LIBRARY_DEBUG="$BOOST_REGEX_LIB" \
+    -DBoost_COMPILER="-clang" -DBoost_ARCHITECTURE="-a64" \
     -DBOOST_INCLUDEDIR="$BOOST_INC" -DBOOST_LIBRARYDIR="$BOOST_LIBDIR"
 cmake --build "openvdb-build" --target openvdb_static -j"$N_CORES" \
     || { echo "[openvdb] ERROR: openvdb_static build failed" >&2; exit 1; }

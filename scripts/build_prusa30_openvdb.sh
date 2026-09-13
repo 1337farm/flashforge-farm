@@ -68,6 +68,14 @@ find "$BOOST_LIBDIR" -name 'libboost_iostreams*.a' | grep -q . \
     || { echo "[openvdb] ERROR: staged Boost iostreams missing" >&2; exit 1; }
 TBB_CMAKE_DIR="$(find "$TBB_STAGE" -name TBBConfig.cmake -printf '%h\n' | head -1)"
 [ -n "$TBB_CMAKE_DIR" ] || { echo "[openvdb] ERROR: TBBConfig.cmake missing" >&2; exit 1; }
+TBB_INC="$TBB_STAGE/include"
+test -f "$TBB_INC/oneapi/tbb/version.h" \
+    || { echo "[openvdb] ERROR: oneapi/tbb/version.h missing" >&2; exit 1; }
+TBB_LIB="$(find "$TBB_STAGE" -name 'libtbb.a' | head -1)"
+[ -n "$TBB_LIB" ] || { echo "[openvdb] ERROR: libtbb.a missing" >&2; exit 1; }
+BOOST_IOSTREAMS_LIB="$(find "$BOOST_LIBDIR" -name 'libboost_iostreams*.a' | head -1)"
+[ -n "$BOOST_IOSTREAMS_LIB" ] \
+    || { echo "[openvdb] ERROR: libboost_iostreams*.a missing" >&2; exit 1; }
 BLOSC_INC="$(dirname "$(find "$BLOSC_STAGE" -name blosc.h | head -1)")"
 [ -n "$BLOSC_INC" ] || { echo "[openvdb] ERROR: blosc.h missing" >&2; exit 1; }
 BLOSC_LIB="$(find "$BLOSC_STAGE" -name 'libblosc.a' | head -1)"
@@ -117,19 +125,23 @@ cmake -S "$SRC" -B "openvdb-build" \
     -DOPENVDB_BUILD_PYTHON_MODULE=OFF -DOPENVDB_BUILD_BINARIES=OFF \
     -DUSE_BLOSC=ON \
     -DOPENVDB_CORE_SHARED=OFF -DOPENVDB_CORE_STATIC=ON \
-    -DOPENVDB_ENABLE_RPATH=OFF -DTBB_STATIC=ON \
+    -DOPENVDB_ENABLE_RPATH=OFF -DUSE_STATIC_DEPENDENCIES=ON \
     -DUSE_CCACHE=OFF -DOPENVDB_ABI_VERSION_NUMBER=11 \
     -DOPENVDB_INSTALL_CMAKE_MODULES=OFF -DUSE_EXPLICIT_INSTANTIATION=OFF \
     -DOPENVDB_BUILD_VDB_PRINT=OFF \
-    -DCMAKE_PREFIX_PATH="$TBB_STAGE;$BLOSC_STAGE;$ZSTD_STAGE;$ZLIB_STAGE;$BOOST_STAGE" \
-    -DTBB_ROOT="$TBB_STAGE" -DTBB_DIR="$TBB_CMAKE_DIR" \
+    -DTBB_ROOT="$TBB_STAGE" -DTBB_INCLUDEDIR="$TBB_INC" \
+    -DTBB_LIBRARYDIR="$(dirname "$TBB_LIB")" \
+    -DTbb_INCLUDE_DIR="$TBB_INC" \
+    -DTbb_tbb_LIBRARY_RELEASE="$TBB_LIB" -DTbb_tbb_LIBRARY_DEBUG="$TBB_LIB" \
     -DBlosc_INCLUDE_DIR="$BLOSC_INC" -DBlosc_LIBRARY="$BLOSC_LIB" \
     -DBlosc_LIBRARY_RELEASE="$BLOSC_LIB" -DBLOSC_USE_STATIC_LIBS=ON \
     -Dzstd_DIR="$ZSTD_CMAKE_DIR" \
     -DZLIB_INCLUDE_DIR="$ZLIB_INC" -DZLIB_LIBRARY="$ZLIB_LIB" \
     -DBOOST_ROOT="$BOOST_STAGE" -DBoost_ROOT="$BOOST_STAGE" \
     -DBoost_INCLUDE_DIR="$BOOST_INC" -DBoost_LIBRARY_DIR="$BOOST_LIBDIR" \
-    -DBoost_ARCHITECTURE="-a64" -DBoost_COMPILER="-clang" \
+    -DBoost_NO_SYSTEM_PATHS=ON -DBoost_USE_STATIC_LIBS=ON \
+    -DBoost_IOSTREAMS_LIBRARY_RELEASE="$BOOST_IOSTREAMS_LIB" \
+    -DBoost_IOSTREAMS_LIBRARY_DEBUG="$BOOST_IOSTREAMS_LIB" \
     -DBOOST_INCLUDEDIR="$BOOST_INC" -DBOOST_LIBRARYDIR="$BOOST_LIBDIR"
 cmake --build "openvdb-build" --target openvdb_static -j"$N_CORES" \
     || { echo "[openvdb] ERROR: openvdb_static build failed" >&2; exit 1; }

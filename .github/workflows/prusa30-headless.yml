@@ -2075,6 +2075,8 @@ jobs:
             -Dcereal_DIR="$CEREAL_CMAKE_DIR" \
             -DEigen3_DIR="$EIGEN_CMAKE_DIR" \
             -Dtl-expected_DIR="$EXPECTED_CMAKE_DIR" \
+            -DJSON_INCLUDE_DIR="$(pwd)/engine/prusa30/jniImports/nlohmann_json/include" \
+            -DMAGIC_ENUM_INCLUDE_DIR="$(pwd)/engine/prusa30/jniImports/magic_enum/include" \
             -DNanoSVG_DIR="$NANOSVG_CMAKE_DIR" \
             -DZLIB_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
             -DPNG_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \

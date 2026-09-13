@@ -115,6 +115,10 @@ stage_include expected "https://github.com/TartanLlama/expected/archive/refs/tag
     4b2a347cf5450e99f7624247f7d78f86f3adb5e6acd33ce307094e9507615b78 \
     expected.zip "tl"
 
+stage_include magic_enum "https://github.com/Neargye/magic_enum/archive/refs/tags/v0.9.7.zip" \
+    e293afdaf4d5918bc145903bccff06d28b3ed437f1ac8414ace9e8a769a9e470 \
+    magic_enum.zip "magic_enum"
+
 # NanoSVG (fltk fork with nsvgRasterizeXY): header-only nanosvg.h +
 # nanosvgrast.h, consumed as NanoSVG::nanosvg + NanoSVG::nanosvgrast via
 # find_package(NanoSVG) (CONFIG only). Upstream includes spell

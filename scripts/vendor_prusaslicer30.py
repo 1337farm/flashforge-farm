@@ -60,8 +60,14 @@ DEP_CMAKE = {
     "MPFR": "MPFR.cmake",
     "OpenSSL": "OpenSSL.cmake",
     "OpenVDB": "OpenVDB.cmake",
+    "Blosc": "Blosc.cmake",
+    "zstd": "zstd.cmake",
+    "heatshrink": "heatshrink.cmake",
+    "LibBGCode": "LibBGCode.cmake",
+    "JPEG": "JPEG.cmake",
     "Eigen": "Eigen.cmake",
     "Lua": "Lua.cmake",
+    "Sol2": "Sol2.cmake",
 }
 
 RE_URL = re.compile(r'URL\s+"?([^"\s]+)"?')

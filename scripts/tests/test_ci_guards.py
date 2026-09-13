@@ -16,7 +16,10 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO / ".github/workflows/native-engine-build.yml"
-PINNED_CHECKS = {"engine", "apk"}
+PRUSA30_WORKFLOW = REPO / ".github/workflows/prusa30-headless.yml"
+PINNED_CHECKS = {
+    "engine", "apk", "prusa30-changes", "prusa30-gate",
+}
 MAX_JOB_NAME = 12
 
 
@@ -39,7 +42,6 @@ def main():
     wf = yaml.safe_load(WORKFLOW.read_text())
     jobs = wf.get("jobs", {})
     names = {jid: (j.get("name") or jid) for jid, j in jobs.items()}
-
     for jid, name in names.items():
         shown = name
         matrix = jobs[jid].get("strategy", {}).get("matrix", {}).get("include", [])
@@ -49,12 +51,36 @@ def main():
         if len(shown) > MAX_JOB_NAME:
             failures.append(f"job display name too long ({len(shown)}): {jid} -> {shown!r}")
 
+    prusawf = yaml.safe_load(PRUSA30_WORKFLOW.read_text())
+    prusajobs = prusawf.get("jobs", {})
+    prusanames = {jid: (j.get("name") or jid) for jid, j in prusajobs.items()}
+
     required = ruleset_contexts()
-    print(f"job names: {sorted(names.values())}")
+    print(f"native job names: {sorted(names.values())}")
+    print(f"prusa30 job names: {sorted(prusanames.values())}")
     print(f"required checks: {sorted(required)}")
     for ctx in required:
-        if ctx not in names.values():
-            failures.append(f"required check {ctx!r} matches no job name")
+        if ctx not in list(names.values()) + list(prusanames.values()):
+            failures.append(f"required check {ctx!r} matches no job name in either workflow")
+
+    gate_id = next(
+        (jid for jid, j in prusajobs.items() if (j.get("name") or jid) == "prusa30-gate"),
+        None,
+    )
+    if gate_id is None:
+        failures.append("prusa30-headless.yml must define a job named 'prusa30-gate'")
+    else:
+        gate_needs = prusajobs[gate_id].get("needs", [])
+        prusa30_only = [
+            jid
+            for jid in prusajobs
+            if jid != gate_id and jid != "prusa30-changes"
+        ]
+        missing = set(prusa30_only) - set(gate_needs)
+        if missing:
+            failures.append(
+                f"prusa30-gate must needs: every heavy stage; missing: {sorted(missing)}"
+            )
 
     # OCCT static-link guard: OCCT must be statically linked into libslic3r.so
     # (engine imports .a archives, gc-sections'd) — it must NOT be packaged or

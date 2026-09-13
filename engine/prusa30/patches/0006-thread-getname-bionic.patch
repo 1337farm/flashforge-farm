@@ -1,0 +1,21 @@
+# 0006: stub get_current_thread_name() on Android (bionic has only
+# pthread_setname_np, not pthread_getname_np, which the generic posix
+# branch calls unconditionally). Matches upstream's existing "not
+# supported" pattern used for the Apple branch.
+diff --git a/src/libslic3r/src/libslic3r/Thread.cpp b/src/libslic3r/src/libslic3r/Thread.cpp
+--- a/src/libslic3r/src/libslic3r/Thread.cpp
++++ b/src/libslic3r/src/libslic3r/Thread.cpp
+@@ -187,8 +187,13 @@
+ 
+ std::optional<std::string> get_current_thread_name()
+ {
++// bionic has no pthread_getname_np
++#ifndef __ANDROID__
+ 	char buf[16];
+ 	return std::string(pthread_getname_np(pthread_self(), buf, 16) == 0 ? buf : "");
++#else
++	return std::nullopt;
++#endif
+ }
+ 
+ #endif

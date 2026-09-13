@@ -6,6 +6,12 @@
       "url": "https://github.com/boostorg/boost/releases/download/boost-1.86.0/boost-1.86.0-cmake.zip",
       "version": "1.86.0"
     },
+    "Blosc": {
+      "cmake": "deps/+Blosc/Blosc.cmake",
+      "sha256": "1919c97d55023c04aa8771ea8235b63e9da3c22e3d2a68340b33710d19c2a2eb",
+      "url": "https://github.com/Blosc/c-blosc/archive/refs/tags/v1.21.6.zip",
+      "version": "1.21.6"
+    },
     "CGAL": {
       "cmake": "deps/+CGAL/CGAL.cmake",
       "sha256": "29acaeee5a76a95029fac23131bb1c3a4a75df9a0e7e43b465a1f32d0628f45d",
@@ -18,11 +24,29 @@
       "url": "https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.zip",
       "version": "3.4.0"
     },
+    "JPEG": {
+      "cmake": "deps/+JPEG/JPEG.cmake",
+      "sha256": "d6d99e693366bc03897677650e8b2dfa76b5d6c54e2c9e70c03f0af821b0a52f",
+      "url": "https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.0.1.zip",
+      "version": "3.0.1"
+    },
     "GMP": {
       "cmake": "deps/+GMP/GMP.cmake",
       "sha256": "eae9326beb4158c386e39a356818031bd28f3124cf915f8c5b1dc4c7a36b4d7c",
       "url": "https://gmplib.org/download/gmp/gmp-6.2.1.tar.bz2",
       "version": "6.2.1"
+    },
+    "heatshrink": {
+      "cmake": "deps/+heatshrink/heatshrink.cmake",
+      "sha256": "2e2db2366bdf36cb450f0b3229467cbc6ea81a8c690723e4227b0b46f92584fe",
+      "url": "https://github.com/atomicobject/heatshrink/archive/refs/tags/v0.4.1.zip",
+      "version": "0.4.1"
+    },
+    "LibBGCode": {
+      "cmake": "deps/+LibBGCode/LibBGCode.cmake",
+      "sha256": "73076348e80315d1c2584f883c6b07637cd847c74bca7e9279e42b56a308f948",
+      "url": "https://github.com/prusa3d/libbgcode/archive/d4da9073616d70a43c151e8c1d7fbff879d2e08a.zip",
+      "version": "0.3.0"
     },
     "Lua": {
       "cmake": "deps/+Lua/Lua.cmake",
@@ -54,11 +78,23 @@
       "url": "https://github.com/openssl/openssl/releases/download/openssl-4.0.1/openssl-4.0.1.tar.gz",
       "version": "4.0.1"
     },
+    "Sol2": {
+      "cmake": "deps/+Sol2/Sol2.cmake",
+      "sha256": "b43e539415956960055f62a9d328fec3fd1ad4f272d6206631b9f022b0b12678",
+      "url": "https://github.com/ThePhD/sol2/archive/refs/tags/v3.5.0.zip",
+      "version": "3.5.0"
+    },
     "TBB": {
       "cmake": "deps/+TBB/TBB.cmake",
       "sha256": "fe6ca052b5bdd2c6e0616b360c9b0dcbcc46e01bbd0aa8fd0517c17fc58931db",
       "url": "https://github.com/oneapi-src/oneTBB/archive/refs/tags/v2021.12.0.zip",
       "version": "2021.12.0"
+    },
+    "zstd": {
+      "cmake": "deps/+zstd/zstd.cmake",
+      "sha256": "8c29e06cf42aacc1eafc4077ae2ec6c6fcb96a626157e0593d5e82a34fd403c1",
+      "url": "https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz",
+      "version": "1.5.6"
     }
   },
   "headless_modules": [

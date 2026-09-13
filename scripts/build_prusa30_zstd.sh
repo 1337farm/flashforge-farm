@@ -62,7 +62,7 @@ echo "$ZSTD_SHA  zstd-$ZSTD_VER.tar.gz" | sha256sum -c --status - \
 rm -rf "zstd-$ZSTD_VER" "zstd-build"
 mkdir -p "zstd-$ZSTD_VER"
 tar xzf "zstd-$ZSTD_VER.tar.gz" -C "zstd-$ZSTD_VER"
-ZSRC="$(find "zstd-$ZSTD_VER" -maxdepth 3 -name CMakeLists.txt -path '*build/cmake*' \
+ZSRC="$(find "zstd-$ZSTD_VER" -maxdepth 4 -name CMakeLists.txt -path '*build/cmake*' \
     -printf '%h\n' | head -1)"
 [ -n "$ZSRC" ] || { echo "[zstd] ERROR: no build/cmake source" >&2; exit 1; }
 

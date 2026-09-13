@@ -15,6 +15,8 @@ on:
       - "scripts/build_boost.sh"
       - "scripts/build_prusa30_tbb.sh"
       - "scripts/build_prusa30_nlopt.sh"
+      - "scripts/build_prusa30_qhull.sh"
+      - "scripts/build_prusa30_mixer.sh"
       - "scripts/build_prusa30_libassert.sh"
       - "scripts/build_prusa30_expat.sh"
       - "scripts/build_prusa30_png.sh"
@@ -27,6 +29,8 @@ on:
       - "scripts/build_boost.sh"
       - "scripts/build_prusa30_tbb.sh"
       - "scripts/build_prusa30_nlopt.sh"
+      - "scripts/build_prusa30_qhull.sh"
+      - "scripts/build_prusa30_mixer.sh"
       - "scripts/build_prusa30_libassert.sh"
       - "scripts/build_prusa30_expat.sh"
       - "scripts/build_prusa30_png.sh"
@@ -483,11 +487,103 @@ jobs:
           path: engine/prusa30/jniImports/assert
           key: prusa30-assert-${{ hashFiles('scripts/build_prusa30_libassert.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
 
+  build-qhullmix:
+    name: qhullmix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged Qhull+mixer from cache
+        id: qm-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            engine/prusa30/jniImports/qhull
+            engine/prusa30/jniImports/mixer
+          key: prusa30-qhullmix-${{ hashFiles('scripts/build_prusa30_qhull.sh', 'scripts/build_prusa30_mixer.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored Qhull+mixer
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.qm-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            find engine/prusa30/jniImports/qhull -name 'libqhull*.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/qhull \( -name 'QhullConfig.cmake' -o -name 'qhull-config.cmake' \) | grep -q . || OK=0
+            find engine/prusa30/jniImports/mixer -name 'libprusa_fdm_mixer.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/mixer -name 'prusa_fdm_mixerConfig.cmake' -o -name 'prusa_fdm_mixer-config.cmake' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch PrusaSlicer 3.0 source for mixer overlay
+        if: steps.validate.outputs.need == '1'
+        run: |
+          # mixer build needs upstream's deps/+prusa_fdm_mixer overlay files.
+          # Shallow blob fetch (no full tree checkout needed here).
+          chmod +x engine/prusa30/fetch_prusaslicer.sh
+          PRUSA_REF="$PRUSA_REF" PRUSA_DIR=/tmp/prusa-overlay PRUSA_SHALLOW=1 ./engine/prusa30/fetch_prusaslicer.sh
+          test -f /tmp/prusa-overlay/deps/+prusa_fdm_mixer/CMakeLists.txt \
+            || { echo "ERROR: mixer overlay missing"; exit 1; }
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build Qhull + prusa-fdm-mixer from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_qhull.sh scripts/build_prusa30_mixer.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/qhull" \
+            ./scripts/build_prusa30_qhull.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/mixer" \
+            PRUSA_UP=/tmp/prusa-overlay \
+            ./scripts/build_prusa30_mixer.sh
+
+      - name: Verify staged Qhull+mixer exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          find engine/prusa30/jniImports/qhull -name 'libqhull*.a' | grep -q . \
+            || { echo "ERROR: no qhull static libs staged"; exit 1; }
+          find engine/prusa30/jniImports/qhull \( -name 'QhullConfig.cmake' -o -name 'qhull-config.cmake' \) | grep -q . \
+            || { echo "ERROR: no Qhull config staged"; exit 1; }
+          find engine/prusa30/jniImports/mixer -name 'libprusa_fdm_mixer.a' | grep -q . \
+            || { echo "ERROR: no libprusa_fdm_mixer.a staged"; exit 1; }
+          find engine/prusa30/jniImports/mixer -name 'prusa_fdm_mixerConfig.cmake' -o -name 'prusa_fdm_mixer-config.cmake' | grep -q . \
+            || { echo "ERROR: no mixer config staged"; exit 1; }
+          echo "Qhull + prusa-fdm-mixer staged and verified"
+
+      - name: Save staged Qhull+mixer
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            engine/prusa30/jniImports/qhull
+            engine/prusa30/jniImports/mixer
+          key: prusa30-qhullmix-${{ hashFiles('scripts/build_prusa30_qhull.sh', 'scripts/build_prusa30_mixer.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
   headless-build:
     name: headless
     runs-on: ubuntu-24.04
     timeout-minutes: 180
-    needs: [build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert]
+    needs: [build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix]
     permissions:
       contents: read
       actions: read
@@ -633,6 +729,23 @@ jobs:
             || { echo "ERROR: staged libassert missing config"; exit 1; }
           echo "libassert v2.2.1 present and verified"
 
+      - name: Restore staged Qhull+mixer from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            engine/prusa30/jniImports/qhull
+            engine/prusa30/jniImports/mixer
+          key: prusa30-qhullmix-${{ hashFiles('scripts/build_prusa30_qhull.sh', 'scripts/build_prusa30_mixer.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged Qhull+mixer exactly
+        run: |
+          find engine/prusa30/jniImports/qhull -name 'libqhull*.a' | grep -q . \
+            || { echo "ERROR: staged qhull missing libs"; exit 1; }
+          find engine/prusa30/jniImports/mixer -name 'libprusa_fdm_mixer.a' | grep -q . \
+            || { echo "ERROR: staged mixer missing lib"; exit 1; }
+          echo "Qhull + prusa-fdm-mixer present and verified"
+
       - name: Configure headless 3.0 build (arm64-v8a)
         env:
           # Upstream FindNLopt reads the NLOPT *environment* variable:
@@ -670,6 +783,14 @@ jobs:
           NANOSVG_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/nanosvg" -name NanoSVGConfig.cmake -printf '%h\n' | head -1)"
           test -n "$NANOSVG_CMAKE_DIR" || { echo "ERROR: NanoSVGConfig.cmake not staged"; exit 1; }
           echo "NanoSVG config dir: $NANOSVG_CMAKE_DIR"
+          # Qhull + mixer live in sibling prefixes; resolve either Qhull
+          # config-file casing (year-2000 CMake names vary by version).
+          QHULL_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/qhull" \( -name QhullConfig.cmake -o -name qhull-config.cmake \) -printf '%h\n' | head -1)"
+          test -n "$QHULL_CMAKE_DIR" || { echo "ERROR: Qhull config not staged"; exit 1; }
+          echo "Qhull config dir: $QHULL_CMAKE_DIR"
+          MIXER_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/mixer" \( -name prusa_fdm_mixerConfig.cmake -o -name prusa_fdm_mixer-config.cmake \) -printf '%h\n' | head -1)"
+          test -n "$MIXER_CMAKE_DIR" || { echo "ERROR: mixer config not staged"; exit 1; }
+          echo "mixer config dir: $MIXER_CMAKE_DIR"
           # Same for libassert: resolve whichever config name its install used.
           ASSERT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/assert" \( -name libassert-config.cmake -o -name libassertConfig.cmake \) -printf '%h\n' | head -1)"
           test -n "$ASSERT_CMAKE_DIR" || { echo "ERROR: libassert config not staged"; exit 1; }
@@ -728,6 +849,8 @@ jobs:
             -DEXPAT_DIR="$EXPAT_CMAKE_DIR" \
             -Dfmt_DIR="$FMT_CMAKE_DIR" \
             -Dlibassert_DIR="$ASSERT_CMAKE_DIR" \
+            -DQhull_DIR="$QHULL_CMAKE_DIR" \
+            -Dprusa_fdm_mixer_DIR="$MIXER_CMAKE_DIR" \
             -Dcpptrace_DIR="$CPPTRACE_CMAKE_DIR" \
             -Dspdlog_DIR="$SPDLOG_CMAKE_DIR" \
             -Dcereal_DIR="$CEREAL_CMAKE_DIR" \

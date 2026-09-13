@@ -2029,8 +2029,12 @@ jobs:
           echo "Lua include: $LUA_INC lib: $LUA_LIB math: ${LUA_MATH_LIB:-<auto>}"
           SOL2_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/sol2" -name sol2-config.cmake -printf '%h\n' | head -1)"
           test -n "$SOL2_CMAKE_DIR" || { echo "ERROR: sol2-config.cmake not staged"; exit 1; }
-          echo "sol2 config dir: $SOL2_CMAKE_DIR"
-          cmake -S "$(pwd)/engine/build/prusaslicer-src" -B build/prusa30 \
+           echo "sol2 config dir: $SOL2_CMAKE_DIR"
+           # SLIC3R_PCH=OFF (below): REUSE_FROM targets (slic3r-biz-*) get usage
+           # requirements (qhull etc.) the slic3r-domain PCH wasn't built with, so
+           # clang rejects the reused PCH ("POSIX thread support was disabled in
+           # PCH file but is currently enabled"); headless API needs no PCH.
+           cmake -S "$(pwd)/engine/build/prusaslicer-src" -B build/prusa30 \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_STL=c++_shared \
@@ -2042,6 +2046,7 @@ jobs:
             -DSLIC3R_GUI=OFF \
             -DSLIC3R_ENABLE_FORMAT_STEP=OFF \
             -DSLIC3R_BUILD_TESTS=OFF \
+            -DSLIC3R_PCH=OFF \
             -DCMAKE_PREFIX_PATH="$(pwd)/engine/prusa30/jniImports" \
             -DBOOST_ROOT="$(pwd)/engine/prusa30/jniImports/boost" \
             -DBoost_ROOT="$(pwd)/engine/prusa30/jniImports/boost" \

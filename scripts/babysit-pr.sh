@@ -7,7 +7,7 @@
 # reports, then run it again — that is the loop.
 #
 # Usage:
-#   scripts/babysit-pr.sh <PR> [interval_sec=60] [max_polls=60] [--apk [out-dir]]
+#   scripts/babysit-pr.sh <PR> [interval_sec=60] [max_polls=60] [--apk[=dir]] [--latest-apk[=dir]] [--pr-apk[=dir]] [--prune=dir] [--no-prune]
 #
 # With --apk, after the merge the script keeps going: it waits for main's
 # native pipeline run for the merge commit (push event or automerge
@@ -15,8 +15,20 @@
 # (artifact FlashForgeFarm-Debug-APK, falling back to the farm-apk-latest
 # release) into out-dir (default ./apk-out).
 #
+# With --pr-apk, no merge is needed: downloads FlashForgeFarm-Debug-APK from
+# the PR's own apk run immediately (fastest iteration feedback).
+#
+# With --latest-apk, after the merge the script waits for main's native run
+# on the merge commit, then downloads the republished farm-apk-latest
+# release APK into dir (default ./apk-out).
+#
+# With --prune=dir, skips CI entirely and just prunes dir immediately
+# (keeps only the newest FlashForgeFarm_*.apk plus the newest 2 *.log,
+# deleting the rest as stale). Useful for cleaning the device Downloads
+# folder. Pruning only ever touches those filename patterns.
+#
 # Exit codes:
-#   0  PR merged (+ APK downloaded with --apk), or all checks pass and mergeable
+#   0  PR merged (+ APK downloaded with --apk/--latest-apk/--pr-apk), or all checks pass and mergeable
 #   1  a check failed, the main run failed, or the APK download failed
 #   2  PR cannot run CI at all (CONFLICTING: GitHub can't build the preview
 #      merge ref, so no runs will ever trigger — merge main first)
@@ -30,23 +42,46 @@
 set -uo pipefail
 
 [ -d /data/data/com.termux/files/usr/bin ] && export PATH="$PATH:/data/data/com.termux/files/usr/bin"
+export HOME="${HOME:-/data/data/com.termux/files/home}"
+export TMPDIR="${TMPDIR:-$HOME/.cache/babysit-tmp}"
+mkdir -p "$TMPDIR"
 
 PR=""
 INTERVAL=60
 MAX_POLLS=60
 WANT_APK=0
 APK_DIR="./apk-out"
+WANT_PR_APK=0
+PR_APK_DIR="./apk-out"
+WANT_LATEST=0
+LATEST_DIR="./apk-out"
+WANT_PRUNE=0
+PRUNE_DIR=""
+PRUNE_AFTER_FETCH=1
 for arg in "$@"; do
     case "$arg" in
         --apk) WANT_APK=1 ;;
         --apk=*) WANT_APK=1; APK_DIR="${arg#--apk=}" ;;
+        --pr-apk) WANT_PR_APK=1 ;;
+        --pr-apk=*) WANT_PR_APK=1; PR_APK_DIR="${arg#--pr-apk=}" ;;
+        --latest-apk) WANT_LATEST=1 ;;
+        --latest-apk=*) WANT_LATEST=1; LATEST_DIR="${arg#--latest-apk=}" ;;
+        --prune=*) WANT_PRUNE=1; PRUNE_DIR="${arg#--prune=}" ;;
+        --no-prune) PRUNE_AFTER_FETCH=0 ;;
         *) if [ -z "$PR" ]; then PR="$arg";
            elif [ "$INTERVAL" = "60" ]; then INTERVAL="$arg";
            elif [ "$MAX_POLLS" = "60" ]; then MAX_POLLS="$arg";
-           else echo "usage: $0 <PR> [interval_sec] [max_polls] [--apk[=dir]]" >&2; exit 3; fi ;;
+           else echo "usage: $0 <PR> [interval_sec] [max_polls] [--apk[=dir]] [--latest-apk[=dir]] [--pr-apk[=dir]] [--prune=dir] [--no-prune]" >&2; exit 3; fi ;;
     esac
 done
-[ -n "$PR" ] || { echo "usage: $0 <PR> [interval_sec] [max_polls] [--apk[=dir]]" >&2; exit 3; }
+if [ "$WANT_PRUNE" = "1" ]; then
+    [ -n "$PRUNE_DIR" ] || { echo "usage: $0 --prune=dir" >&2; exit 3; }
+    [ -d "$PRUNE_DIR" ] || { echo "babysit: not a directory: $PRUNE_DIR" >&2; exit 3; }
+    PRUNE_ONLY=1
+else
+    PRUNE_ONLY=0
+    [ -n "$PR" ] || { echo "usage: $0 <PR> [interval_sec] [max_polls] [--apk[=dir]] [--latest-apk[=dir]] [--pr-apk[=dir]] [--prune=dir]" >&2; exit 3; }
+fi
 command -v gh >/dev/null || { echo "babysit: gh CLI not found" >&2; exit 3; }
 
 APK_ARTIFACT="FlashForgeFarm-Debug-APK"
@@ -68,6 +103,34 @@ wait_for_run() {
     done
     echo "babysit: timed out waiting for $phase run $run_id." >&2
     return 3
+}
+
+# Remove stale siblings in a download dir. APKs live loose, so scan the dir;
+# keep only the newest FlashForgeFarm_*.apk and the newest 2 *.log files.
+# Removal failures are reported loudly (never silently swallowed) but do not
+# fail the run — the download is the deliverable.
+prune_downloads() {
+    local dir="$1" f="" i=0 failed=0
+    local apks=()
+    while IFS= read -r f; do apks+=("$f"); done < <(ls -t "$dir"/FlashForgeFarm_*.apk 2>/dev/null || true)
+    if [ "${#apks[@]}" -gt 0 ]; then
+        for f in "${apks[@]:1}"; do
+            echo "babysit: removing stale APK: $f"
+            rm -f "$f" || { echo "babysit: WARNING: could not remove $f" >&2; failed=1; }
+        done
+    fi
+    i=0
+    while IFS= read -r f; do
+        i=$((i + 1))
+        if [ "$i" -gt 2 ]; then
+            echo "babysit: removing stale log: $f"
+            rm -f "$f" || { echo "babysit: WARNING: could not remove $f" >&2; failed=1; }
+        fi
+    done < <(ls -t "$dir"/*.log 2>/dev/null || true)
+    if [ "$failed" -ne 0 ]; then
+        echo "babysit: WARNING: some stale files could not be removed (see above)." >&2
+    fi
+    return 0
 }
 
 # After the merge: find main's native pipeline run for the merge commit,
@@ -93,14 +156,12 @@ fetch_merge_apk() {
         return 1
     }
     mkdir -p "$APK_DIR"
-    # gh stages artifact zips through $TMPDIR; when the inherited TMPDIR is
-    # missing or not writable (restricted sandboxes/CI), point it at the
-    # output dir instead of failing with a zip permission error.
-    _TMP="${TMPDIR:-/tmp}"
-    [ -w "$_TMP" ] || export TMPDIR="$APK_DIR"
     if gh run download "$run_id" -n "$APK_ARTIFACT" -D "$APK_DIR" 2>/dev/null; then
         echo "babysit: APK downloaded to $APK_DIR:"
-        ls -la "$APK_DIR"/*.apk
+        ls -lh "$APK_DIR"
+        if [ "$PRUNE_AFTER_FETCH" = "1" ]; then
+            prune_downloads "$APK_DIR"
+        fi
         return 0
     fi
     echo "babysit: artifact gone (retention?); falling back to farm-apk-latest release..."
@@ -108,10 +169,74 @@ fetch_merge_apk() {
         echo "babysit: APK download failed from artifact and release." >&2
         return 1
     }
-    ls -la "$APK_DIR"/*.apk
+    ls -lh "$APK_DIR"/*.apk
+    if [ "$PRUNE_AFTER_FETCH" = "1" ]; then
+        prune_downloads "$APK_DIR"
+    fi
     return 0
 }
 
+# No merge needed: download the APK artifact from the PR's own apk run.
+fetch_pr_apk() {
+    local pr="$1" run_id=""
+    run_id="$(gh pr checks "$pr" 2>/dev/null | grep -oP 'runs/\K[0-9]+' | head -1)"
+    [ -n "$run_id" ] || { echo "babysit: no workflow run found for PR #$pr." >&2; return 3; }
+    mkdir -p "$PR_APK_DIR"
+    if gh run download "$run_id" -n "$APK_ARTIFACT" -D "$PR_APK_DIR" 2>&1 | tail -1; then
+        echo "babysit: APK downloaded to $PR_APK_DIR:"
+        ls -lh "$PR_APK_DIR"
+        if [ "$PRUNE_AFTER_FETCH" = "1" ]; then
+            prune_downloads "$PR_APK_DIR"
+        fi
+        return 0
+    fi
+    echo "babysit: APK download failed for run $run_id." >&2
+    return 3
+}
+
+# After the merge: wait for main's native run on the merge commit, then
+# download the republished farm-apk-latest release APK.
+fetch_latest_apk() {
+    local pr="$1" n=0 done=0 sha="" run_id="" status="" concl=""
+    sha="$(gh pr view "$pr" --json mergeCommit --jq .mergeCommit.oid 2>/dev/null || echo "")"
+    [ -n "$sha" ] || { echo "babysit: PR #$pr has no merge commit yet." >&2; return 3; }
+    echo "babysit: waiting for main native run on merge commit $sha..."
+    while [ "$n" -lt "$MAX_POLLS" ]; do
+        n=$((n + 1))
+        run_id="$(gh run list --workflow=native-engine-build.yml --branch main --limit 10 \
+            --json databaseId,headSha,status,conclusion \
+            --jq "[.[] | select(.headSha==\"$sha\")] | .[0] | .databaseId // empty" 2>/dev/null || echo "")"
+        if [ -z "$run_id" ]; then
+            echo "babysit: main run for $sha not started yet... [$n/$MAX_POLLS]"
+        else
+            status="$(gh run view "$run_id" --json status --jq .status 2>/dev/null || echo UNKNOWN)"
+            concl="$(gh run view "$run_id" --json conclusion --jq .conclusion 2>/dev/null || echo "")"
+            if [ "$status" = "completed" ]; then
+                if [ "$concl" = "success" ]; then
+                    echo "babysit: main run $run_id succeeded."
+                    done=1
+                    break
+                fi
+                echo "babysit: main run $run_id concluded: ${concl:-unknown}." >&2
+                return 1
+            fi
+            echo "babysit: main run $run_id $status... [$n/$MAX_POLLS]"
+        fi
+        sleep "$INTERVAL"
+    done
+    if [ "$done" != "1" ]; then
+        echo "babysit: timed out waiting for main run on $sha." >&2
+        return 3
+    fi
+    mkdir -p "$LATEST_DIR"
+    gh release download farm-apk-latest --pattern '*.apk' --dir "$LATEST_DIR" --clobber >/dev/null \
+        || { echo "babysit: latest-release APK download failed." >&2; return 3; }
+    echo "babysit: latest APK downloaded to $LATEST_DIR:"
+    ls -lh "$LATEST_DIR"
+    prune_downloads "$LATEST_DIR"
+}
+
+if [ "$PRUNE_ONLY" = "0" ]; then
 poll=0
 EMPTY_CHECKS=0
 while [ "$poll" -lt "$MAX_POLLS" ]; do
@@ -120,12 +245,7 @@ while [ "$poll" -lt "$MAX_POLLS" ]; do
     if [ "$STATE" = "MERGED" ]; then
         MERGED_AT="$(gh pr view "$PR" --json mergedAt --jq .mergedAt 2>/dev/null || echo unknown)"
         echo "babysit: PR #$PR is MERGED (at $MERGED_AT)."
-        if [ "$WANT_APK" = "1" ]; then
-            fetch_merge_apk "$PR"
-            exit $?
-        fi
-        echo "babysit: Done."
-        exit 0
+        break
     fi
     if [ "$STATE" = "CLOSED" ]; then
         echo "babysit: PR #$PR is CLOSED unmerged." >&2
@@ -149,20 +269,44 @@ while [ "$poll" -lt "$MAX_POLLS" ]; do
         continue
     fi
     echo "babysit: [$poll/$MAX_POLLS] checks on PR #$PR:"
-    printf '%s\n' "$CHECKS" | head -15
-    if printf '%s\n' "$CHECKS" | grep -Eq "^[^[:space:]]+[[:space:]]+fail"; then
+    printf '%s\n' "$CHECKS" | sed 's/^/babysit: /' | head -15
+    if printf '%s\n' "$CHECKS" | awk '{print $2}' | grep -qx "fail"; then
         echo "babysit: FAILURES detected:" >&2
-        printf '%s\n' "$CHECKS" | grep -E "^[^[:space:]]+[[:space:]]+fail" >&2
+        printf '%s\n' "$CHECKS" | awk '$2 == "fail"' | sed 's/^/babysit: /' >&2
         echo "babysit: investigate with: gh run view <run-id> --log-failed" >&2
         exit 1
     fi
-    if printf '%s\n' "$CHECKS" | grep -Eq "pending|queued|in_progress|waiting|requested"; then
-        echo "babysit: still running; sleeping ${INTERVAL}s..."
-        sleep "$INTERVAL"
-        continue
+    if ! printf '%s\n' "$CHECKS" | awk '{print $2}' | grep -Eq "pending|queued|in_progress|waiting|requested"; then
+        echo "babysit: all reported checks pass on PR #$PR."
+        break
     fi
-    echo "babysit: all reported checks pass on PR #$PR."
-    exit 0
+    echo "babysit: still running; sleeping ${INTERVAL}s..."
+    sleep "$INTERVAL"
 done
-echo "babysit: timed out after $MAX_POLLS polls." >&2
-exit 3
+fi
+
+# Post-check phases run even for already-merged PRs (loop above breaks on MERGED).
+if [ "$WANT_APK" = "1" ]; then
+    fetch_merge_apk "$PR"
+    rc=$?
+    [ "$rc" -ne 0 ] && exit "$rc"
+fi
+
+if [ "$WANT_PR_APK" = "1" ]; then
+    fetch_pr_apk "$PR"
+    rc=$?
+    [ "$rc" -ne 0 ] && exit "$rc"
+fi
+
+if [ "$WANT_LATEST" = "1" ]; then
+    fetch_latest_apk "$PR"
+    rc=$?
+    [ "$rc" -ne 0 ] && exit "$rc"
+fi
+
+if [ "$WANT_PRUNE" = "1" ]; then
+    prune_downloads "$PRUNE_DIR"
+fi
+
+echo "babysit: Done."
+exit 0

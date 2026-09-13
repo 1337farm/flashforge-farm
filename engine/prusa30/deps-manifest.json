@@ -78,6 +78,12 @@
       "url": "https://github.com/openssl/openssl/releases/download/openssl-4.0.1/openssl-4.0.1.tar.gz",
       "version": "4.0.1"
     },
+    "Sol2": {
+      "cmake": "deps/+Sol2/Sol2.cmake",
+      "sha256": "b43e539415956960055f62a9d328fec3fd1ad4f272d6206631b9f022b0b12678",
+      "url": "https://github.com/ThePhD/sol2/archive/refs/tags/v3.5.0.zip",
+      "version": "3.5.0"
+    },
     "TBB": {
       "cmake": "deps/+TBB/TBB.cmake",
       "sha256": "fe6ca052b5bdd2c6e0616b360c9b0dcbcc46e01bbd0aa8fd0517c17fc58931db",

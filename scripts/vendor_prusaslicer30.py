@@ -67,6 +67,7 @@ DEP_CMAKE = {
     "JPEG": "JPEG.cmake",
     "Eigen": "Eigen.cmake",
     "Lua": "Lua.cmake",
+    "Sol2": "Sol2.cmake",
 }
 
 RE_URL = re.compile(r'URL\s+"?([^"\s]+)"?')

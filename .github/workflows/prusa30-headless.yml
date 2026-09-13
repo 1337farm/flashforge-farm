@@ -1336,11 +1336,166 @@ jobs:
           path: engine/prusa30/jniImports/jpeg
           key: prusa30-jpeg-3.0.1-${{ hashFiles('scripts/build_prusa30_jpeg.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
 
+  build-lua:
+    name: lua
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged Lua 5.4.8 from cache
+        id: lua-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/lua
+          key: prusa30-lua-5.4.8-${{ hashFiles('scripts/build_prusa30_lua.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored Lua
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.lua-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/lua/include/lua.h || OK=0
+            find engine/prusa30/jniImports/lua -name 'liblua.a' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build Lua 5.4.8 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_lua.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/lua" \
+            ./scripts/build_prusa30_lua.sh
+
+      - name: Verify staged Lua exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/lua/include/lua.h \
+            || { echo "ERROR: lua.h missing"; exit 1; }
+          find engine/prusa30/jniImports/lua -name 'liblua.a' | grep -q . \
+            || { echo "ERROR: no liblua.a staged"; exit 1; }
+          echo "Lua 5.4.8 staged and verified"
+
+      - name: Save staged Lua 5.4.8
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/lua
+          key: prusa30-lua-5.4.8-${{ hashFiles('scripts/build_prusa30_lua.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-sol2:
+    name: sol2
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [prusa30-changes, build-lua]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged Lua 5.4.8 from cache (sol2 build input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/lua
+          key: prusa30-lua-5.4.8-${{ hashFiles('scripts/build_prusa30_lua.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged sol2 v3.5.0 from cache
+        id: sol2-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/sol2
+          key: prusa30-sol2-3.5.0-${{ hashFiles('scripts/build_prusa30_sol2.sh', 'scripts/build_prusa30_lua.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored sol2
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.sol2-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -d engine/prusa30/jniImports/sol2/include/sol || OK=0
+            SOL2_DIR="$(find engine/prusa30/jniImports/sol2 -name sol2-config.cmake -printf '%h\n' | head -1)"
+            test -n "$SOL2_DIR" || OK=0
+            test -f "$SOL2_DIR/sol2-targets.cmake" || OK=0
+            grep -q "sol2::sol2" "$SOL2_DIR/sol2-targets.cmake" || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build sol2 v3.5.0 from source (header-only)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_sol2.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/sol2" \
+            LUA_STAGE="$(pwd)/engine/prusa30/jniImports/lua" \
+            ./scripts/build_prusa30_sol2.sh
+
+      - name: Verify staged sol2 exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -d engine/prusa30/jniImports/sol2/include/sol \
+            || { echo "ERROR: sol/ headers missing"; exit 1; }
+          SOL2_DIR="$(find engine/prusa30/jniImports/sol2 -name sol2-config.cmake -printf '%h\n' | head -1)"
+          test -n "$SOL2_DIR" || { echo "ERROR: sol2-config.cmake missing"; exit 1; }
+          test -f "$SOL2_DIR/sol2-targets.cmake" \
+            || { echo "ERROR: sol2-targets.cmake missing"; exit 1; }
+          grep -q "sol2::sol2" "$SOL2_DIR/sol2-targets.cmake" \
+            || { echo "ERROR: sol2::sol2 target missing"; exit 1; }
+          echo "sol2 v3.5.0 staged and verified"
+
+      - name: Save staged sol2 v3.5.0
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/sol2
+          key: prusa30-sol2-3.5.0-${{ hashFiles('scripts/build_prusa30_sol2.sh', 'scripts/build_prusa30_lua.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
   headless-build:
     name: headless
     runs-on: ubuntu-24.04
     timeout-minutes: 180
-    needs: [prusa30-changes, build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix, build-gmpcgal, build-openssl, build-zstd, build-blosc, build-openvdb, build-heatshrink, build-libbgcode, build-jpeg]
+    needs: [prusa30-changes, build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix, build-gmpcgal, build-openssl, build-zstd, build-blosc, build-openvdb, build-heatshrink, build-libbgcode, build-jpeg, build-lua, build-sol2]
     if: needs.prusa30-changes.outputs.prusa30 == 'true'
     permissions:
       contents: read
@@ -1642,6 +1797,36 @@ jobs:
             || { echo "ERROR: staged libjpeg missing libjpeg.a"; exit 1; }
           echo "libjpeg-turbo 3.0.1 present and verified"
 
+      - name: Restore staged Lua 5.4.8 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/lua
+          key: prusa30-lua-5.4.8-${{ hashFiles('scripts/build_prusa30_lua.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged Lua exactly
+        run: |
+          test -f engine/prusa30/jniImports/lua/include/lua.h \
+            || { echo "ERROR: staged lua missing lua.h"; exit 1; }
+          find engine/prusa30/jniImports/lua -name 'liblua.a' | grep -q . \
+            || { echo "ERROR: staged lua missing liblua.a"; exit 1; }
+          echo "Lua 5.4.8 present and verified"
+
+      - name: Restore staged sol2 v3.5.0 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/sol2
+          key: prusa30-sol2-3.5.0-${{ hashFiles('scripts/build_prusa30_sol2.sh', 'scripts/build_prusa30_lua.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged sol2 exactly
+        run: |
+          test -d engine/prusa30/jniImports/sol2/include/sol \
+            || { echo "ERROR: staged sol2 missing sol/ headers"; exit 1; }
+          find engine/prusa30/jniImports/sol2 -name sol2-config.cmake | grep -q . \
+            || { echo "ERROR: staged sol2 missing sol2-config.cmake"; exit 1; }
+          echo "sol2 v3.5.0 present and verified"
+
       - name: Configure headless 3.0 build (arm64-v8a)
         env:
           # Upstream FindNLopt reads the NLOPT *environment* variable:
@@ -1817,6 +2002,27 @@ jobs:
           BGCODE_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/bgcode" -name LibBGCodeConfig.cmake -printf '%h\n' | head -1)"
           test -n "$BGCODE_CMAKE_DIR" || { echo "ERROR: LibBGCodeConfig.cmake not staged"; exit 1; }
           echo "LibBGCode config dir: $BGCODE_CMAKE_DIR"
+          # Lua + sol2 (slic3r-biz-lua): find_package(Lua REQUIRED) uses the
+          # standard FindLua module (preset vars; version auto-detected from
+          # the staged lua.h). sol2::sol2 is header-only, resolved in config
+          # mode via the staged sol2-config.cmake — pass the exact package dir.
+          LUA_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/lua" -name lua.h | head -1)")"
+          test -n "$LUA_INC" || { echo "ERROR: staged lua.h missing"; exit 1; }
+          LUA_LIB="$(find "$(pwd)/engine/prusa30/jniImports/lua" -name 'liblua.a' | head -1)"
+          test -n "$LUA_LIB" || { echo "ERROR: staged liblua.a missing"; exit 1; }
+          # Android has no separate libm; FindLua would otherwise bake
+          # LUA_MATH_LIBRARY-NOTFOUND into LUA_LIBRARIES. Pre-seed it from the
+          # NDK sysroot stub when present (fall back to FindLua's own search).
+          LUA_MATH_LIB="$(find "$ANDROID_NDK_ROOT" \( -name 'libm.a' -o -name 'libm.so' \) | head -1 || true)"
+          if [ -n "$LUA_MATH_LIB" ]; then
+            LUA_FLAGS=(-DLUA_MATH_LIBRARY="$LUA_MATH_LIB")
+          else
+            LUA_FLAGS=()
+          fi
+          echo "Lua include: $LUA_INC lib: $LUA_LIB math: ${LUA_MATH_LIB:-<auto>}"
+          SOL2_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/sol2" -name sol2-config.cmake -printf '%h\n' | head -1)"
+          test -n "$SOL2_CMAKE_DIR" || { echo "ERROR: sol2-config.cmake not staged"; exit 1; }
+          echo "sol2 config dir: $SOL2_CMAKE_DIR"
           cmake -S "$(pwd)/engine/build/prusaslicer-src" -B build/prusa30 \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a \
@@ -1879,7 +2085,11 @@ jobs:
             -Dheatshrink_DIR="$HEATSHRINK_CMAKE_DIR" \
             -DLibBGCode_DIR="$BGCODE_CMAKE_DIR" \
             -DJPEG_LIBRARY="$JPEG_LIB" \
-            -DJPEG_INCLUDE_DIR="$JPEG_INC"
+            -DJPEG_INCLUDE_DIR="$JPEG_INC" \
+            -DLUA_INCLUDE_DIR="$LUA_INC" \
+            -DLUA_LIBRARY="$LUA_LIB" \
+            "${LUA_FLAGS[@]}" \
+            -Dsol2_DIR="$SOL2_CMAKE_DIR"
 
       - name: Build headless core (libslic3r)
         run: |
@@ -1916,6 +2126,8 @@ jobs:
       - build-heatshrink
       - build-libbgcode
       - build-jpeg
+      - build-lua
+      - build-sol2
       - headless-build
     steps:
       - name: Gate every prusa30 stage result
@@ -1942,6 +2154,8 @@ jobs:
             "heatshrink=${{ needs.build-heatshrink.result }}" \
             "libbgcode=${{ needs.build-libbgcode.result }}" \
             "jpeg=${{ needs.build-jpeg.result }}" \
+            "lua=${{ needs.build-lua.result }}" \
+            "sol2=${{ needs.build-sol2.result }}" \
             "headless=${{ needs.headless-build.result }}" \
           ; do
             name="${kv%%=*}"; res="${kv#*=}"
@@ -1951,4 +2165,4 @@ jobs:
             echo "ERROR: prusa30 pipeline red:$BAD"
             exit 1
           fi
-          echo "prusa30 pipeline fully green (all 16 stages success)"
+          echo "prusa30 pipeline fully green (all 18 stages success)"

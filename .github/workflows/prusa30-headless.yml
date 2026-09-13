@@ -988,6 +988,7 @@ jobs:
             -DSLIC3R_BUILD_TESTS=OFF \
             -DCMAKE_PREFIX_PATH="$(pwd)/engine/prusa30/jniImports" \
             -DBOOST_ROOT="$(pwd)/engine/prusa30/jniImports/boost" \
+            -DBoost_ROOT="$(pwd)/engine/prusa30/jniImports/boost" \
             -DBoost_INCLUDE_DIR="$(pwd)/engine/prusa30/jniImports/boost/include" \
             -DBoost_LIBRARY_DIR="$(pwd)/engine/prusa30/jniImports/boost/lib/arm64-v8a/lib" \
             -DBoost_ARCHITECTURE="-a64" \

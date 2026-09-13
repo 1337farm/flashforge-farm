@@ -6,26 +6,48 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.util.AttributeSet;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 
 public class SpinningPreviewView extends View {
     private static final int MAX_BUF = 144;
-    // ~0.7 rad/s at 60fps: a calm ~9s revolution. 0.05 was a half-second blur.
-    private static final float STEP = 0.012f;
-    private static final float TILT = -0.35f;
+    /** Slow turntable: full revolution in ~12s (was STEP/frame ~2s/rev). */
+    private static final float AUTO_SPEED = 0.52f;
+    private static final float DEFAULT_TILT = -0.35f;
+    /** Preview frame cap: tiny previews don't need 60fps of CPU rasterizing. */
+    private static final long FRAME_MS = 66;
+    /** Idle delay before auto-rotate resumes after a drag. */
+    private static final long RESUME_MS = 2500;
 
     private GalleryMesh mesh;
     private float[] normals;
     private float cx, cy, cz, radius;
-    private float angle;
+    private float yaw;
+    private float pitch = DEFAULT_TILT;
 
     private Bitmap bitmap;
     private int[] pixels;
     private float[] depth;
     private int bufSize;
     private boolean running;
+    private long lastFrameMs;
+    private long resumeAtMs;
     private final Paint paint = new Paint();
     private final RectF dstRect = new RectF();
+
+    private boolean dragging;
+    private boolean moved;
+    private float lastX, lastY, downX, downY;
+    private int touchSlop = -1;
+    private final Runnable longPress = new Runnable() {
+        @Override
+        public void run() {
+            if (dragging && !moved && getParent() instanceof View) {
+                ((View) getParent()).performLongClick();
+            }
+        }
+    };
 
     public SpinningPreviewView(Context context) {
         super(context);
@@ -84,13 +106,66 @@ public class SpinningPreviewView extends View {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         running = true;
+        lastFrameMs = 0;
         postInvalidateOnAnimation();
     }
 
     @Override
     protected void onDetachedFromWindow() {
         running = false;
+        removeCallbacks(longPress);
         super.onDetachedFromWindow();
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (touchSlop < 0) touchSlop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                dragging = true;
+                moved = false;
+                downX = lastX = event.getX();
+                downY = lastY = event.getY();
+                resumeAtMs = Long.MAX_VALUE;
+                postDelayed(longPress, ViewConfiguration.getLongPressTimeout());
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                if (!dragging) break;
+                float dx = event.getX() - lastX;
+                float dy = event.getY() - lastY;
+                if (!moved && Math.hypot(event.getX() - downX, event.getY() - downY) > touchSlop) {
+                    moved = true;
+                    removeCallbacks(longPress);
+                    if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+                }
+                if (moved) {
+                    yaw += dx * 0.012f;
+                    pitch = Math.max(-1.2f, Math.min(0.3f, pitch + dy * 0.012f));
+                    resumeAtMs = android.os.SystemClock.uptimeMillis() + RESUME_MS;
+                    lastX = event.getX();
+                    lastY = event.getY();
+                    invalidate();
+                }
+                return true;
+            case MotionEvent.ACTION_UP:
+                removeCallbacks(longPress);
+                if (dragging && !moved && getParent() instanceof View) {
+                    ((View) getParent()).performClick();
+                }
+                dragging = false;
+                if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
+                resumeAtMs = android.os.SystemClock.uptimeMillis() + RESUME_MS;
+                postInvalidateOnAnimation();
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                removeCallbacks(longPress);
+                dragging = false;
+                if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
+                resumeAtMs = android.os.SystemClock.uptimeMillis() + RESUME_MS;
+                postInvalidateOnAnimation();
+                return true;
+        }
+        return super.onTouchEvent(event);
     }
 
     @Override
@@ -114,9 +189,14 @@ public class SpinningPreviewView extends View {
             dstRect.set(left, top, left + s, top + s);
             canvas.drawBitmap(bitmap, null, dstRect, paint);
         }
-        if (running) {
-            angle += STEP;
-            postInvalidateOnAnimation();
+        if (running && isShown()) {
+            long now = android.os.SystemClock.uptimeMillis();
+            if (lastFrameMs == 0) lastFrameMs = now;
+            if (!dragging && now >= resumeAtMs) {
+                yaw += AUTO_SPEED * (now - lastFrameMs) / 1000f;
+            }
+            lastFrameMs = now;
+            postInvalidateDelayed(FRAME_MS);
         }
     }
 
@@ -125,8 +205,8 @@ public class SpinningPreviewView extends View {
             pixels[i] = 0;
             depth[i] = Float.MAX_VALUE;
         }
-        float cosA = (float) Math.cos(angle), sinA = (float) Math.sin(angle);
-        float cosT = (float) Math.cos(TILT), sinT = (float) Math.sin(TILT);
+        float cosA = (float) Math.cos(yaw), sinA = (float) Math.sin(yaw);
+        float cosT = (float) Math.cos(pitch), sinT = (float) Math.sin(pitch);
         float lx = -0.42f, ly = 0.78f, lz = 0.46f;
         float llen = (float) Math.sqrt(lx * lx + ly * ly + lz * lz);
         lx /= llen;

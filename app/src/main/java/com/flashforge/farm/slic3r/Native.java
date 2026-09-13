@@ -50,6 +50,10 @@ public class Native {
         Log.d(TAG, "All native libs loaded in " + (System.currentTimeMillis() - start) + "ms");
     }
 
+    /** Force static init (lib load + signal-handler install) early. Safe to call repeatedly. */
+    public static void ensureLoaded() {
+    }
+
     /** Build a one-line metadata header embedded in every native crash dump. */
     private static String buildCrashMetadata() {
         // Use reflection so the app tolerates missing BuildConfig fields (e.g. debug builds).

@@ -177,7 +177,14 @@ public class FarmApp extends Application {
             // Persist to Downloads immediately: a report must never wait for
             // an app restart to be visible. Best-effort; never mask the crash.
             try {
-                exportPendingCrashesToDownloads();
+        exportPendingCrashesToDownloads();
+        // Install the native signal handler NOW, not lazily on first slice:
+        // a crash before any Native.* reference would otherwise leave no log.
+        try {
+            com.flashforge.farm.slic3r.Native.ensureLoaded();
+        } catch (Throwable t) {
+            android.util.Log.e("FarmApp", "native load failed", t);
+        }
             } catch (Exception ignored) {
             }
         } catch (Exception ignored) {

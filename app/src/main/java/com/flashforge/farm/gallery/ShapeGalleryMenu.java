@@ -168,9 +168,12 @@ public class ShapeGalleryMenu extends UnfoldMenu {
                     FarmApp.PENDING_CALIB_MODE = 0;
                     FarmApp.PENDING_CALIB_ITEM = null;
                 }
+                // Blocking: service bind + sandbox parse + native load.
+                // Must stay off the UI thread or taps ANR-freeze (an ANR is
+                // not an uncaught exception, so no crash log is written).
+                fragment.loadModel(f);
                 ViewUtils.postOnMainThread(() -> {
                     try {
-                        fragment.loadModel(f);
                         Bus.OBJECTS_LIST_CHANGED.postValue(new ObjectsListChangedEvent());
                         Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuFileOpenFileLoaded));
                     } catch (Throwable e) {
@@ -186,7 +189,7 @@ public class ShapeGalleryMenu extends UnfoldMenu {
                         Toast.makeText(FarmApp.INSTANCE, R.string.MenuFileOpenFileFailed, Toast.LENGTH_SHORT).show());
             }
         }, "gallery-slice-load").start();
-        Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu());
+        Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu(this));
         dismiss(true);
     }
 

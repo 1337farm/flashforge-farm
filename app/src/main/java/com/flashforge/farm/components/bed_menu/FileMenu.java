@@ -270,7 +270,10 @@ public class FileMenu extends ListBedMenu {
     }
 
     public final class CalibrationsMenu extends UnfoldMenu {
-        private final Bus.Listener<NeedDismissCalibrationsMenu> onDismiss = e -> dismiss();
+        private final Bus.Listener<NeedDismissCalibrationsMenu> onDismiss = e -> {
+            if (e.source == this) return;
+            dismiss();
+        };
         @Override
         public int getRequestedSize(FrameLayout into, boolean portrait) {
             return (int) (portrait ? into.getHeight() * 0.35f : into.getWidth() * 0.6f);
@@ -293,16 +296,21 @@ public class FileMenu extends ListBedMenu {
                     com.flashforge.farm.gallery.ShapeGallery.Item item = calibItem(kind);
                     FarmApp.PENDING_CALIB_ITEM = item.id;
                     File f = com.flashforge.farm.gallery.ShapeGallery.fileFor(item);
+                    // Blocking: service bind + sandbox parse + native load.
+                    // Must stay off the UI thread or taps ANR-freeze (an ANR
+                    // is not an uncaught exception, so no crash log).
+                    FileMenu.this.fragment.loadModel(f);
                     ViewUtils.postOnMainThread(() -> {
-                        try {
-                            FileMenu.this.fragment.loadModel(f);
-                            Bus.OBJECTS_LIST_CHANGED.postValue(new ObjectsListChangedEvent());
-                        } catch (Exception e) {
-                            android.util.Log.e("FileMenu", "PA calib model failed", e);
-                        }
+                        Bus.OBJECTS_LIST_CHANGED.postValue(new ObjectsListChangedEvent());
                     });
-                } catch (Exception e) {
+                } catch (Throwable e) {
                     android.util.Log.e("FileMenu", "PA calib model failed", e);
+                    FarmApp.writeCrashDump("pa-calib", android.util.Log.getStackTraceString(e));
+                    ViewUtils.postOnMainThread(() -> {
+                        android.widget.Toast.makeText(FarmApp.INSTANCE,
+                                com.flashforge.farm.R.string.MenuFileOpenFileFailed,
+                                android.widget.Toast.LENGTH_SHORT).show();
+                    });
                 }
             }, "pa-calib").start();
         }
@@ -405,7 +413,7 @@ public class FileMenu extends ListBedMenu {
                         FarmApp.PENDING_CALIB_STEP = 0.002;
                         ensureCalibModel(com.flashforge.farm.gallery.ShapeGallery.KIND_CALIB_PA_LINE);
                         Toast.makeText(ctx, "Pressure Advance armed — go to the Slice tab", Toast.LENGTH_LONG).show();
-                        Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu());
+                        Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu(this));
                         dismiss(true);
                     }),
                     new PreferenceItem().setIcon(R.drawable.menu_calibrate_la_28).setTitle("PA Tower").setSubtitle("flashforge-farm PA tower — each layer gets a different PA value").setOnClickListener(v -> {
@@ -440,7 +448,7 @@ public class FileMenu extends ListBedMenu {
                                 }
                                 ensureCalibModel(com.flashforge.farm.gallery.ShapeGallery.KIND_CALIB_PA_TOWER);
                                 Toast.makeText(ctx, "PA Tower armed — go to the Slice tab", Toast.LENGTH_LONG).show();
-                                Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu());
+                                Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu(this));
                                 dismiss(true);
                             })
                             .setNegativeButton("Cancel", null)
@@ -453,7 +461,7 @@ public class FileMenu extends ListBedMenu {
                         FarmApp.PENDING_CALIB_STEP = 0.002;
                         ensureCalibModel(com.flashforge.farm.gallery.ShapeGallery.KIND_CALIB_PA_PATTERN);
                         Toast.makeText(ctx, "PA Pattern armed — go to the Slice tab", Toast.LENGTH_LONG).show();
-                        Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu());
+                        Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu(this));
                         dismiss(true);
                     }),
                     new PreferenceItem().setIcon(R.drawable.grid_layout_outline_28).setTitle(ctx.getString(R.string.MenuFileShapeGallery)).setSubtitle("Primitives, tags and your own models").setOnClickListener(v -> {

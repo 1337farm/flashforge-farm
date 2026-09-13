@@ -954,6 +954,14 @@ jobs:
           # CGAL's config re-probes GMP/MPFR via its own FindGMP/FindMPFR at
           # OUR configure time: pre-seed the exact staged libs+headers (same
           # PNG/ZLIB pattern) so no NDK-sysroot probing is needed.
+          # NDK quirk (playbook section 5): the toolchain forces
+          # CMAKE_FIND_ROOT_PATH_MODE_*=ONLY, so absolute HINTS get re-rooted
+          # under the sysroot and staged-prefix header finds miss. Top-level
+          # calls never notice (-DBoost_INCLUDE_DIR cache-hits), but CGAL's
+          # tweak changes Boost_ADDITIONAL_VERSIONS, invalidating the cache
+          # and forcing a re-search that misses. BOTH searches re-rooted
+          # first, then original paths: strictly more than ONLY, so existing
+          # exact pre-seeds (PNG/ZLIB/GMP/MPFR/_DIRs) resolve identically.
           GMP_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/gmpcgal" -name gmp.h | head -1)")"
           test -n "$GMP_INC" || { echo "ERROR: staged gmp.h not found"; exit 1; }
           GMP_LIB="$(find "$(pwd)/engine/prusa30/jniImports/gmpcgal" -name 'libgmp.so' | head -1)"
@@ -984,6 +992,7 @@ jobs:
             -DANDROID_STL=c++_shared \
             -DANDROID_PLATFORM=android-23 \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
             -DSLIC3R_GUI=OFF \
             -DSLIC3R_BUILD_TESTS=OFF \
             -DCMAKE_PREFIX_PATH="$(pwd)/engine/prusa30/jniImports" \

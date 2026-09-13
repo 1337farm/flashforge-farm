@@ -1183,3 +1183,59 @@ jobs:
       - name: Build headless core (libslic3r)
         run: |
           cmake --build build/prusa30 --target libslic3r -j"$(nproc)"
+
+  # Terminal gate: this is the ONE prusa30 check branch protection/ruleset must
+  # require, instead of every individual stage name. GitHub never auto-adds new
+  # job names to required checks, so a per-job list silently goes stale when a
+  # dep stage is added (2026-09-13: #204 merged red — headless failed on Blosc
+  # but only native engine/apk were required, and automerge ignored the red
+  # headless check). The gate `needs:` EVERY stage and fails unless each
+  # upstream result is success (skips are only OK on the prusa30=false change
+  # path). Adding a job to this workflow only requires adding it to this gate's
+  # needs+check — enforcement stays exactly one name.
+  prusa30-gate:
+    name: prusa30-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - prusa30-changes
+      - build-boost
+      - build-tbb
+      - build-nlopt
+      - build-expat
+      - build-pngfmt
+      - build-assert
+      - build-qhullmix
+      - build-gmpcgal
+      - build-openssl
+      - headless-build
+    steps:
+      - name: Gate every prusa30 stage result
+        run: |
+          NEED="${{ needs.prusa30-changes.outputs.prusa30 }}"
+          if [ "$NEED" != "true" ]; then
+            echo "prusa30 untouched: heavy stages skipped by design; gate green"
+            exit 0
+          fi
+          BAD=""
+          for kv in \
+            "boost=${{ needs.build-boost.result }}" \
+            "tbb=${{ needs.build-tbb.result }}" \
+            "nlopt=${{ needs.build-nlopt.result }}" \
+            "expat=${{ needs.build-expat.result }}" \
+            "pngfmt=${{ needs.build-pngfmt.result }}" \
+            "assert=${{ needs.build-assert.result }}" \
+            "qhullmix=${{ needs.build-qhullmix.result }}" \
+            "gmpcgal=${{ needs.build-gmpcgal.result }}" \
+            "openssl=${{ needs.build-openssl.result }}" \
+            "headless=${{ needs.headless-build.result }}" \
+          ; do
+            name="${kv%%=*}"; res="${kv#*=}"
+            [ "$res" = "success" ] || BAD="$BAD $name=$res"
+          done
+          if [ -n "$BAD" ]; then
+            echo "ERROR: prusa30 pipeline red:$BAD"
+            exit 1
+          fi
+          echo "prusa30 pipeline fully green (all 10 stages success)"

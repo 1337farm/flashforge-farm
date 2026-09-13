@@ -1978,7 +1978,7 @@ jobs:
           OPENVDB_STAGE="$(pwd)/engine/prusa30/jniImports/openvdb"
           test -f "$OPENVDB_STAGE/include/openvdb/version.h" \
             || { echo "ERROR: staged openvdb/version.h missing"; exit 1; }
-          OPENVDB_INC="$(dirname "$(find "$OPENVDB_STAGE" -path '*/openvdb/version.h' | head -1)")"
+          OPENVDB_INC="$(dirname "$(dirname "$(find "$OPENVDB_STAGE" -path '*/openvdb/version.h' | head -1)")")"
           OPENVDB_LIB="$(find "$OPENVDB_STAGE" -name 'libopenvdb.a' | head -1)"
           test -n "$OPENVDB_LIB" || { echo "ERROR: staged libopenvdb.a missing"; exit 1; }
           grep -q "OPENVDB_USE_BLOSC" "$OPENVDB_STAGE/include/openvdb/version.h" \

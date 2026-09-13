@@ -102,6 +102,6 @@ find "$STAGE_ROOT" -name 'libassert.a' -o -name 'libassert*.a' | grep -q . \
     || { echo "[assert] ERROR: no libassert archive staged" >&2; exit 1; }
 find "$STAGE_ROOT" -name 'libassert-config.cmake' -o -name 'libassertConfig.cmake' | grep -q . \
     || { echo "[assert] ERROR: no libassert config staged" >&2; exit 1; }
-find "$STAGE_ROOT" -name 'libassert/assert.hpp' | grep -q . \
+find "$STAGE_ROOT" -path '*/libassert/assert.hpp' | grep -q . \
     || { echo "[assert] ERROR: libassert headers missing" >&2; exit 1; }
 echo "[assert] done -> $STAGE_ROOT"

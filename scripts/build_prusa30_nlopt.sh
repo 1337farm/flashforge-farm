@@ -86,6 +86,10 @@ mkdir -p "$STAGE_ROOT/include" "$STAGE_ROOT/lib"
 HDR="$(find "$STAGE_ROOT" -name nlopt.hpp | head -1)"
 [ -n "$HDR" ] || { echo "[nlopt] ERROR: nlopt.hpp missing" >&2; exit 1; }
 cp "$HDR" "$STAGE_ROOT/include/" 2>/dev/null || true
+HDRC="$(find "$STAGE_ROOT" -name nlopt.h | head -1)"
+[ -n "$HDRC" ] && cp "$HDRC" "$STAGE_ROOT/include/" 2>/dev/null || true
+test -f "$STAGE_ROOT/include/nlopt.hpp" || { echo "[nlopt] ERROR: include normalize failed" >&2; exit 1; }
+test -f "$STAGE_ROOT/include/nlopt.h" || { echo "[nlopt] ERROR: nlopt.h normalize failed (NLoptOptimizer.hpp includes <nlopt.h>)" >&2; exit 1; }
 LIB="$(find "$STAGE_ROOT" -name 'libnlopt_cxx.*' | head -1)"
 [ -n "$LIB" ] || { echo "[nlopt] ERROR: libnlopt_cxx missing (NLOPT_CXX on?)" >&2; exit 1; }
 cp "$LIB" "$STAGE_ROOT/lib/" 2>/dev/null || true

@@ -256,6 +256,7 @@ jobs:
           if [ "${{ steps.nlopt-cache.outputs.cache-hit }}" = "true" ]; then
             OK=1
             test -f engine/prusa30/jniImports/nlopt/include/nlopt.hpp || OK=0
+            test -f engine/prusa30/jniImports/nlopt/include/nlopt.h || OK=0
             ls engine/prusa30/jniImports/nlopt/lib/libnlopt_cxx.* >/dev/null 2>&1 || OK=0
             [ "$OK" = "1" ] && NEED=0
           fi

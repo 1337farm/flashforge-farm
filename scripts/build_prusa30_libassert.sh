@@ -7,8 +7,10 @@
 # -Dlibassert_DIR satisfies find_package(libassert) and the transitive
 # cpptrace::cpptrace resolves from the same tree. Static only.
 #
-# Backend selection is left to cpptrace's Autoconfig (dladdr/unwind/cxxabi
-# all live in the NDK toolchain); external zstd/libdwarf are NOT used.
+# Backend selection is explicit, not Autoconfig: NDK probes prove libgcc
+# unwind + cxxabi demangle work, while dladdr does NOT exist on bionic and
+# the default libdwarf backend would FetchContent zstd+libdwarf.
+# Symbols:NONE (raw addresses; asserts still fire with full messages).
 #
 # Pins (exact, from upstream deps/+LibAssert + deps/+cpptrace):
 #   cpptrace:  https://github.com/jeremy-rifkin/cpptrace/archive/refs/tags/v1.0.4.zip
@@ -74,7 +76,10 @@ cmake -S "$CSRC" -B "cpptrace-build" \
     -DANDROID_PLATFORM="android-$API_LEVEL" -DANDROID_STL=c++_shared \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$STAGE_ROOT" \
     -DBUILD_SHARED_LIBS=OFF \
-    -DCPPTRACE_BUILD_TESTING=OFF -DCPPTRACE_BUILD_BENCHMARKING=OFF -DCPPTRACE_BUILD_TOOLS=OFF
+    -DCPPTRACE_BUILD_TESTING=OFF -DCPPTRACE_BUILD_BENCHMARKING=OFF -DCPPTRACE_BUILD_TOOLS=OFF \
+    -DCPPTRACE_UNWIND_WITH_UNWIND=ON \
+    -DCPPTRACE_GET_SYMBOLS_WITH_NOTHING=ON \
+    -DCPPTRACE_DEMANGLE_WITH_CXXABI=ON
 cmake --build "cpptrace-build" -j"$N_CORES"
 cmake --install "cpptrace-build"
 
@@ -97,6 +102,6 @@ find "$STAGE_ROOT" -name 'libassert.a' -o -name 'libassert*.a' | grep -q . \
     || { echo "[assert] ERROR: no libassert archive staged" >&2; exit 1; }
 find "$STAGE_ROOT" -name 'libassert-config.cmake' -o -name 'libassertConfig.cmake' | grep -q . \
     || { echo "[assert] ERROR: no libassert config staged" >&2; exit 1; }
-find "$STAGE_ROOT" -name 'libassert/assert.hpp' | grep -q . \
+find "$STAGE_ROOT" -path '*/libassert/assert.hpp' | grep -q . \
     || { echo "[assert] ERROR: libassert headers missing" >&2; exit 1; }
 echo "[assert] done -> $STAGE_ROOT"

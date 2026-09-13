@@ -437,7 +437,7 @@ jobs:
           if [ "${{ steps.assert-cache.outputs.cache-hit }}" = "true" ]; then
             OK=1
             find engine/prusa30/jniImports/assert -name 'libassert*.a' | grep -q . || OK=0
-            find engine/prusa30/jniImports/assert -name 'libassert/assert.hpp' | grep -q . || OK=0
+            find engine/prusa30/jniImports/assert -path '*/libassert/assert.hpp' | grep -q . || OK=0
             find engine/prusa30/jniImports/assert -name 'libassert-config.cmake' -o -name 'libassertConfig.cmake' | grep -q . || OK=0
             [ "$OK" = "1" ] && NEED=0
           fi
@@ -470,7 +470,7 @@ jobs:
         run: |
           find engine/prusa30/jniImports/assert -name 'libassert*.a' | grep -q . \
             || { echo "ERROR: no libassert archive staged"; exit 1; }
-          find engine/prusa30/jniImports/assert -name 'libassert/assert.hpp' | grep -q . \
+          find engine/prusa30/jniImports/assert -path '*/libassert/assert.hpp' | grep -q . \
             || { echo "ERROR: libassert headers missing"; exit 1; }
           find engine/prusa30/jniImports/assert -name 'libassert-config.cmake' -o -name 'libassertConfig.cmake' | grep -q . \
             || { echo "ERROR: no libassert config staged"; exit 1; }

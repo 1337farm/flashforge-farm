@@ -84,6 +84,14 @@ documents its own exit codes (0 green / 1 red / 2 usage / 3 blocked);
 - `scripts/babysit.sh status <pr>` prints a snapshot (state, held runs,
   required-check coverage) and `main` reports observed runs per workflow on
   a commit; trust its exit code, not the wall of text.
+- A green `main` run automatically downloads the `FlashForgeFarm-Debug-APK`
+  artifact to `$APK_STAGE_DIR/<sha>/` inside the repo (default `.babysit-apks`;
+  copied to `~/storage/downloads/` when Termux storage is set up);
+  `--no-download` disables this.
+- The repo is resolved from `git remote` and short `--sha` values are expanded
+  to the 40-hex needed by `head_sha=` filters. Tool defaults come from the
+  tracked `.babysitrc` (shared with the external pr-babysitter): `APK_ARTIFACT`,
+  `APK_STAGE_DIR`, `MAIN_WORKFLOW`, `PRUSA30_WORKFLOW`.
 
 ## 4. Evidence standards
 

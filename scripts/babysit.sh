@@ -46,15 +46,23 @@
 #        [--approve]           --dispatch triggers missing workflows on the
 #        [--dispatch]          ref (workflow_dispatch is the ONLY reliable
 #        [--wait-min M]        trigger today — push is dead). Without
-#                              --dispatch, missing evidence is BLOCKED (exit3).
+#        [--no-download]       --dispatch, missing evidence is BLOCKED (exit3).
+#                              On a terminal-green native run, the
+#                              FlashForgeFarm-Debug-APK artifact is downloaded
+#                              to $APK_STAGE_DIR/<sha>/ (default .babysit-apks,
+#                              configurable in .babysitrc; copied to
+#                              ~/storage/downloads/ when present). --no-download
+#                              disables this.
 #
-#   Global: --dry-run   print what would be done; never POST/approve/dispatch.
+#   Global: --dry-run      print what would be done; never POST/approve/dispatch.
+#   Global: --no-download  validate only; never fetch the APK artifact.
 #
 # Workflows are referenced by path (native-engine-build.yml,
 # prusa30-headless.yml) — stable regardless of display-name churn.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+ROOT="$(pwd)"
 
 SUB="${1:-}"
 [ -n "$SUB" ] || { echo "usage: babysit.sh <status|approve|held|pr|main> [args]" >&2; exit 2; }
@@ -63,9 +71,13 @@ shift
 DRY_RUN=0
 APPROVE=0
 DISPATCH=0
+NO_DOWNLOAD=0
 WAIT_MIN=0
 REF="main"
 SHA=""
+APK_RUN_ID=""
+APK_ARTIFACT=""
+APK_STAGE_DIR=""
 declare -a WORKFLOWS=()
 declare -a POSARGS=()
 
@@ -77,6 +89,7 @@ while [ "$i" -lt "${#ARGV[@]}" ]; do
     --dry-run)   DRY_RUN=1 ;;
     --approve)   APPROVE=1 ;;
     --dispatch)  DISPATCH=1 ;;
+    --no-download) NO_DOWNLOAD=1 ;;
     --ref)       i=$((i+1)); REF="${ARGV[$i]:-}" ;;
     --ref=*)     REF="${a#--ref=}" ;;
     --sha)       i=$((i+1)); SHA="${ARGV[$i]:-}" ;;
@@ -101,8 +114,24 @@ err() { echo "[babysit] ERROR: $*" >&2; }
 command -v gh >/dev/null 2>&1 || { err "gh CLI required"; exit 1; }
 gh auth status >/dev/null 2>&1 || { err "gh not authenticated (run 'gh auth login')"; exit 1; }
 
-REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)"
+REPO="$(git remote get-url origin 2>/dev/null | sed -E 's#\.git$##; s#^.*(github\.com[:/])([^/#]+/[^/#]+)$#\2#' || true)"
+[ -n "$REPO" ] || REPO="$(gh repo view 2>/dev/null --json nameWithOwner -q .nameWithOwner || true)"
 [ -n "$REPO" ] || { err "cannot resolve repo from git remote"; exit 1; }
+
+# Repo-local babysitting config (shared with 1337farm/pr-babysitter's
+# babysit-pr.sh); CLI flags in .babysitrc are overridden by our flags above.
+if [ -f "$ROOT/.babysitrc" ]; then
+  . "$ROOT/.babysitrc"
+fi
+APK_ARTIFACT="${APK_ARTIFACT:-FlashForgeFarm-Debug-APK}"
+APK_STAGE_DIR="${APK_STAGE_DIR:-.babysit-apks}"
+
+# GitHub's head_sha= filter requires the full 40-hex SHA; normalize --sha once.
+if [ -n "$SHA" ]; then
+  local_sha="$SHA"
+  SHA="$(gh api "repos/$REPO/commits/$SHA" --jq .sha 2>/dev/null || true)"
+  [ -n "$SHA" ] || { err "cannot resolve --sha '$local_sha'"; exit 1; }
+fi
 
 # --- helpers -----------------------------------------------------------------
 
@@ -160,14 +189,68 @@ required_checks() { # -> names required by branch protection on $REF
 # 0 when no check is pending AND every protection-required check is present
 run_checks_settled() { # $1 pr
   local pending missing=0 rc
-  pending="$(gh pr checks "$1" --json name,state --jq '[.[] | select(.state=="PENDING" or .state=="NEUTRAL")] | length' 2>/dev/null || true)"
+  pending="$(gh pr checks "$1" -R "$REPO" --json name,state --jq '[.[] | select(.state=="PENDING" or .state=="NEUTRAL")] | length' 2>/dev/null || true)"
   [ -n "$pending" ] || { return 1; }
   [ "$pending" = "0" ] || { return 1; }
   while IFS= read -r rc; do
     [ -n "$rc" ] || continue
-    gh pr checks "$1" --json name,state --jq "[.[] | select(.name==\"$rc\") | .name] | length" 2>/dev/null | grep -q '^1$' || missing=1
+    gh pr checks "$1" -R "$REPO" --json name,state --jq "[.[] | select(.name==\"$rc\") | .name] | length" 2>/dev/null | grep -q '^1$' || missing=1
   done < <(required_checks)
   [ "$missing" -eq 0 ]
+}
+
+# Download the APK artifact from a terminal-green native run on $SHA.
+# Deterministic: silently no-ops unless (a) a run id is known, (b) it is
+# terminal, and (c) it concluded success. Dry-run prints intent only.
+maybe_download_apk() { # $1 run id
+  local id="$1" st co meta dir apk
+  if [ "$NO_DOWNLOAD" -eq 1 ]; then
+    log "APK download disabled (--no-download)"
+    return 0
+  fi
+  if [ -z "$id" ]; then
+    log "no native run id on $SHA — nothing to download"
+    return 0
+  fi
+  meta="$(run_meta "$id")"
+  st="$(printf '%s' "$meta" | cut -f1)"
+  co="$(printf '%s' "$meta" | cut -f2)"
+  if [ "$st" != "completed" ]; then
+    log "run $id not terminal (status=$st) — skipping APK download"
+    return 0
+  fi
+  if [ "$co" != "success" ]; then
+    log "run $id not success (conclusion=$co) — skipping APK download"
+    return 0
+  fi
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "would download $APK_ARTIFACT from run $id (dry-run)"
+    return 0
+  fi
+  dir="$ROOT/$APK_STAGE_DIR/$SHA"
+  mkdir -p "$dir"
+  if gh run download "$id" -R "$REPO" -n "$APK_ARTIFACT" -D "$dir" --clobber 2>"$dir/.dl.err"; then
+    apk="$(find "$dir" -maxdepth 1 -name '*.apk' 2>/dev/null | head -1)"
+    if [ -n "$apk" ]; then
+      log "APK downloaded: $apk ($(du -h "$apk" | cut -f1))"
+      if [ -d "$HOME/storage/downloads" ]; then
+        mkdir -p "$HOME/storage/downloads/FlashForgeFarm-Debug-APK"
+        cp -f "$apk" "$HOME/storage/downloads/FlashForgeFarm-Debug-APK/"
+        log "copied -> $HOME/storage/downloads/FlashForgeFarm-Debug-APK/$(basename "$apk")"
+      else
+        log "no ~/storage/downloads (termux-setup-storage); APK left in cache"
+      fi
+      rm -f "$dir/.dl.err"
+      return 0
+    fi
+    err "artifact downloaded but no .apk under $dir"
+    rm -f "$dir/.dl.err"
+    return 1
+  fi
+  cat "$dir/.dl.err" >&2 || true
+  rm -f "$dir/.dl.err"
+  err "artifact download failed for run $id"
+  return 1
 }
 
 # --- status ------------------------------------------------------------------
@@ -176,7 +259,7 @@ cmd_status() {
   local pr="${POSARGS[0]:-}"
   [ -n "$pr" ] || { err "usage: babysit.sh status <pr>"; exit 2; }
   local prj state head
-  prj="$(gh pr view "$pr" --json title,state,mergeable,mergeStateStatus,isDraft,headRefOid,mergedAt,mergeCommit 2>/dev/null || true)"
+  prj="$(gh pr view "$pr" -R "$REPO" --json title,state,mergeable,mergeStateStatus,isDraft,headRefOid,mergedAt,mergeCommit 2>/dev/null || true)"
   [ -n "$prj" ] || { err "cannot view PR #$pr"; exit 1; }
   state="$(printf '%s' "$prj" | sed -n 's/.*"state":"\([^"]*\)".*/\1/p')"
   head="$(printf '%s' "$prj" | sed -n 's/.*"headRefOid":"\([^"]*\)".*/\1/p')"
@@ -195,12 +278,12 @@ cmd_status() {
   local rc
   while IFS= read -r rc; do
     [ -n "$rc" ] || continue
-    local chk; chk="$(gh pr checks "$pr" --json name,state --jq ".[] | select(.name==\"$rc\") | .state" 2>/dev/null || true)"
+    local chk; chk="$(gh pr checks "$pr" -R "$REPO" --json name,state --jq ".[] | select(.name==\"$rc\") | .state" 2>/dev/null || true)"
     printf '%s\t%s\n' "$rc" "${chk:-MISSING}"
   done < <(required_checks)
   echo "=== snapshot verdict ==="
   if [ "$state" = "MERGED" ]; then
-    local mc; mc="$(gh pr view "$pr" --json mergeCommit -q '.mergeCommit.oid')"
+    local mc; mc="$(gh pr view "$pr" -R "$REPO" --json mergeCommit -q '.mergeCommit.oid')"
     log "PR merged ($mc) — post-merge CI is NOT automatic; run: babysit.sh main --dispatch"
     return 0
   fi
@@ -256,7 +339,7 @@ cmd_held() {
 
 pr_snapshot() { # $1 pr -> MERGED|RED|HELD|PENDING|SETTLED
   local pr="$1" prj state head rid name ev st co att red=0 held=0 active=0
-  prj="$(gh pr view "$pr" --json state,headRefOid 2>/dev/null || true)"
+  prj="$(gh pr view "$pr" -R "$REPO" --json state,headRefOid 2>/dev/null || true)"
   state="$(printf '%s' "$prj" | sed -n 's/.*"state":"\([^"]*\)".*/\1/p')"
   [ "$state" = "MERGED" ] && { echo MERGED; return 0; }
   head="$(printf '%s' "$prj" | sed -n 's/.*"headRefOid":"\([^"]*\)".*/\1/p')"
@@ -281,7 +364,7 @@ cmd_pr() {
   log "PR #$pr initial state: $v"
   case "$v" in
     MERGED)
-      mc="$(gh pr view "$pr" --json mergeCommit -q '.mergeCommit.oid')"
+      mc="$(gh pr view "$pr" -R "$REPO" --json mergeCommit -q '.mergeCommit.oid')"
       log "merged at $mc — post-merge CI is NOT automatic; run: babysit.sh main --dispatch"
       return 0 ;;
     RED)
@@ -293,7 +376,7 @@ cmd_pr() {
     while IFS=$'\t' read -r rid name ev st co att; do
       [ -n "$rid" ] || continue
       is_held "$st" "$co" && approve_run "$rid" || :
-    done < <(runs_for_sha "$(gh pr view "$pr" --json headRefOid -q .headRefOid)")
+    done < <(runs_for_sha "$(gh pr view "$pr" -R "$REPO" --json headRefOid -q .headRefOid)")
     v="$(pr_snapshot "$pr")"
     log "PR #$pr state after approval pass: $v"
   fi
@@ -312,13 +395,13 @@ cmd_pr() {
           while IFS=$'\t' read -r rid name ev st co att; do
             [ -n "$rid" ] || continue
             is_held "$st" "$co" && approve_run "$rid" || :
-          done < <(runs_for_sha "$(gh pr view "$pr" --json headRefOid -q .headRefOid)")
+          done < <(runs_for_sha "$(gh pr view "$pr" -R "$REPO" --json headRefOid -q .headRefOid)")
         fi ;;
     esac
   done
   case "$v" in
     MERGED)
-      mc="$(gh pr view "$pr" --json mergeCommit -q '.mergeCommit.oid')"
+      mc="$(gh pr view "$pr" -R "$REPO" --json mergeCommit -q '.mergeCommit.oid')"
       log "merged at $mc — run 'babysit.sh main --dispatch' for post-merge validation"
       return 0 ;;
     SETTLED)
@@ -346,7 +429,7 @@ run_workflow_exists() { # $1 workflow file or name  $2 sha -> latest run id or e
 dispatch_workflow() { # $1 workflow file -> echo run id once visible
   local wf="$1" id i
   log "dispatching $wf on $REF"
-  gh workflow run "$wf" --ref "$REF" || { err "dispatch failed for $wf"; return 1; }
+  gh workflow run "$wf" -R "$REPO" --ref "$REF" || { err "dispatch failed for $wf"; return 1; }
   for i in $(seq 1 30); do
     sleep 5
     id="$(run_workflow_exists "$wf" "$SHA")"
@@ -357,7 +440,7 @@ dispatch_workflow() { # $1 workflow file -> echo run id once visible
 }
 
 cmd_main() {
-  [ "${#WORKFLOWS[@]}" -gt 0 ] || WORKFLOWS=("native-engine-build.yml" "prusa30-headless.yml")
+  [ "${#WORKFLOWS[@]}" -gt 0 ] || WORKFLOWS=("${MAIN_WORKFLOW:-native-engine-build.yml}" "${PRUSA30_WORKFLOW:-prusa30-headless.yml}")
   if [ -z "$SHA" ]; then
     SHA="$(gh api "repos/$REPO/commits/$REF" --jq .sha 2>/dev/null || true)"
   fi
@@ -389,6 +472,13 @@ cmd_main() {
     err "  scripts/babysit.sh main --sha $SHA --workflow prusa30-headless.yml --dispatch --wait-min 30"
     return 3
   fi
+  local wf_i
+  for wf_i in "${!WORKFLOWS[@]}"; do
+    case "${WORKFLOWS[$wf_i]}" in
+      native-engine-build.yml) [ "${#RUN_IDS[@]}" -gt "$wf_i" ] && APK_RUN_ID="${RUN_IDS[$wf_i]}" ;;
+    esac
+  done
+  [ -z "$APK_RUN_ID" ] || log "native run for APK artifact: $APK_RUN_ID"
   for i in "${RUN_IDS[@]}"; do
     meta="$(run_meta "$i")"
     st="$(printf '%s' "$meta" | cut -f1)"
@@ -417,6 +507,7 @@ cmd_main() {
       [ "$held" -eq 1 ] && { err "held run on $SHA — re-run with --approve"; return 3; }
       if [ "$active" -ne 1 ]; then
         log "all ${#RUN_IDS[@]} runs on $SHA observed terminal ($SHA)"
+        maybe_download_apk "$APK_RUN_ID"
         return 0
       fi
       now="$(date +%s)"
@@ -427,6 +518,7 @@ cmd_main() {
   [ "$red" -eq 1 ]  && { err "red run on $SHA"; return 1; }
   [ "$held" -eq 1 ] && [ "$APPROVE" -eq 0 ] && { err "held run on $SHA — re-run with --approve"; return 3; }
   log "snapshot: no red, no held on $SHA; use --wait-min to confirm terminal state"
+  maybe_download_apk "$APK_RUN_ID"
   return 0
 }
 

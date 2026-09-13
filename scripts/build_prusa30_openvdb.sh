@@ -40,7 +40,7 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 OPENVDB_VER="11.0.0"
 OPENVDB_URL="https://github.com/AcademySoftwareFoundation/openvdb/archive/refs/tags/v${OPENVDB_VER}.zip"
 OPENVDB_SHA="db7e1aacd0a634195574b2e6a43d268d063830628501fd0a94a99bf252d01fb6"
-PATCH="$ROOT/engine/prusa30/patches/openvdb-patch.patch"
+PATCH="$ROOT/engine/prusa30/openvdb-patch.patch"
 
 NDK="${NDK:-${ANDROID_NDK_ROOT:-${ANDROID_SDK_ROOT:-$HOME/android-sdk}/ndk/23.1.7779620}}"
 if [ ! -d "$NDK" ]; then

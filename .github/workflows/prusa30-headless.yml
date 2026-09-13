@@ -30,12 +30,19 @@ on:
       - "scripts/build_prusa30_heatshrink.sh"
       - "scripts/build_prusa30_libbgcode.sh"
       - "scripts/build_prusa30_jpeg.sh"
+      - "scripts/build_prusa30_lua.sh"
+      - "scripts/build_prusa30_sol2.sh"
       - ".github/workflows/prusa30-headless.yml"
   pull_request:
     branches: ["main", "master"]
 
 env:
-  NDK_VERSION: "23.1.7779620"
+  # PrusaSlicer 3.0-alpha uses C++20 hard (constexpr std::string, concepts),
+  # which requires libc++ >= 15. NDK r23 ships clang 14 / libc++ 14 and fails
+  # (libslic3r TypeInfo.hpp "constexpr function's return type 'std::string' is
+  # not a literal type"). r26d = clang 17 / libc++ 17. Native engine stays on
+  # its own r23 NDK (Orca) — this workflow is isolated.
+  NDK_VERSION: "26.3.11579264"
   PRUSA_REF: "6f510128d7c2e543b62919b74bea7e876f564205"
   BOOST_VER: "1.86.0"
   ABI: "arm64-v8a"
@@ -2029,6 +2036,8 @@ jobs:
             -DANDROID_STL=c++_shared \
             -DANDROID_PLATFORM=android-23 \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=20 \
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON \
             -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
             -DSLIC3R_GUI=OFF \
             -DSLIC3R_ENABLE_FORMAT_STEP=OFF \

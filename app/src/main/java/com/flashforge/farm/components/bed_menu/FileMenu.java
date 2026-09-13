@@ -407,10 +407,10 @@ public class FileMenu extends ListBedMenu {
             adapter.setItems(Arrays.asList(
                     // K3D (Prusa/FarmApp) web calibrators removed in favor of flashforge-farm's calibrations.
                     new PreferenceItem().setIcon(R.drawable.menu_calibrate_la_28).setTitle("Pressure Advance").setSubtitle("flashforge-farm PA line test — slices a PA pattern").setOnClickListener(v -> {
-                        FarmApp.PENDING_CALIB_MODE = 1; // CalibMode::Calib_PA_Line
-                        FarmApp.PENDING_CALIB_START = 0;
-                        FarmApp.PENDING_CALIB_END = 0.1;
-                        FarmApp.PENDING_CALIB_STEP = 0.002;
+                        FarmApp.PENDING_CALIB_MODE = com.flashforge.farm.gallery.CalibArm.MODE_PA_LINE;
+                        FarmApp.PENDING_CALIB_START = com.flashforge.farm.gallery.CalibArm.DEFAULT_START;
+                        FarmApp.PENDING_CALIB_END = com.flashforge.farm.gallery.CalibArm.DEFAULT_END;
+                        FarmApp.PENDING_CALIB_STEP = com.flashforge.farm.gallery.CalibArm.DEFAULT_STEP;
                         ensureCalibModel(com.flashforge.farm.gallery.ShapeGallery.KIND_CALIB_PA_LINE);
                         Toast.makeText(ctx, "Pressure Advance armed — go to the Slice tab", Toast.LENGTH_LONG).show();
                         Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu(this));
@@ -437,14 +437,14 @@ public class FileMenu extends ListBedMenu {
                             .setView(towerLl)
                             .setPositiveButton("OK", (d, w) -> {
                                 try {
-                                    FarmApp.PENDING_CALIB_MODE = 3; // CalibMode::Calib_PA_Tower
+                                    FarmApp.PENDING_CALIB_MODE = com.flashforge.farm.gallery.CalibArm.MODE_PA_TOWER;
                                     FarmApp.PENDING_CALIB_START = Double.parseDouble(startEt.getText().toString());
                                     FarmApp.PENDING_CALIB_END = Double.parseDouble(endEt.getText().toString());
                                     FarmApp.PENDING_CALIB_STEP = Double.parseDouble(stepEt.getText().toString());
                                 } catch (NumberFormatException e) {
-                                    FarmApp.PENDING_CALIB_START = 0;
-                                    FarmApp.PENDING_CALIB_END = 0.1;
-                                    FarmApp.PENDING_CALIB_STEP = 0.002;
+                                    FarmApp.PENDING_CALIB_START = com.flashforge.farm.gallery.CalibArm.DEFAULT_START;
+                                    FarmApp.PENDING_CALIB_END = com.flashforge.farm.gallery.CalibArm.DEFAULT_END;
+                                    FarmApp.PENDING_CALIB_STEP = com.flashforge.farm.gallery.CalibArm.DEFAULT_STEP;
                                 }
                                 ensureCalibModel(com.flashforge.farm.gallery.ShapeGallery.KIND_CALIB_PA_TOWER);
                                 Toast.makeText(ctx, "PA Tower armed — go to the Slice tab", Toast.LENGTH_LONG).show();
@@ -455,10 +455,10 @@ public class FileMenu extends ListBedMenu {
                             .show();
                     }),
                     new PreferenceItem().setIcon(R.drawable.menu_calibrate_la_28).setTitle("PA Pattern").setSubtitle("flashforge-farm PA pattern — number/flow test grid").setOnClickListener(v -> {
-                        FarmApp.PENDING_CALIB_MODE = 2; // CalibMode::Calib_PA_Pattern
-                        FarmApp.PENDING_CALIB_START = 0;
-                        FarmApp.PENDING_CALIB_END = 0.1;
-                        FarmApp.PENDING_CALIB_STEP = 0.002;
+                        FarmApp.PENDING_CALIB_MODE = com.flashforge.farm.gallery.CalibArm.MODE_PA_PATTERN;
+                        FarmApp.PENDING_CALIB_START = com.flashforge.farm.gallery.CalibArm.DEFAULT_START;
+                        FarmApp.PENDING_CALIB_END = com.flashforge.farm.gallery.CalibArm.DEFAULT_END;
+                        FarmApp.PENDING_CALIB_STEP = com.flashforge.farm.gallery.CalibArm.DEFAULT_STEP;
                         ensureCalibModel(com.flashforge.farm.gallery.ShapeGallery.KIND_CALIB_PA_PATTERN);
                         Toast.makeText(ctx, "PA Pattern armed — go to the Slice tab", Toast.LENGTH_LONG).show();
                         Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu(this));

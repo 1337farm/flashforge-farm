@@ -158,11 +158,11 @@ public class ShapeGalleryMenu extends UnfoldMenu {
         new Thread(() -> {
             try {
                 final File f = ShapeGallery.fileFor(item);
-                if (armCalib && isCalibKind(item.kind)) {
-                    FarmApp.PENDING_CALIB_MODE = calibModeFor(item.kind);
-                    FarmApp.PENDING_CALIB_START = 0;
-                    FarmApp.PENDING_CALIB_END = 0.1;
-                    FarmApp.PENDING_CALIB_STEP = 0.002;
+                if (armCalib && CalibArm.isCalibKind(item.kind)) {
+                    FarmApp.PENDING_CALIB_MODE = CalibArm.modeForKind(item.kind);
+                    FarmApp.PENDING_CALIB_START = CalibArm.DEFAULT_START;
+                    FarmApp.PENDING_CALIB_END = CalibArm.DEFAULT_END;
+                    FarmApp.PENDING_CALIB_STEP = CalibArm.DEFAULT_STEP;
                     FarmApp.PENDING_CALIB_ITEM = item.id;
                 } else {
                     FarmApp.PENDING_CALIB_MODE = 0;
@@ -191,18 +191,6 @@ public class ShapeGalleryMenu extends UnfoldMenu {
         }, "gallery-slice-load").start();
         Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu(this));
         dismiss(true);
-    }
-
-    private static boolean isCalibKind(int kind) {
-        return kind == ShapeGallery.KIND_CALIB_PA_LINE
-                || kind == ShapeGallery.KIND_CALIB_PA_PATTERN
-                || kind == ShapeGallery.KIND_CALIB_PA_TOWER;
-    }
-
-    private static int calibModeFor(int kind) {
-        if (kind == ShapeGallery.KIND_CALIB_PA_PATTERN) return 2;
-        if (kind == ShapeGallery.KIND_CALIB_PA_TOWER) return 3;
-        return 1;
     }
 
     private void confirmDelete(ShapeGallery.Item item) {

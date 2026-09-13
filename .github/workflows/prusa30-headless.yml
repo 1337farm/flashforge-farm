@@ -24,6 +24,9 @@ on:
       - "scripts/build_prusa30_tracy.sh"
       - "scripts/build_prusa30_gmp.sh"
       - "scripts/build_prusa30_openssl.sh"
+      - "scripts/build_prusa30_zstd.sh"
+      - "scripts/build_prusa30_blosc.sh"
+      - "scripts/build_prusa30_openvdb.sh"
       - ".github/workflows/prusa30-headless.yml"
   pull_request:
     branches: ["main", "master"]
@@ -794,11 +797,288 @@ jobs:
           path: engine/prusa30/jniImports/openssl
           key: prusa30-openssl4.0.1-${{ hashFiles('scripts/build_prusa30_openssl.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
 
+  build-zstd:
+    name: zstd
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged zstd 1.5.6 from cache
+        id: zstd-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/zstd
+          key: prusa30-zstd-1.5.6-${{ hashFiles('scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored zstd
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.zstd-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/zstd/include/zstd.h || OK=0
+            find engine/prusa30/jniImports/zstd -name 'libzstd.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/zstd -name zstdConfig.cmake | grep -q . || OK=0
+            grep -rq "zstd::libzstd" engine/prusa30/jniImports/zstd || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build zstd 1.5.6 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_zstd.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/zstd" \
+            ./scripts/build_prusa30_zstd.sh
+
+      - name: Verify staged zstd exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/zstd/include/zstd.h \
+            || { echo "ERROR: zstd.h missing"; exit 1; }
+          find engine/prusa30/jniImports/zstd -name 'libzstd.a' | grep -q . \
+            || { echo "ERROR: no libzstd.a staged"; exit 1; }
+          find engine/prusa30/jniImports/zstd -name zstdConfig.cmake | grep -q . \
+            || { echo "ERROR: zstdConfig.cmake missing"; exit 1; }
+          grep -rq "zstd::libzstd" engine/prusa30/jniImports/zstd \
+            || { echo "ERROR: zstd::libzstd target missing"; exit 1; }
+          echo "zstd 1.5.6 staged and verified"
+
+      - name: Save staged zstd 1.5.6
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/zstd
+          key: prusa30-zstd-1.5.6-${{ hashFiles('scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-blosc:
+    name: blosc
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged zstd 1.5.6 from cache (Blosc build input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/zstd
+          key: prusa30-zstd-1.5.6-${{ hashFiles('scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged zlib+libpng from cache (Blosc build input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/pngfmt
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh', 'scripts/build_prusa30_tracy.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged Blosc 1.21.6 from cache
+        id: blosc-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/blosc
+          key: prusa30-blosc-1.21.6-${{ hashFiles('scripts/build_prusa30_blosc.sh', 'scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored Blosc
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.blosc-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/blosc/include/blosc.h || OK=0
+            find engine/prusa30/jniImports/blosc -name 'libblosc.a' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build Blosc 1.21.6 from source (static, external zlib+zstd)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_blosc.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/blosc" \
+            ZLIB_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
+            ZSTD_ROOT="$(pwd)/engine/prusa30/jniImports/zstd" \
+            ./scripts/build_prusa30_blosc.sh
+
+      - name: Verify staged Blosc exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/blosc/include/blosc.h \
+            || { echo "ERROR: blosc.h missing"; exit 1; }
+          find engine/prusa30/jniImports/blosc -name 'libblosc.a' | grep -q . \
+            || { echo "ERROR: no libblosc.a staged"; exit 1; }
+          echo "Blosc 1.21.6 staged and verified"
+
+      - name: Save staged Blosc 1.21.6
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/blosc
+          key: prusa30-blosc-1.21.6-${{ hashFiles('scripts/build_prusa30_blosc.sh', 'scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-openvdb:
+    name: openvdb
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    needs: [prusa30-changes, build-boost, build-tbb, build-pngfmt, build-zstd, build-blosc]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged Boost ${{ env.BOOST_VER }} from cache (OpenVDB input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/boost
+          key: prusa30-boost-${{ env.BOOST_VER }}-${{ hashFiles('scripts/build_boost.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged oneTBB v2021.12.0 from cache (OpenVDB input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/tbb
+          key: prusa30-tbb-v2021.12.0-${{ hashFiles('scripts/build_prusa30_tbb.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged zlib+libpng from cache (OpenVDB input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/pngfmt
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh', 'scripts/build_prusa30_tracy.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged zstd 1.5.6 from cache (OpenVDB input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/zstd
+          key: prusa30-zstd-1.5.6-${{ hashFiles('scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged Blosc 1.21.6 from cache (OpenVDB input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/blosc
+          key: prusa30-blosc-1.21.6-${{ hashFiles('scripts/build_prusa30_blosc.sh', 'scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged OpenVDB 11.0.0 from cache
+        id: vdb-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/openvdb
+          key: prusa30-openvdb-11.0.0-${{ hashFiles('scripts/build_prusa30_openvdb.sh', 'scripts/build_prusa30_blosc.sh', 'scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored OpenVDB
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.vdb-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/openvdb/include/openvdb/version.h || OK=0
+            find engine/prusa30/jniImports/openvdb -name 'libopenvdb.a' | grep -q . || OK=0
+            grep -q "OPENVDB_USE_BLOSC" engine/prusa30/jniImports/openvdb/include/openvdb/version.h 2>/dev/null || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build OpenVDB 11.0.0 from source (static, blosc+zlib)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_openvdb.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/openvdb" \
+            BOOST_STAGE="$(pwd)/engine/prusa30/jniImports/boost" \
+            TBB_STAGE="$(pwd)/engine/prusa30/jniImports/tbb" \
+            BLOSC_STAGE="$(pwd)/engine/prusa30/jniImports/blosc" \
+            ZSTD_STAGE="$(pwd)/engine/prusa30/jniImports/zstd" \
+            ZLIB_STAGE="$(pwd)/engine/prusa30/jniImports/pngfmt" \
+            ./scripts/build_prusa30_openvdb.sh
+
+      - name: Verify staged OpenVDB exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/openvdb/include/openvdb/version.h \
+            || { echo "ERROR: openvdb/version.h missing"; exit 1; }
+          find engine/prusa30/jniImports/openvdb -name 'libopenvdb.a' | grep -q . \
+            || { echo "ERROR: no libopenvdb.a staged"; exit 1; }
+          grep -q "OPENVDB_USE_BLOSC" engine/prusa30/jniImports/openvdb/include/openvdb/version.h \
+            || { echo "ERROR: version.h lacks OPENVDB_USE_BLOSC"; exit 1; }
+          grep -q "OPENVDB_USE_ZLIB" engine/prusa30/jniImports/openvdb/include/openvdb/version.h \
+            || { echo "ERROR: version.h lacks OPENVDB_USE_ZLIB"; exit 1; }
+          echo "OpenVDB 11.0.0 staged and verified"
+
+      - name: Save staged OpenVDB 11.0.0
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/openvdb
+          key: prusa30-openvdb-11.0.0-${{ hashFiles('scripts/build_prusa30_openvdb.sh', 'scripts/build_prusa30_blosc.sh', 'scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
   headless-build:
     name: headless
     runs-on: ubuntu-24.04
     timeout-minutes: 180
-    needs: [prusa30-changes, build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix, build-gmpcgal, build-openssl]
+    needs: [prusa30-changes, build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix, build-gmpcgal, build-openssl, build-zstd, build-blosc, build-openvdb]
     if: needs.prusa30-changes.outputs.prusa30 == 'true'
     permissions:
       contents: read
@@ -1004,6 +1284,55 @@ jobs:
             || { echo "ERROR: staged openssl missing libssl.a"; exit 1; }
           echo "OpenSSL 4.0.1 present and verified"
 
+      - name: Restore staged zstd 1.5.6 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/zstd
+          key: prusa30-zstd-1.5.6-${{ hashFiles('scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged zstd exactly
+        run: |
+          test -f engine/prusa30/jniImports/zstd/include/zstd.h \
+            || { echo "ERROR: staged zstd missing zstd.h"; exit 1; }
+          find engine/prusa30/jniImports/zstd -name 'libzstd.a' | grep -q . \
+            || { echo "ERROR: staged zstd missing libzstd.a"; exit 1; }
+          find engine/prusa30/jniImports/zstd -name zstdConfig.cmake | grep -q . \
+            || { echo "ERROR: staged zstd missing zstdConfig.cmake"; exit 1; }
+          echo "zstd 1.5.6 present and verified"
+
+      - name: Restore staged Blosc 1.21.6 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/blosc
+          key: prusa30-blosc-1.21.6-${{ hashFiles('scripts/build_prusa30_blosc.sh', 'scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged Blosc exactly
+        run: |
+          test -f engine/prusa30/jniImports/blosc/include/blosc.h \
+            || { echo "ERROR: staged blosc missing blosc.h"; exit 1; }
+          find engine/prusa30/jniImports/blosc -name 'libblosc.a' | grep -q . \
+            || { echo "ERROR: staged blosc missing libblosc.a"; exit 1; }
+          echo "Blosc 1.21.6 present and verified"
+
+      - name: Restore staged OpenVDB 11.0.0 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/openvdb
+          key: prusa30-openvdb-11.0.0-${{ hashFiles('scripts/build_prusa30_openvdb.sh', 'scripts/build_prusa30_blosc.sh', 'scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged OpenVDB exactly
+        run: |
+          test -f engine/prusa30/jniImports/openvdb/include/openvdb/version.h \
+            || { echo "ERROR: staged openvdb missing openvdb/version.h"; exit 1; }
+          find engine/prusa30/jniImports/openvdb -name 'libopenvdb.a' | grep -q . \
+            || { echo "ERROR: staged openvdb missing libopenvdb.a"; exit 1; }
+          grep -q "OPENVDB_USE_BLOSC" engine/prusa30/jniImports/openvdb/include/openvdb/version.h \
+            || { echo "ERROR: staged openvdb version.h lacks OPENVDB_USE_BLOSC"; exit 1; }
+          echo "OpenVDB 11.0.0 present and verified"
+
       - name: Configure headless 3.0 build (arm64-v8a)
         env:
           # Upstream FindNLopt reads the NLOPT *environment* variable:
@@ -1131,6 +1460,34 @@ jobs:
           test -f "$OPENSSL_SSL_LIBRARY" \
             || { echo "ERROR: staged libssl.a missing"; exit 1; }
           echo "OpenSSL libcrypto: $OPENSSL_CRYPTO_LIBRARY inc: $OPENSSL_INCLUDE_DIR"
+          # OpenVDB: bundled FindOpenVDB (src/libslic3r) reads the staged
+          # openvdb/version.h (USE_BLOSC/ZLIB baked in) then hard-requires
+          # Blosc{+zstd config}, ZLIB, TBB and Boost iostreams — all staged.
+          # Pre-seed the exact component vars so the NDK MODE=ONLY re-rooting
+          # (playbook §5) can't miss them (same PNG/ZLIB/OpenSSL pattern).
+          OPENVDB_STAGE="$(pwd)/engine/prusa30/jniImports/openvdb"
+          test -f "$OPENVDB_STAGE/include/openvdb/version.h" \
+            || { echo "ERROR: staged openvdb/version.h missing"; exit 1; }
+          OPENVDB_INC="$(dirname "$(find "$OPENVDB_STAGE" -path '*/openvdb/version.h' | head -1)")"
+          OPENVDB_LIB="$(find "$OPENVDB_STAGE" -name 'libopenvdb.a' | head -1)"
+          test -n "$OPENVDB_LIB" || { echo "ERROR: staged libopenvdb.a missing"; exit 1; }
+          grep -q "OPENVDB_USE_BLOSC" "$OPENVDB_STAGE/include/openvdb/version.h" \
+            || { echo "ERROR: staged openvdb lacks OPENVDB_USE_BLOSC"; exit 1; }
+          echo "OpenVDB lib: $OPENVDB_LIB inc: $OPENVDB_INC"
+          BLOSC_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/blosc" -name blosc.h | head -1)")"
+          test -n "$BLOSC_INC" || { echo "ERROR: staged blosc.h missing"; exit 1; }
+          BLOSC_LIB="$(find "$(pwd)/engine/prusa30/jniImports/blosc" -name 'libblosc.a' | head -1)"
+          test -n "$BLOSC_LIB" || { echo "ERROR: staged libblosc.a missing"; exit 1; }
+          echo "Blosc lib: $BLOSC_LIB inc: $BLOSC_INC"
+          # Blosc::blosc unconditionally links zstd::libzstd via
+          # find_package(zstd REQUIRED) (config mode) — resolve its package dir.
+          ZSTD_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/zstd" -name zstdConfig.cmake -printf '%h\n' | head -1)"
+          test -n "$ZSTD_CMAKE_DIR" || { echo "ERROR: staged zstdConfig.cmake missing"; exit 1; }
+          test -f "$ZSTD_CMAKE_DIR/zstdTargets.cmake" \
+            || { echo "ERROR: zstdTargets.cmake missing"; exit 1; }
+          grep -q "zstd::libzstd" "$ZSTD_CMAKE_DIR/zstdTargets.cmake" \
+            || { echo "ERROR: zstd::libzstd target missing"; exit 1; }
+          echo "zstd config dir: $ZSTD_CMAKE_DIR"
           cmake -S "$(pwd)/engine/build/prusaslicer-src" -B build/prusa30 \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a \
@@ -1178,7 +1535,18 @@ jobs:
             -DOPENSSL_ROOT_DIR="$OPENSSL_ROOT" \
             -DOPENSSL_INCLUDE_DIR="$OPENSSL_INCLUDE_DIR" \
             -DOPENSSL_CRYPTO_LIBRARY="$OPENSSL_CRYPTO_LIBRARY" \
-            -DOPENSSL_SSL_LIBRARY="$OPENSSL_SSL_LIBRARY"
+            -DOPENSSL_SSL_LIBRARY="$OPENSSL_SSL_LIBRARY" \
+            -DOPENVDB_USE_STATIC_LIBS=ON \
+            -DOpenVDB_ROOT="$OPENVDB_STAGE" \
+            -DOpenVDB_INCLUDE_DIR="$OPENVDB_INC" \
+            -DOpenVDB_openvdb_INCLUDE_DIR="$OPENVDB_INC" \
+            -DOpenVDB_openvdb_LIBRARY="$OPENVDB_LIB" \
+            -DBLOSC_USE_STATIC_LIBS=ON \
+            -DBlosc_ROOT="$(pwd)/engine/prusa30/jniImports/blosc" \
+            -DBlosc_INCLUDE_DIR="$BLOSC_INC" \
+            -DBlosc_LIBRARY="$BLOSC_LIB" \
+            -DBlosc_LIBRARY_RELEASE="$BLOSC_LIB" \
+            -Dzstd_DIR="$ZSTD_CMAKE_DIR"
 
       - name: Build headless core (libslic3r)
         run: |
@@ -1209,6 +1577,9 @@ jobs:
       - build-qhullmix
       - build-gmpcgal
       - build-openssl
+      - build-zstd
+      - build-blosc
+      - build-openvdb
       - headless-build
     steps:
       - name: Gate every prusa30 stage result
@@ -1229,6 +1600,9 @@ jobs:
             "qhullmix=${{ needs.build-qhullmix.result }}" \
             "gmpcgal=${{ needs.build-gmpcgal.result }}" \
             "openssl=${{ needs.build-openssl.result }}" \
+            "zstd=${{ needs.build-zstd.result }}" \
+            "blosc=${{ needs.build-blosc.result }}" \
+            "openvdb=${{ needs.build-openvdb.result }}" \
             "headless=${{ needs.headless-build.result }}" \
           ; do
             name="${kv%%=*}"; res="${kv#*=}"
@@ -1238,4 +1612,4 @@ jobs:
             echo "ERROR: prusa30 pipeline red:$BAD"
             exit 1
           fi
-          echo "prusa30 pipeline fully green (all 10 stages success)"
+          echo "prusa30 pipeline fully green (all 13 stages success)"

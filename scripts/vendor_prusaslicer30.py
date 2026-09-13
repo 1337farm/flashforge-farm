@@ -60,6 +60,8 @@ DEP_CMAKE = {
     "MPFR": "MPFR.cmake",
     "OpenSSL": "OpenSSL.cmake",
     "OpenVDB": "OpenVDB.cmake",
+    "Blosc": "Blosc.cmake",
+    "zstd": "zstd.cmake",
     "Eigen": "Eigen.cmake",
     "Lua": "Lua.cmake",
 }

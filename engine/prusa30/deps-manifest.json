@@ -6,6 +6,12 @@
       "url": "https://github.com/boostorg/boost/releases/download/boost-1.86.0/boost-1.86.0-cmake.zip",
       "version": "1.86.0"
     },
+    "Blosc": {
+      "cmake": "deps/+Blosc/Blosc.cmake",
+      "sha256": "1919c97d55023c04aa8771ea8235b63e9da3c22e3d2a68340b33710d19c2a2eb",
+      "url": "https://github.com/Blosc/c-blosc/archive/refs/tags/v1.21.6.zip",
+      "version": "1.21.6"
+    },
     "CGAL": {
       "cmake": "deps/+CGAL/CGAL.cmake",
       "sha256": "29acaeee5a76a95029fac23131bb1c3a4a75df9a0e7e43b465a1f32d0628f45d",
@@ -59,6 +65,12 @@
       "sha256": "fe6ca052b5bdd2c6e0616b360c9b0dcbcc46e01bbd0aa8fd0517c17fc58931db",
       "url": "https://github.com/oneapi-src/oneTBB/archive/refs/tags/v2021.12.0.zip",
       "version": "2021.12.0"
+    },
+    "zstd": {
+      "cmake": "deps/+zstd/zstd.cmake",
+      "sha256": "8c29e06cf42aacc1eafc4077ae2ec6c6fcb96a626157e0593d5e82a34fd403c1",
+      "url": "https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz",
+      "version": "1.5.6"
     }
   },
   "headless_modules": [

@@ -877,7 +877,7 @@ jobs:
     name: blosc
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    needs: [prusa30-changes]
+    needs: [prusa30-changes, build-zstd]
     if: needs.prusa30-changes.outputs.prusa30 == 'true'
     permissions:
       contents: read

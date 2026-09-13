@@ -69,9 +69,9 @@ fi
 echo "$SOL2_SHA  sol2-v$SOL2_VER.zip" | sha256sum -c --status - \
     || { echo "[sol2] ERROR: sha256 mismatch" >&2; exit 1; }
 
-rm -rf "sol2-v$SOL2_VER" "sol2-build"
+rm -rf "sol2-v$SOL2_VER" "sol2-3.5.0" "sol2-build"
 unzip -q -o "sol2-v$SOL2_VER.zip"
-SSRC="$(find "sol2-v$SOL2_VER" -maxdepth 2 -name CMakeLists.txt -path '*sol2*' \
+SSRC="$(find . -maxdepth 2 -name CMakeLists.txt -path '*sol2*/CMakeLists.txt' \
     -printf '%h\n' | head -1)"
 [ -n "$SSRC" ] || { echo "[sol2] ERROR: no sol2 CMakeLists" >&2; exit 1; }
 

@@ -29,6 +29,7 @@ on:
       - "scripts/build_prusa30_openvdb.sh"
       - "scripts/build_prusa30_heatshrink.sh"
       - "scripts/build_prusa30_libbgcode.sh"
+      - "scripts/build_prusa30_jpeg.sh"
       - ".github/workflows/prusa30-headless.yml"
   pull_request:
     branches: ["main", "master"]
@@ -1257,11 +1258,89 @@ jobs:
           path: engine/prusa30/jniImports/bgcode
           key: prusa30-libbgcode-0.3.0-${{ hashFiles('scripts/build_prusa30_libbgcode.sh', 'scripts/build_prusa30_heatshrink.sh', 'engine/prusa30/heatshrink/CMakeLists.txt', 'engine/prusa30/heatshrink/Config.cmake.in') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
 
+  build-jpeg:
+    name: jpeg
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [prusa30-changes, build-pngfmt]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged zlib+libpng from cache (JPEG build input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/pngfmt
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh', 'scripts/build_prusa30_tracy.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged libjpeg-turbo 3.0.1 from cache
+        id: jpeg-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/jpeg
+          key: prusa30-jpeg-3.0.1-${{ hashFiles('scripts/build_prusa30_jpeg.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored libjpeg-turbo
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.jpeg-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/jpeg/include/jpeglib.h || OK=0
+            find engine/prusa30/jniImports/jpeg -name 'libjpeg.a' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build libjpeg-turbo 3.0.1 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_jpeg.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/jpeg" \
+            ZLIB_STAGE="$(pwd)/engine/prusa30/jniImports/pngfmt" \
+            ./scripts/build_prusa30_jpeg.sh
+
+      - name: Verify staged libjpeg-turbo exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/jpeg/include/jpeglib.h \
+            || { echo "ERROR: jpeglib.h missing"; exit 1; }
+          find engine/prusa30/jniImports/jpeg -name 'libjpeg.a' | grep -q . \
+            || { echo "ERROR: no libjpeg.a staged"; exit 1; }
+          echo "libjpeg-turbo 3.0.1 staged and verified"
+
+      - name: Save staged libjpeg-turbo 3.0.1
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/jpeg
+          key: prusa30-jpeg-3.0.1-${{ hashFiles('scripts/build_prusa30_jpeg.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
   headless-build:
     name: headless
     runs-on: ubuntu-24.04
     timeout-minutes: 180
-    needs: [prusa30-changes, build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix, build-gmpcgal, build-openssl, build-zstd, build-blosc, build-openvdb, build-heatshrink, build-libbgcode]
+    needs: [prusa30-changes, build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix, build-gmpcgal, build-openssl, build-zstd, build-blosc, build-openvdb, build-heatshrink, build-libbgcode, build-jpeg]
     if: needs.prusa30-changes.outputs.prusa30 == 'true'
     permissions:
       contents: read
@@ -1548,6 +1627,21 @@ jobs:
             || { echo "ERROR: staged libbgcode missing LibBGCodeConfig.cmake"; exit 1; }
           echo "LibBGCode 0.3.0 present and verified"
 
+      - name: Restore staged libjpeg-turbo 3.0.1 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/jpeg
+          key: prusa30-jpeg-3.0.1-${{ hashFiles('scripts/build_prusa30_jpeg.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged libjpeg-turbo exactly
+        run: |
+          test -f engine/prusa30/jniImports/jpeg/include/jpeglib.h \
+            || { echo "ERROR: staged libjpeg missing jpeglib.h"; exit 1; }
+          find engine/prusa30/jniImports/jpeg -name 'libjpeg.a' | grep -q . \
+            || { echo "ERROR: staged libjpeg missing libjpeg.a"; exit 1; }
+          echo "libjpeg-turbo 3.0.1 present and verified"
+
       - name: Configure headless 3.0 build (arm64-v8a)
         env:
           # Upstream FindNLopt reads the NLOPT *environment* variable:
@@ -1660,6 +1754,14 @@ jobs:
           ZLIB_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name zlib.h | head -1)")"
           test -n "$ZLIB_INC" || { echo "ERROR: staged zlib.h not found"; exit 1; }
           echo "ZLIB lib: $ZLIB_LIB inc: $ZLIB_INC"
+          # libslic3r find_package(JPEG) uses stock FindJPEG (module mode):
+          # pre-seed the exact staged lib+include (PNG/ZLIB/OpenSSL pattern)
+          # so NDK MODE=ONLY re-rooting can't shadow it with a sysroot stub.
+          JPEG_LIB="$(find "$(pwd)/engine/prusa30/jniImports/jpeg" -name 'libjpeg.a' | head -1)"
+          test -n "$JPEG_LIB" || { echo "ERROR: staged libjpeg.a not found"; exit 1; }
+          JPEG_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/jpeg" -name jpeglib.h | head -1)")"
+          test -n "$JPEG_INC" || { echo "ERROR: staged jpeglib.h not found"; exit 1; }
+          echo "JPEG lib: $JPEG_LIB inc: $JPEG_INC"
           # OpenSSL: slic3r-biz-crypto hard-requires find_package(OpenSSL).
           # Pre-seed the exact staged libs+include (PNG/ZLIB pattern) so the
           # NDK MODE=ONLY re-rooting (playbook §5) can't shadow them with the
@@ -1775,7 +1877,9 @@ jobs:
             -DBlosc_LIBRARY_RELEASE="$BLOSC_LIB" \
             -Dzstd_DIR="$ZSTD_CMAKE_DIR" \
             -Dheatshrink_DIR="$HEATSHRINK_CMAKE_DIR" \
-            -DLibBGCode_DIR="$BGCODE_CMAKE_DIR"
+            -DLibBGCode_DIR="$BGCODE_CMAKE_DIR" \
+            -DJPEG_LIBRARY="$JPEG_LIB" \
+            -DJPEG_INCLUDE_DIR="$JPEG_INC"
 
       - name: Build headless core (libslic3r)
         run: |
@@ -1811,6 +1915,7 @@ jobs:
       - build-openvdb
       - build-heatshrink
       - build-libbgcode
+      - build-jpeg
       - headless-build
     steps:
       - name: Gate every prusa30 stage result
@@ -1836,6 +1941,7 @@ jobs:
             "openvdb=${{ needs.build-openvdb.result }}" \
             "heatshrink=${{ needs.build-heatshrink.result }}" \
             "libbgcode=${{ needs.build-libbgcode.result }}" \
+            "jpeg=${{ needs.build-jpeg.result }}" \
             "headless=${{ needs.headless-build.result }}" \
           ; do
             name="${kv%%=*}"; res="${kv#*=}"
@@ -1845,4 +1951,4 @@ jobs:
             echo "ERROR: prusa30 pipeline red:$BAD"
             exit 1
           fi
-          echo "prusa30 pipeline fully green (all 15 stages success)"
+          echo "prusa30 pipeline fully green (all 16 stages success)"

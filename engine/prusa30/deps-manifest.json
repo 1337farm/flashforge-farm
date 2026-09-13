@@ -24,6 +24,12 @@
       "url": "https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.zip",
       "version": "3.4.0"
     },
+    "JPEG": {
+      "cmake": "deps/+JPEG/JPEG.cmake",
+      "sha256": "d6d99e693366bc03897677650e8b2dfa76b5d6c54e2c9e70c03f0af821b0a52f",
+      "url": "https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.0.1.zip",
+      "version": "3.0.1"
+    },
     "GMP": {
       "cmake": "deps/+GMP/GMP.cmake",
       "sha256": "eae9326beb4158c386e39a356818031bd28f3124cf915f8c5b1dc4c7a36b4d7c",

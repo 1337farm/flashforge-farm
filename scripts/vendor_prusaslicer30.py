@@ -64,6 +64,7 @@ DEP_CMAKE = {
     "zstd": "zstd.cmake",
     "heatshrink": "heatshrink.cmake",
     "LibBGCode": "LibBGCode.cmake",
+    "JPEG": "JPEG.cmake",
     "Eigen": "Eigen.cmake",
     "Lua": "Lua.cmake",
 }

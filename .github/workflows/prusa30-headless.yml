@@ -22,6 +22,7 @@ on:
       - "scripts/build_prusa30_png.sh"
       - "scripts/build_prusa30_fmt.sh"
       - "scripts/build_prusa30_tracy.sh"
+      - "scripts/build_prusa30_gmp.sh"
       - ".github/workflows/prusa30-headless.yml"
   pull_request:
     paths:
@@ -36,6 +37,7 @@ on:
       - "scripts/build_prusa30_png.sh"
       - "scripts/build_prusa30_fmt.sh"
       - "scripts/build_prusa30_tracy.sh"
+      - "scripts/build_prusa30_gmp.sh"
       - ".github/workflows/prusa30-headless.yml"
 
 env:
@@ -579,11 +581,112 @@ jobs:
             engine/prusa30/jniImports/mixer
           key: prusa30-qhullmix-${{ hashFiles('scripts/build_prusa30_qhull.sh', 'scripts/build_prusa30_mixer.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
 
+  build-gmpcgal:
+    name: gmpcgal
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    needs: [build-boost]
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged Boost ${{ env.BOOST_VER }} (CGAL configure input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/boost
+          key: prusa30-boost-${{ env.BOOST_VER }}-${{ hashFiles('scripts/build_boost.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Bridge Boost archives into stage/lib (FindBoost search path)
+        run: |
+          mkdir -p engine/prusa30/jniImports/boost/stage/lib
+          for a in engine/prusa30/jniImports/boost/lib/$ABI/lib/libboost_*.a; do
+            ln -sf "../../lib/$ABI/lib/$(basename "$a")" \
+              "engine/prusa30/jniImports/boost/stage/lib/$(basename "$a")"
+          done
+          ls engine/prusa30/jniImports/boost/stage/lib/ | head -5
+
+      - name: Restore staged GMP+MPFR+CGAL from cache
+        id: gmpcgal-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/gmpcgal
+          key: prusa30-gmpcgal-cgal5.6.2-${{ hashFiles('scripts/build_prusa30_gmp.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored GMP+MPFR+CGAL
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.gmpcgal-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/gmpcgal/include/gmp.h || OK=0
+            test -f engine/prusa30/jniImports/gmpcgal/include/gmpxx.h || OK=0
+            test -f engine/prusa30/jniImports/gmpcgal/include/mpfr.h || OK=0
+            ls engine/prusa30/jniImports/gmpcgal/lib/libgmp.so >/dev/null 2>&1 || OK=0
+            ls engine/prusa30/jniImports/gmpcgal/lib/libgmpxx.so >/dev/null 2>&1 || OK=0
+            ls engine/prusa30/jniImports/gmpcgal/lib/libmpfr.so >/dev/null 2>&1 || OK=0
+            find engine/prusa30/jniImports/gmpcgal \( -name 'CGALConfig.cmake' -o -name 'CGAL-config.cmake' \) | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build GMP+MPFR+CGAL from source (shared+static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_gmp.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/gmpcgal" \
+            BOOST_STAGE="$(pwd)/engine/prusa30/jniImports/boost" \
+            ./scripts/build_prusa30_gmp.sh
+
+      - name: Verify staged GMP+MPFR+CGAL exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/gmpcgal/include/gmp.h \
+            || { echo "ERROR: gmp.h missing"; exit 1; }
+          test -f engine/prusa30/jniImports/gmpcgal/include/gmpxx.h \
+            || { echo "ERROR: gmpxx.h missing"; exit 1; }
+          test -f engine/prusa30/jniImports/gmpcgal/include/mpfr.h \
+            || { echo "ERROR: mpfr.h missing"; exit 1; }
+          ls engine/prusa30/jniImports/gmpcgal/lib/libgmp.so >/dev/null \
+            || { echo "ERROR: no libgmp.so staged"; exit 1; }
+          ls engine/prusa30/jniImports/gmpcgal/lib/libgmpxx.so >/dev/null \
+            || { echo "ERROR: no libgmpxx.so staged"; exit 1; }
+          ls engine/prusa30/jniImports/gmpcgal/lib/libmpfr.so >/dev/null \
+            || { echo "ERROR: no libmpfr.so staged"; exit 1; }
+          find engine/prusa30/jniImports/gmpcgal \( -name 'CGALConfig.cmake' -o -name 'CGAL-config.cmake' \) | grep -q . \
+            || { echo "ERROR: no CGAL config staged"; exit 1; }
+          echo "GMP 6.2.1 + MPFR 4.2.0 + CGAL 5.6.2 staged and verified"
+
+      - name: Save staged GMP+MPFR+CGAL
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/gmpcgal
+          key: prusa30-gmpcgal-cgal5.6.2-${{ hashFiles('scripts/build_prusa30_gmp.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
   headless-build:
     name: headless
     runs-on: ubuntu-24.04
     timeout-minutes: 180
-    needs: [build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix]
+    needs: [build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix, build-gmpcgal]
     permissions:
       contents: read
       actions: read
@@ -746,6 +849,31 @@ jobs:
             || { echo "ERROR: staged mixer missing lib"; exit 1; }
           echo "Qhull + prusa-fdm-mixer present and verified"
 
+      - name: Restore staged GMP+MPFR+CGAL from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/gmpcgal
+          key: prusa30-gmpcgal-cgal5.6.2-${{ hashFiles('scripts/build_prusa30_gmp.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged GMP+MPFR+CGAL exactly
+        run: |
+          test -f engine/prusa30/jniImports/gmpcgal/include/gmp.h \
+            || { echo "ERROR: staged gmp.h missing"; exit 1; }
+          test -f engine/prusa30/jniImports/gmpcgal/include/gmpxx.h \
+            || { echo "ERROR: staged gmpxx.h missing"; exit 1; }
+          test -f engine/prusa30/jniImports/gmpcgal/include/mpfr.h \
+            || { echo "ERROR: staged mpfr.h missing"; exit 1; }
+          ls engine/prusa30/jniImports/gmpcgal/lib/libgmp.so >/dev/null \
+            || { echo "ERROR: staged libgmp.so missing"; exit 1; }
+          ls engine/prusa30/jniImports/gmpcgal/lib/libgmpxx.so >/dev/null \
+            || { echo "ERROR: staged libgmpxx.so missing"; exit 1; }
+          ls engine/prusa30/jniImports/gmpcgal/lib/libmpfr.so >/dev/null \
+            || { echo "ERROR: staged libmpfr.so missing"; exit 1; }
+          find engine/prusa30/jniImports/gmpcgal \( -name 'CGALConfig.cmake' -o -name 'CGAL-config.cmake' \) | grep -q . \
+            || { echo "ERROR: staged CGAL config missing"; exit 1; }
+          echo "GMP + MPFR + CGAL present and verified"
+
       - name: Configure headless 3.0 build (arm64-v8a)
         env:
           # Upstream FindNLopt reads the NLOPT *environment* variable:
@@ -817,6 +945,25 @@ jobs:
           TRACY_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name TracyConfig.cmake -printf '%h\n' | head -1)"
           test -n "$TRACY_CMAKE_DIR" || { echo "ERROR: TracyConfig.cmake not staged"; exit 1; }
           echo "Tracy config dir: $TRACY_CMAKE_DIR"
+          # Same for CGAL: the gmpcgal prefix carries CGALConfig.cmake from
+          # CGAL's own `cmake --install` tree (year-2000 CMake names vary by
+          # version, so resolve either casing like Qhull).
+          CGAL_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/gmpcgal" \( -name CGALConfig.cmake -o -name CGAL-config.cmake \) -printf '%h\n' | head -1)"
+          test -n "$CGAL_CMAKE_DIR" || { echo "ERROR: CGALConfig.cmake not staged"; exit 1; }
+          echo "CGAL config dir: $CGAL_CMAKE_DIR"
+          # CGAL's config re-probes GMP/MPFR via its own FindGMP/FindMPFR at
+          # OUR configure time: pre-seed the exact staged libs+headers (same
+          # PNG/ZLIB pattern) so no NDK-sysroot probing is needed.
+          GMP_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/gmpcgal" -name gmp.h | head -1)")"
+          test -n "$GMP_INC" || { echo "ERROR: staged gmp.h not found"; exit 1; }
+          GMP_LIB="$(find "$(pwd)/engine/prusa30/jniImports/gmpcgal" -name 'libgmp.so' | head -1)"
+          test -n "$GMP_LIB" || { echo "ERROR: staged libgmp.so not found"; exit 1; }
+          GMPXX_LIB="$(find "$(pwd)/engine/prusa30/jniImports/gmpcgal" -name 'libgmpxx.so' | head -1)"
+          test -n "$GMPXX_LIB" || { echo "ERROR: staged libgmpxx.so not found"; exit 1; }
+          MPFR_LIB="$(find "$(pwd)/engine/prusa30/jniImports/gmpcgal" -name 'libmpfr.so' | head -1)"
+          test -n "$MPFR_LIB" || { echo "ERROR: staged libmpfr.so not found"; exit 1; }
+          echo "GMP lib: $GMP_LIB inc: $GMP_INC"
+          echo "MPFR lib: $MPFR_LIB"
           # PNG/ZLIB: stock FindPNG/FindZLIB honor PNG_ROOT/ZLIB_ROOT, but
           # pre-seeding the exact lib+include paths is immune to GNUInstallDirs
           # nesting (lib/ vs lib/<triplet>/) and NDK-sysroot shadowing
@@ -851,6 +998,13 @@ jobs:
             -Dlibassert_DIR="$ASSERT_CMAKE_DIR" \
             -DQhull_DIR="$QHULL_CMAKE_DIR" \
             -Dprusa_fdm_mixer_DIR="$MIXER_CMAKE_DIR" \
+            -DCGAL_DIR="$CGAL_CMAKE_DIR" \
+            -DGMP_INCLUDE_DIR="$GMP_INC" \
+            -DGMP_LIBRARIES="$GMP_LIB" \
+            -DGMPXX_INCLUDE_DIR="$GMP_INC" \
+            -DGMPXX_LIBRARIES="$GMPXX_LIB" \
+            -DMPFR_INCLUDE_DIR="$GMP_INC" \
+            -DMPFR_LIBRARIES="$MPFR_LIB" \
             -Dcpptrace_DIR="$CPPTRACE_CMAKE_DIR" \
             -Dspdlog_DIR="$SPDLOG_CMAKE_DIR" \
             -Dcereal_DIR="$CEREAL_CMAKE_DIR" \

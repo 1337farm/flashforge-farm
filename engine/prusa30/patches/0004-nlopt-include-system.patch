@@ -1,0 +1,17 @@
+# 0004: expose staged NLopt include dir globally (libnest2d's NLopt::nlopt is
+# only PRIVATE to biz-arrange; libslic3r TUs including NLoptOptimizer.hpp never
+# get the include dir on the NDK cross-build where there is no system nlopt).
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -286,6 +286,10 @@
+ include(Localization)
+ include(GlobalDependencies)
+ 
++# NDK cross-builds have no system NLopt; export the staged include dir globally
++# (desktop builds get it from /usr/include via the distro).
++include_directories(SYSTEM "${NLopt_INCLUDE_DIR}")
++
+ include(CheckAndPrintSummary)
+ 
+ add_subdirectory(bundled_deps)

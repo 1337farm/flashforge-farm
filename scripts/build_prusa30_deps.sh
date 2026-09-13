@@ -109,7 +109,7 @@ stage_include sol2 "https://github.com/ThePhD/sol2/archive/refs/tags/v3.5.0.zip"
 
 stage_include eigen "https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.zip" \
     eba3f3d414d2f8cba2919c78ec6daab08fc71ba2ba4ae502b7e5d4d99fc02cda \
-    eigen.zip "Eigen"
+    eigen.zip "Eigen" "unsupported"
 
 stage_include expected "https://github.com/TartanLlama/expected/archive/refs/tags/v1.1.0.zip" \
     4b2a347cf5450e99f7624247f7d78f86f3adb5e6acd33ce307094e9507615b78 \

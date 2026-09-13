@@ -58,6 +58,7 @@ DEP_CMAKE = {
     "TBB": "TBB.cmake",
     "GMP": "GMP.cmake",
     "MPFR": "MPFR.cmake",
+    "OpenSSL": "OpenSSL.cmake",
     "OpenVDB": "OpenVDB.cmake",
     "Eigen": "Eigen.cmake",
     "Lua": "Lua.cmake",

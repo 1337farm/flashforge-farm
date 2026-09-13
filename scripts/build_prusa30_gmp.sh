@@ -153,9 +153,13 @@ echo "$CGAL_SHA  cgal-$CGAL_VER.zip" | sha256sum -c --status - \
     || { echo "[gmpcgal] ERROR: cgal sha256 mismatch" >&2; exit 1; }
 rm -rf "cgal-$CGAL_VER" "cgal-build"
 mkdir -p "cgal-$CGAL_VER" && unzip -q -o "cgal-$CGAL_VER.zip" -d "cgal-$CGAL_VER"
-CSRC="$(find "cgal-$CGAL_VER" -maxdepth 2 -name CMakeLists.txt -path '*CGAL*' | head -1 | xargs dirname)"
-[ -n "$CSRC" ] || CSRC="$(find "cgal-$CGAL_VER" -maxdepth 2 -name CMakeLists.txt | head -1 | xargs dirname)"
-[ -n "$CSRC" ] || { echo "[gmpcgal] ERROR: no CGAL CMakeLists" >&2; exit 1; }
+# NOTE: never `... | xargs dirname` here — with `set -o pipefail`, empty
+# find output makes xargs exit 123 and `set -e` kills the script before any
+# fallback runs. Capture first, test non-empty, then dirname.
+CSRC_CAND="$(find "cgal-$CGAL_VER" -maxdepth 3 -name CMakeLists.txt -ipath '*cgal*' | head -1)"
+[ -n "$CSRC_CAND" ] || CSRC_CAND="$(find "cgal-$CGAL_VER" -maxdepth 3 -name CMakeLists.txt | head -1)"
+[ -n "$CSRC_CAND" ] || { echo "[gmpcgal] ERROR: no CGAL CMakeLists" >&2; exit 1; }
+CSRC="$(dirname "$CSRC_CAND")"
 test -d "$BOOST_STAGE/include/boost" || { echo "[gmpcgal] ERROR: staged Boost missing at $BOOST_STAGE" >&2; exit 1; }
 cmake -S "$CSRC" -B "cgal-build" \
     -DCMAKE_TOOLCHAIN_FILE="$TC" -DANDROID_ABI="$ABI" \

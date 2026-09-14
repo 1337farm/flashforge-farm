@@ -489,6 +489,9 @@ add_library(slic3r
         src/main/jni/admesh/stlinit.cpp
         src/main/jni/admesh/util.cpp
 
+        # Upstream 3.0 TU for CNumericLocalesSetter (used by admesh).
+        ${PRUSA_SRC}/bundled_deps/localesutils/LocalesUtils.cpp
+
         src/main/jni/clipper/clipper_z.cpp
         src/main/jni/clipper/clipper_z.hpp
 

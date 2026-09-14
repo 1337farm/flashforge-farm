@@ -756,6 +756,10 @@ target_include_directories(slic3r PRIVATE
         ${PRUSA_SRC}/src/libslic3r/include
         ${PRUSA_SRC}/src/libslic3r/src
         ${PRUSA_SRC}/bundled_deps
+        ${PRUSA_SRC}/src/slic3r-domain/include
+        ${PRUSA_SRC}/src/slic3r-base/include
+        ${PRUSA_SRC}/src/slic3r-biz-algorithms/include
+        ${PRUSA_SRC}/src/slic3r-biz-arrange/include
         src/main/jni/openvdb
         src/main/jni/mpfr
         src/main/jni/zlib

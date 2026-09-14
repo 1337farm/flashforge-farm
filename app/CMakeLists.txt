@@ -100,11 +100,9 @@ target_include_directories(farm PRIVATE
         ${ENGINE_ROOT}/build/headers/cereal/include
         ${ENGINE_ROOT}/build/headers/nlohmann_json/include
         ${ENGINE_ROOT}/build/headers/sol2/include
-
         ${ENGINE_ROOT}/build/headers/expected/include
         ${ENGINE_ROOT}/build/headers/magic_enum/include
         ${PRUSA_GEN}
-        ${ENGINE_ROOT}/build/eigen-3.4.0/include  # staged Eigen 3.4.0 (scripts/stage_eigen.sh)
         ${ENGINE_ROOT}/prusa30/jniImports/assert/include  # staged libassert (3.0 Assert.hpp)
         ${ENGINE_INCLUDE_SUBDIRS}               # flattened sys-style includes (<expat.h>, <nlopt.h>, ...)
         ${ENGINE_JNI}/render                # flat render headers: GLModel.hpp, GLShader.hpp, bed_utils.hpp

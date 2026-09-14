@@ -32,7 +32,7 @@
 #include "libslic3r/calib.hpp"
 #include "libslic3r/Geometry/ConvexHull.hpp"
 #include "libslic3r/Format/3mf.hpp"
-#include "prusa/Orient.hpp"
+#include "compat/Orient.hpp"
 #include "Viewer.hpp"
 
 #include "GLModel.hpp"

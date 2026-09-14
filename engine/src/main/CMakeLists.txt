@@ -889,8 +889,8 @@ add_library(slic3r
         src/main/jni/libslic3r/Format/3mf.hpp
         src/main/jni/libslic3r/Format/AMF.cpp
         src/main/jni/libslic3r/Format/AMF.hpp
-        src/main/jni/libslic3r/Format/bbs_3mf.cpp
-        src/main/jni/libslic3r/Format/bbs_3mf.hpp
+        src/main/jni/libslic3r/Format/prusa_3mf.cpp
+        src/main/jni/libslic3r/Format/prusa_3mf.hpp
         src/main/jni/libslic3r/Format/STEP.cpp
         src/main/jni/libslic3r/Format/STEP.hpp
         src/main/jni/libslic3r/format.hpp

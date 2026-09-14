@@ -90,6 +90,7 @@ target_include_directories(farm PRIVATE
         ${PRUSA_SRC}/src/slic3r-jthread/include
         ${PRUSA_SRC}/src/libpgcode/include
         ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
+        ${ENGINE_ROOT}/build/eigen-3.4.0/include  # staged Eigen 3.4.0 (scripts/stage_eigen.sh)
         ${ENGINE_INCLUDE_SUBDIRS}               # flattened sys-style includes (<expat.h>, <nlopt.h>, ...)
         ${ENGINE_JNI}/render                # flat render headers: GLModel.hpp, GLShader.hpp, bed_utils.hpp
         ${ENGINE_JNI}/libvgcode/include     # vgcode flat include: Viewer.hpp

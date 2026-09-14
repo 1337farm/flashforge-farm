@@ -3842,7 +3842,7 @@ bool PrintObject::update_layer_height_profile(const ModelObject &model_object, c
 
     return updated;
 }
-// void PrintObject::get_certain_layers(float start, float end, std::vector<LayerPtrs> &out, std::vector<BoundingBox> &boundingbox_objects)
+void PrintObject::get_certain_layers(float start, float end, std::vector<LayerPtrs> &out, std::vector<BoundingBox> &boundingbox_objects)
 {
     BoundingBox temp;
     LayerPtrs   out_temp;

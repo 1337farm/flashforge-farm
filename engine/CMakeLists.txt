@@ -786,6 +786,8 @@ target_include_directories(libslic3r_core PRIVATE
     ${PRUSA_SRC}/src/libslic3r/src
     ${PRUSA_SRC}/src/libseqarrange/include
     ${PRUSA_SRC}/bundled_deps
+    ${PRUSA_SRC}/bundled_deps/semver
+    ${PRUSA_SRC}/bundled_deps/localesutils
     ${PRUSA_SRC}/src/slic3r-domain/include
     ${PRUSA_SRC}/src/slic3r-base/include
     ${PRUSA_SRC}/src/slic3r-biz-algorithms/include
@@ -809,6 +811,8 @@ target_include_directories(libslic3r_core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/expected/include
     ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/magic_enum/include)
 target_link_libraries(libslic3r_core PUBLIC ${PRUSA_SRC}/bundled_deps/admesh
+                ${PRUSA_SRC}/bundled_deps/localesutils
+                ${PRUSA_SRC}/bundled_deps/semver
                                         ${PRUSA_SRC}/bundled_deps/localesutils)
 
 target_link_libraries(slic3r PRIVATE libslic3r_core)

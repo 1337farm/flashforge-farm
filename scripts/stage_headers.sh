@@ -16,7 +16,9 @@ set -euo pipefail
 
 DEST="${1:?usage: stage_headers.sh <dest-dir> [dep...]}"
 shift
-WORK="${WORK_DIR:-/tmp/stage_headers}"
+# Sandboxed runners (Termux) often deny /tmp writes; stage scratch in-repo.
+_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+WORK="${WORK_DIR:-$_SCRIPT_DIR/../.babysit-tmp/stage_headers}"
 # Optional dep filter (e.g. for testing one dep); default stages all.
 ONLY="$*"
 
@@ -88,6 +90,6 @@ needs expected && dl_verify_stage expected \
 needs magic_enum && dl_verify_stage magic_enum \
     "https://github.com/Neargye/magic_enum/archive/refs/tags/v0.9.7.zip" \
     "e293afdaf4d5918bc145903bccff06d28b3ed437f1ac8414ace9e8a769a9e470" \
-    magic_enum.zip "magic_enum.hpp" "magic_enum"
+    magic_enum.zip "magic_enum/magic_enum.hpp" "magic_enum"
 
 echo "header deps staged under $DEST"

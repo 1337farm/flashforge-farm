@@ -548,8 +548,9 @@ namespace Slic3r {
             unsigned int vertices_counter = 0;
             for (uint32_t i = 0; i < its.indices.size(); ++i) {
                 const stl_triangle_vertex_indices face = its.indices[i];
-                const stl_vertex                  vertex[3] = { its.vertices[face[0]], its.vertices[face[1]], its.vertices[face[2]] };
-                const stl_vertex                  n = Biz::Algorithms::TriangleMesh::face_normal_normalized(vertex);
+                const std::array<stl_vertex, 3>    vertex = Biz::Algorithms::TriangleMesh::its_triangle_vertices(
+                    its, static_cast<size_t>(face));
+                const stl_vertex n = Biz::Algorithms::TriangleMesh::face_normal_normalized(vertex[0]);
                 for (size_t j = 0; j < 3; ++j) {
                     data.add_vertex(vertex[j], n);
                 }
@@ -871,15 +872,14 @@ namespace Slic3r {
             data.add_vertex(Vec3f(0.0f, outer_radius, half_thickness), (Vec3f)Vec3f::UnitX());
             data.add_vertex(Vec3f(0.0f, radius + half_tip_width, half_thickness), (Vec3f)Vec3f::UnitX());
 
-            Vec3f normal(-half_tip_width, tip_height, 0.0f);
-            normal.normalize();
+            Vec3f normal = Vec3f(-half_tip_width, tip_height, 0.0f).normalized();
             data.add_vertex(Vec3f(0.0f, radius + half_tip_width, -half_thickness), normal);
             data.add_vertex(Vec3f(-tip_height, radius, -half_thickness), normal);
             data.add_vertex(Vec3f(0.0f, radius + half_tip_width, half_thickness), normal);
             data.add_vertex(Vec3f(-tip_height, radius, half_thickness), normal);
 
-            normal = { -half_tip_width, -tip_height, 0.0f };
-            normal.normalize();
+            Vec3f normal;
+            normal = Vec3f(-half_tip_width, -tip_height, 0.0f).normalized();
             data.add_vertex(Vec3f(-tip_height, radius, -half_thickness), normal);
             data.add_vertex(Vec3f(0.0f, radius - half_tip_width, -half_thickness), normal);
             data.add_vertex(Vec3f(-tip_height, radius, half_thickness), normal);
@@ -1042,15 +1042,13 @@ namespace Slic3r {
             data.add_vertex(Vec3f(half_stem_width, stem_height, half_thickness), (Vec3f)(-Vec3f::UnitY()));
             data.add_vertex(Vec3f(half_tip_width, stem_height, half_thickness), (Vec3f)(-Vec3f::UnitY()));
 
-            Vec3f normal(tip_height, half_tip_width, 0.0f);
-            normal.normalize();
+            Vec3f normal = Vec3f(tip_height, half_tip_width, 0.0f).normalized();
             data.add_vertex(Vec3f(half_tip_width, stem_height, -half_thickness), normal);
             data.add_vertex(Vec3f(0.0f, total_height, -half_thickness), normal);
             data.add_vertex(Vec3f(half_tip_width, stem_height, half_thickness), normal);
             data.add_vertex(Vec3f(0.0f, total_height, half_thickness), normal);
 
-            normal = { -tip_height, half_tip_width, 0.0f };
-            normal.normalize();
+            const Vec3f normal2 = Vec3f(-tip_height, half_tip_width, 0.0f).normalized();
             data.add_vertex(Vec3f(0.0f, total_height, -half_thickness), normal);
             data.add_vertex(Vec3f(-half_tip_width, stem_height, -half_thickness), normal);
             data.add_vertex(Vec3f(0.0f, total_height, half_thickness), normal);

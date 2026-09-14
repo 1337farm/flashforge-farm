@@ -50,7 +50,7 @@ using Domain::TriangleSelector::TriangleStateType;
 
 // GLShaderProgram lives in the app render stack (still 2.x); forward-declare so
 // get_current_shader() keeps its signature without pulling those headers.
-namespace Slic3r { class GLShaderProgram; }
+#include "render/Program.hpp"
 
 #define LOG_TAG "NativeCut"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)

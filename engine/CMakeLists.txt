@@ -784,6 +784,7 @@ add_library(libslic3r_core STATIC ${SLIC3R_IMPL_CPP})
 target_include_directories(libslic3r_core PRIVATE
     ${PRUSA_SRC}/src/libslic3r/include
     ${PRUSA_SRC}/src/libslic3r/src
+    ${PRUSA_SRC}/src/libseqarrange/include
     ${PRUSA_SRC}/bundled_deps
     ${PRUSA_SRC}/src/slic3r-domain/include
     ${PRUSA_SRC}/src/slic3r-base/include

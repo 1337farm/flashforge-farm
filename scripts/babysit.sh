@@ -229,11 +229,25 @@ maybe_download_apk() { # $1 run id
   fi
   dir="$ROOT/$APK_STAGE_DIR/$SHA"
   mkdir -p "$dir"
-  if gh run download "$id" -R "$REPO" -n "$APK_ARTIFACT" -D "$dir" --clobber 2>"$dir/.dl.err"; then
+  # --clobber only exists in newer gh releases (Termux ships 2.100.0,
+  # which rejects the flag): detect once and pre-clean the artifact dir
+  # instead, so re-downloads behave the same everywhere.
+  dl_flags=""
+  if gh run download --help 2>/dev/null | grep -q -- '--clobber'; then
+    dl_flags="--clobber"
+  else
+    rm -rf "${dir:?}/${APK_ARTIFACT:?}"
+  fi
+  # Sandboxed runners (Termux) often have no writable system temp dir and gh
+  # stages artifact zips in $TMPDIR -> "permission denied". Stage in-repo.
+  tmpdir="$ROOT/.babysit-tmp"
+  mkdir -p "$tmpdir"
+  if TMPDIR="$tmpdir" gh run download "$id" -R "$REPO" -n "$APK_ARTIFACT" -D "$dir" $dl_flags 2>"$dir/.dl.err"; then
     apk="$(find "$dir" -maxdepth 1 -name '*.apk' 2>/dev/null | head -1)"
     if [ -n "$apk" ]; then
       log "APK downloaded: $apk ($(du -h "$apk" | cut -f1))"
-      if [ -d "$HOME/storage/downloads" ]; then
+      # $HOME may be unset under set -u (non-interactive runners).
+      if [ -n "${HOME:-}" ] && [ -d "$HOME/storage/downloads" ]; then
         mkdir -p "$HOME/storage/downloads/FlashForgeFarm-Debug-APK"
         cp -f "$apk" "$HOME/storage/downloads/FlashForgeFarm-Debug-APK/"
         log "copied -> $HOME/storage/downloads/FlashForgeFarm-Debug-APK/$(basename "$apk")"

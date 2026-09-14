@@ -293,7 +293,7 @@ public:
 
     // add new simplifing method by fitting arc
     void simplify_by_fitting_arc(double tolerance);
-    //     bool is_force_no_extrusion() const { return m_no_extrusion; }
+    bool is_force_no_extrusion() const { return m_no_extrusion; }
     void set_force_no_extrusion(bool no_extrusion) { m_no_extrusion = no_extrusion; }
     void set_extrusion_role(ExtrusionRole extrusion_role) { m_role = extrusion_role; }
     void set_reverse() override { m_can_reverse = false; }

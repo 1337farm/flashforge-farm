@@ -116,10 +116,9 @@ public:
     void add_object_end_labels(std::string &gcode);
     void add_object_change_labels(std::string& gcode);
 
-    //     void set_current_position_clear(bool clear) { m_is_current_pos_clear = clear; };
+    void set_current_position_clear(bool clear) { m_is_current_pos_clear = clear; };
     bool is_current_position_clear() const { return m_is_current_pos_clear; };
-    //     static bool full_gcode_comment;
-    //PrusaSlicer
+    static bool full_gcode_comment;
     void set_is_prusa_machine(bool bval) {m_is_prusa_printers = bval;}
     const bool is_prusa_printers() const {return m_is_prusa_printers;}
     void set_is_first_layer(bool bval) { m_is_first_layer = bval; }

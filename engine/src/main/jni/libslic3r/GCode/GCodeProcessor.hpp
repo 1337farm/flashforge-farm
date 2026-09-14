@@ -1124,7 +1124,7 @@ class Print;
 
         double extract_absolute_position_on_axis(Axis axis, const GCodeReader::GCodeLine& line, double area_filament_cross_section);
 
-        //         void update_slice_warnings();
+        void update_slice_warnings();
 
         // get current used filament
         int get_filament_id(bool force_initialize = true) const;

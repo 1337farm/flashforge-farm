@@ -490,12 +490,13 @@ add_library(slic3r
         SHARED
         src/main/jni/semver/semver.c
 
-        src/main/jni/admesh/connect.cpp
-        src/main/jni/admesh/normals.cpp
-        src/main/jni/admesh/shared.cpp
-        src/main/jni/admesh/stl_io.cpp
-        src/main/jni/admesh/stlinit.cpp
-        src/main/jni/admesh/util.cpp
+        # Upstream 3.0 bundled admesh (2.x copy deleted; same TU set).
+        ${PRUSA_SRC}/bundled_deps/admesh/admesh/connect.cpp
+        ${PRUSA_SRC}/bundled_deps/admesh/admesh/normals.cpp
+        ${PRUSA_SRC}/bundled_deps/admesh/admesh/shared.cpp
+        ${PRUSA_SRC}/bundled_deps/admesh/admesh/stl_io.cpp
+        ${PRUSA_SRC}/bundled_deps/admesh/admesh/stlinit.cpp
+        ${PRUSA_SRC}/bundled_deps/admesh/admesh/util.cpp
 
         # Upstream 3.0 TU for CNumericLocalesSetter (used by admesh).
         ${PRUSA_SRC}/bundled_deps/localesutils/LocalesUtils.cpp

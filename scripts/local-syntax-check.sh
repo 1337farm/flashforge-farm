@@ -35,9 +35,9 @@ SYSROOT="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 # from the fetched tree (engine/prusa30/fetch_prusaslicer.sh -> build/prusaslicer-src).
 PRUSA_SRC="${PRUSA_SRC:-$ROOT/engine/build/prusaslicer-src}"
 [ -d "$PRUSA_SRC/src/libslic3r/include" ] || { echo "ERROR: 3.0 tree not fetched (run engine/prusa30/fetch_prusaslicer.sh)" >&2; exit 1; }
-EIGEN340="$ROOT/engine/build/eigen-3.4.0"
-if [ ! -f "$EIGEN340/include/Eigen/Dense" ]; then
-  bash "$SCRIPT_DIR/stage_eigen.sh" "$EIGEN340" || { echo "ERROR: Eigen stage failed" >&2; exit 1; }
+EIGEN340="$ROOT/engine/build/headers"
+if [ ! -f "$EIGEN340/eigen/include/Eigen/Dense" ]; then
+  bash "$SCRIPT_DIR/stage_headers.sh" "$EIGEN340" || { echo "ERROR: header stage failed" >&2; exit 1; }
 fi
 INC=(
   -Isrc/main/jni
@@ -56,7 +56,14 @@ INC=(
   -I"$PRUSA_SRC/src/libpgcode/include"
   -I"$PRUSA_SRC/bundled_deps/slic3r-domain-types/include"
   -Isrc/main/jni/LibBGCode
-  -I"$EIGEN340/include"
+  -I"$EIGEN340/eigen/include"
+  -I"$EIGEN340/spdlog/include"
+  -I"$EIGEN340/fmt/include"
+  -I"$EIGEN340/cereal/include"
+  -I"$EIGEN340/nlohmann_json/include"
+  -I"$EIGEN340/sol2/include"
+  -I"$EIGEN340/expected/include"
+  -I"$EIGEN340/magic_enum/include"
   -Isrc/main/jni/libigl
   -Isrc/main/jniImports/boost/include
   -Isrc/main/jniImports/oneTBB/include

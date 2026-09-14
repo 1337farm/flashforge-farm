@@ -81,7 +81,8 @@ target_include_directories(farm PRIVATE
         ${ENGINE_JNI}                       # render/, expat/, clipper/, cereal/, ...
         ${PRUSA_SRC}/src/libslic3r/include  # ISSUE-210: 3.0 core headers (vendored libslic3r/ deleted)
         ${PRUSA_SRC}/src/libslic3r/src
-        ${PRUSA_SRC}/bundled_deps
+        ${PRUSA_SRC}/bundled_deps/admesh
+        ${PRUSA_SRC}/bundled_deps/localesutils
         ${PRUSA_SRC}/src/slic3r-domain/include
         ${PRUSA_SRC}/src/slic3r-base/include
         ${PRUSA_SRC}/src/slic3r-biz-algorithms/include
@@ -93,6 +94,15 @@ target_include_directories(farm PRIVATE
         ${PRUSA_SRC}/src/slic3r-jthread/include
         ${PRUSA_SRC}/src/libpgcode/include
         ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
+        ${ENGINE_ROOT}/build/headers/eigen/include
+        ${ENGINE_ROOT}/build/headers/spdlog/include
+        ${ENGINE_ROOT}/build/headers/fmt/include
+        ${ENGINE_ROOT}/build/headers/cereal/include
+        ${ENGINE_ROOT}/build/headers/nlohmann_json/include
+        ${ENGINE_ROOT}/build/headers/sol2/include
+
+        ${ENGINE_ROOT}/build/headers/expected/include
+        ${ENGINE_ROOT}/build/headers/magic_enum/include
         ${PRUSA_GEN}
         ${ENGINE_ROOT}/build/eigen-3.4.0/include  # staged Eigen 3.4.0 (scripts/stage_eigen.sh)
         ${ENGINE_ROOT}/prusa30/jniImports/assert/include  # staged libassert (3.0 Assert.hpp)

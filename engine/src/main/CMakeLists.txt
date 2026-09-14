@@ -481,7 +481,8 @@ add_library(slic3r
         src/main/jni/semver/semver.c
 
         # Upstream 3.0 bundled admesh (2.x copy deleted; same TU set).
-        ${PRUSA_SRC}/bundled_deps/admesh/admesh/connect.cpp
+        ${PRUSA_SRC}/bundled_deps/admesh
+        ${PRUSA_SRC}/bundled_deps/localesutils/admesh/admesh/connect.cpp
         ${PRUSA_SRC}/bundled_deps/admesh/admesh/normals.cpp
         ${PRUSA_SRC}/bundled_deps/admesh/admesh/shared.cpp
         ${PRUSA_SRC}/bundled_deps/admesh/admesh/stl_io.cpp
@@ -780,6 +781,15 @@ target_include_directories(slic3r PRIVATE
         ${PRUSA_SRC}/src/slic3r-jthread/include
         ${PRUSA_SRC}/src/libpgcode/include
         ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/eigen/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/spdlog/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/fmt/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/cereal/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/nlohmann_json/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/sol2/include
+
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/expected/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/magic_enum/include
         ${PRUSA_GEN}
         src/main/jni/openvdb
         src/main/jni/mpfr

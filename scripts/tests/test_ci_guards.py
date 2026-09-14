@@ -339,15 +339,9 @@ def main():
             "default ~1MB new Thread() stack overflows in Slic3r::Print::apply"
         )
     farm = (REPO / "app/src/main/jni/farm/farm_native.cpp").read_text()
-    m = re.search(
-        r"Java_com_flashforge_farm_slic3r_Native_model_1slice.*?^}",
-        farm, re.S | re.M)
-    body = m.group(0) if m else ""
-    if "make_unique<Print>()" not in body or "make_unique<DynamicPrintConfig>()" not in body:
-        failures.append(
-            "model_slice must heap-allocate Print/DynamicPrintConfig "
-            "(make_unique); stack locals eat the slice thread's stack"
-        )
+    # (2.x heap-allocation lesson retired with the vendored tree: model_slice
+    # is a 3.0 stub until #212 lands the IPrint port. Re-add an equivalent
+    # guard — e.g. no large 3.0 objects by value on the slice thread — then.)
 
     # AutoDispatch dataSync guard: Android 15+ (targetSdk 35) caps dataSync
     # FGS at 6h/24h and kills the app two ways — running past the cap without
@@ -667,15 +661,10 @@ def main():
             "and prune legacy/other-build docs by name comparison"
         )
 
-    # Slice-verbosity guards: failures must carry actionable context — the
-    # native catch attaches a per-key config inventory (def type + actual
-    # C++ class), and the Java slice catch logs paths/thread/memory. A bare
-    # message + stack alone could not identify the 2026-09-07 config culprit.
-    if 'describe_slice_config(*config)' not in farm_native or '__cxa_demangle' not in farm_native:
-        failures.append(
-            "model_slice catch must attach describe_slice_config inventory "
-            "(demangled per-key classes) so config failures are diagnosable offline"
-        )
+    # Slice-verbosity guards: failures must carry actionable context.
+    # (The describe_slice_config-inventory guard retired with the 2.x slice
+    # path; re-add a 3.0 equivalent — e.g. ConfigPack key inventory on
+    # IPrint errors — when #212 lands the port.)
     if 'thread=" + Thread.currentThread' not in bed:
         failures.append(
             "BedFragment slice failure must log paths/thread/memory context, "

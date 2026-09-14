@@ -1,24 +1,35 @@
-#include "libslic3r/Geometry.hpp"
-#include "libslic3r/ClipperUtils.hpp"
+#include "Slic3r/Domain/Point.hpp"
+#include "Slic3r/Domain/ExPolygon.hpp"
+#include "Slic3r/Domain/Line.hpp"
+#include "Slic3r/Domain/Polyline.hpp"
+#include "Slic3r/Biz/Algorithms/ClipperUtils.hpp"
+#include "Slic3r/Biz/Algorithms/ExPolygon.hpp"
+#include "Slic3r/Biz/Algorithms/Polygon.hpp"
+#include "Slic3r/Biz/Algorithms/Polyline.hpp"
+#include "Slic3r/Biz/Algorithms/Scaling.hpp"
+#include "Slic3r/Biz/Algorithms/Tesselate.hpp"
 #include "GLModel.hpp"
-#include "Tesselate.hpp"
 
 #include <android/log.h>
 
-#ifndef ORCA_SLICER3_RENDER_BED_UTILS_HPP
-#define ORCA_SLICER3_RENDER_BED_UTILS_HPP
+#include <algorithm>
+#include <iterator>
+
+#ifndef FLASHFORGE_FARM_RENDER_BED_UTILS_HPP
+#define FLASHFORGE_FARM_RENDER_BED_UTILS_HPP
 
 #define GROUND_Z -0.02f
 
 using namespace Slic3r;
+using namespace Slic3r::Domain;
 using namespace Slic3r::GUI;
 
 void bed_util_init_gridlines(ExPolygon& contour, GLModel* glGridlines) {
     if (contour.empty())
         return;
 
-    const BoundingBox& bed_bbox = contour.contour.bounding_box();
-    const coord_t step = scale_(10.0);
+    const BoundingBox2crd bed_bbox = Biz::Algorithms::Polygon::get_extents(contour.contour);
+    const coord_t step = Biz::Algorithms::Scaling::scaled<coord_t>(10.0);
 
     Polylines axes_lines;
     for (coord_t x = bed_bbox.min.x(); x <= bed_bbox.max.x(); x += step) {
@@ -35,10 +46,11 @@ void bed_util_init_gridlines(ExPolygon& contour, GLModel* glGridlines) {
     }
 
     // clip with a slightly grown expolygon because our lines lay on the contours and may get erroneously clipped
-    Lines gridlines = to_lines(intersection_pl(axes_lines, offset(contour, float(SCALED_EPSILON))));
+    Lines gridlines = Biz::Algorithms::Polyline::to_lines(Biz::Algorithms::ClipperUtils::intersection_pl(
+        axes_lines, Biz::Algorithms::ClipperUtils::offset(contour, static_cast<float>(SCALED_EPSILON))));
 
     // append bed contours
-    Lines contour_lines = to_lines(contour);
+    Lines contour_lines = Biz::Algorithms::ExPolygon::to_lines(contour);
     std::copy(contour_lines.begin(), contour_lines.end(), std::back_inserter(gridlines));
 
     GLModel::Geometry init_data;
@@ -46,9 +58,9 @@ void bed_util_init_gridlines(ExPolygon& contour, GLModel* glGridlines) {
     init_data.reserve_vertices(2 * gridlines.size());
     init_data.reserve_indices(2 * gridlines.size());
 
-    for (const Slic3r::Line& l : gridlines) {
-        init_data.add_vertex(Vec3f(unscale<float>(l.a.x()), unscale<float>(l.a.y()), GROUND_Z));
-        init_data.add_vertex(Vec3f(unscale<float>(l.b.x()), unscale<float>(l.b.y()), GROUND_Z));
+    for (const Line& l : gridlines) {
+        init_data.add_vertex(Vec3f(Biz::Algorithms::Scaling::unscaled<float>(l.a.x()), Biz::Algorithms::Scaling::unscaled<float>(l.a.y()), GROUND_Z));
+        init_data.add_vertex(Vec3f(Biz::Algorithms::Scaling::unscaled<float>(l.b.x()), Biz::Algorithms::Scaling::unscaled<float>(l.b.y()), GROUND_Z));
         const unsigned int vertices_counter = (unsigned int)init_data.vertices_count();
         init_data.add_line(vertices_counter - 2, vertices_counter - 1);
     }
@@ -60,15 +72,15 @@ void bed_util_init_triangles_its(ExPolygon& contour, indexed_triangle_set* its) 
     if (contour.empty())
         return;
 
-    auto triangles = triangulate_expolygon_3d(contour, 0);
+    auto triangles = Biz::Algorithms::Tesselate::triangulate_expolygon_3d(contour, 0);
     its->vertices.reserve(triangles.size());
 
     for (size_t i = 0; i < triangles.size(); i += 3) {
-        its->vertices.emplace_back(triangles[i].cast<float>());
-        its->vertices.emplace_back(triangles[i + 1].cast<float>());
-        its->vertices.emplace_back(triangles[i + 2].cast<float>());
+        its->vertices.emplace_back(triangles[i].x(), triangles[i].y(), triangles[i].z());
+        its->vertices.emplace_back(triangles[i + 1].x(), triangles[i + 1].y(), triangles[i + 1].z());
+        its->vertices.emplace_back(triangles[i + 2].x(), triangles[i + 2].y(), triangles[i + 2].z());
 
-        its->indices.emplace_back(i, i + 1, i + 2);
+        its->indices.push_back({ static_cast<int>(i), static_cast<int>(i + 1), static_cast<int>(i + 2) });
     }
 }
 
@@ -79,7 +91,8 @@ void bed_util_init_triangles(ExPolygon& contour, GLModel* glTriangles) {
     if (contour.empty())
         return;
 
-    const std::vector<Vec2f> triangles = triangulate_expolygon_2f(contour, NORMALS_UP);
+    const std::vector<Vec2f> triangles = Biz::Algorithms::Tesselate::triangulate_expolygon_2f(
+        contour, Biz::Algorithms::Tesselate::NORMALS_UP);
     if (triangles.empty() || triangles.size() % 3 != 0)
         return;
 
@@ -113,7 +126,7 @@ void bed_util_init_triangles(ExPolygon& contour, GLModel* glTriangles) {
     }
 
     glTriangles->init_from(std::move(init_data));
-    glTriangles->set_color(Slic3r::ColorRGBA::DARK_GRAY());
+    glTriangles->set_color(ColorRGBA::DARK_GRAY());
 }
 
 void bed_util_init_contourlines(ExPolygon& contour, GLModel* glContourlines) {
@@ -123,16 +136,16 @@ void bed_util_init_contourlines(ExPolygon& contour, GLModel* glContourlines) {
     if (contour.empty())
         return;
 
-    const Lines contour_lines = to_lines(contour);
+    const Lines contour_lines = Biz::Algorithms::ExPolygon::to_lines(contour);
 
     GLModel::Geometry init_data;
     init_data.format = { GLModel::Geometry::EPrimitiveType::Lines, GLModel::Geometry::EVertexLayout::P3 };
     init_data.reserve_vertices(2 * contour_lines.size());
     init_data.reserve_indices(2 * contour_lines.size());
 
-    for (const Slic3r::Line& l : contour_lines) {
-        init_data.add_vertex(Vec3f(unscale<float>(l.a.x()), unscale<float>(l.a.y()), GROUND_Z));
-        init_data.add_vertex(Vec3f(unscale<float>(l.b.x()), unscale<float>(l.b.y()), GROUND_Z));
+    for (const Line& l : contour_lines) {
+        init_data.add_vertex(Vec3f(Biz::Algorithms::Scaling::unscaled<float>(l.a.x()), Biz::Algorithms::Scaling::unscaled<float>(l.a.y()), GROUND_Z));
+        init_data.add_vertex(Vec3f(Biz::Algorithms::Scaling::unscaled<float>(l.b.x()), Biz::Algorithms::Scaling::unscaled<float>(l.b.y()), GROUND_Z));
         const unsigned int vertices_counter = (unsigned int)init_data.vertices_count();
         init_data.add_line(vertices_counter - 2, vertices_counter - 1);
     }
@@ -141,4 +154,4 @@ void bed_util_init_contourlines(ExPolygon& contour, GLModel* glContourlines) {
     glContourlines->set_color({ 1.0f, 1.0f, 1.0f, 0.5f });
 }
 
-#endif //ORCA_SLICER3_RENDER_BED_UTILS_HPP
+#endif //FLASHFORGE_FARM_RENDER_BED_UTILS_HPP

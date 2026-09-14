@@ -1,5 +1,5 @@
-#ifndef ORCA_SLICER3_RENDER_PROGRAM_HPP
-#define ORCA_SLICER3_RENDER_PROGRAM_HPP
+#ifndef FLASHFORGE_FARM_RENDER_PROGRAM_HPP
+#define FLASHFORGE_FARM_RENDER_PROGRAM_HPP
 
 namespace Slic3r {
 
@@ -12,4 +12,4 @@ GLShaderProgram* get_current_shader();
 
 } // namespace Slic3r
 
-#endif // ORCA_SLICER3_RENDER_PROGRAM_HPP
+#endif // FLASHFORGE_FARM_RENDER_PROGRAM_HPP

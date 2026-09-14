@@ -872,6 +872,11 @@ jobs:
         run: |
           bash engine/prusa30/fetch_prusaslicer.sh
 
+      - name: Stage Eigen 3.4.0 headers (vendored 3.3 is not C++20-clean)
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          bash scripts/stage_eigen.sh engine/build/eigen-3.4.0
+
       - name: Build native engine .so from source (standalone CMake)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |
@@ -1063,6 +1068,15 @@ jobs:
           tar -xzf "$DL/tbb-deps.tar.gz"
           test -d engine/src/main/jniImports/oneTBB/include/tbb || { echo "ERROR: tbb headers missing after extract"; exit 1; }
           echo "oneTBB headers restored from release"
+
+      - name: Fetch PrusaSlicer 3.0 core (farm bridge compiles against it)
+        run: |
+          bash engine/prusa30/fetch_prusaslicer.sh
+          test -d engine/build/prusaslicer-src/src/libslic3r || { echo "ERROR: 3.0 tree missing after fetch"; exit 1; }
+
+      - name: Stage Eigen 3.4.0 headers (farm bridge needs)
+        run: |
+          bash scripts/stage_eigen.sh engine/build/eigen-3.4.0
 
       - name: Download GMP trees artifact
         if: needs.changes.outputs.native == 'true'

@@ -100,7 +100,7 @@ add_library(mpfr SHARED IMPORTED)
 set_target_properties(mpfr PROPERTIES IMPORTED_LOCATION
         ${jni_libs}/${ANDROID_ABI}/libmpfr.so)
 
-include_directories(src/main/jni/eigen)
+include_directories(build/eigen-3.4.0/include)
 include_directories(src/main/jni/libigl)
 include_directories(src/main/occt/include/${ANDROID_ABI})
 
@@ -783,7 +783,7 @@ target_include_directories(slic3r PRIVATE
         src/main/jni/libpng
         src/main/jni/libjpeg-turbo
         src/main/jni/semver
-        src/main/jni/eigen
+        build/eigen-3.4.0/include
         src/main/jni/fast_float
         src/main/jni/expat
         src/main/jni/heatshrink

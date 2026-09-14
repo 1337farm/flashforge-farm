@@ -819,7 +819,7 @@ target_include_directories(slic3r PRIVATE
         ${PRUSA_SRC}/src/libslic3r/src
         ${PRUSA_SRC}/bundled_deps
         ${PRUSA_SRC}/bundled_deps/localesutils
-        ${PRUSA_SRC}/bundled_deps/semver
+        ${PRUSA_SRC}/bundled_deps/semver/semver
         ${PRUSA_SRC}/src/slic3r-domain/include
         ${PRUSA_SRC}/src/slic3r-base/include
         ${PRUSA_SRC}/src/slic3r-biz-algorithms/include

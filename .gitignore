@@ -52,6 +52,7 @@ __pycache__/
 scratch/
 .ci-artifacts/
 .babysit-apks/
+.babysit-tmp/
 flashforge-farm_mobile_assets/
 logcat.txt
 compile_mocks.txt

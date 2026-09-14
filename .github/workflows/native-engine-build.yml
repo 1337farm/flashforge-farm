@@ -1078,16 +1078,10 @@ jobs:
         run: |
           bash scripts/stage_eigen.sh engine/build/eigen-3.4.0
 
-      - name: Restore staged libassert from cache (3.0 Assert.hpp needs)
-        id: assert-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: engine/prusa30/jniImports/assert
-          # Same key as prusa30-headless: shared repo cache, NDK must match.
-          key: prusa30-assert-${{ hashFiles('scripts/build_prusa30_libassert.sh') }}-ndk${{ env.NDK_VERSION }}-arm64-v8a
-
-      - name: Build cpptrace+libassert from source (static, cache miss only)
-        if: steps.assert-cache.outputs.cache-hit != 'true'
+      - name: Build cpptrace+libassert from source (static; 3.0 Assert.hpp needs)
+        # No cache/release reuse by design (like GMP/MPFR): ~minutes, immune
+        # to poisoning, and the package-apk job must not use actions/cache
+        # (CI guard: build-dep skips cache-save on reuse).
         run: |
           chmod +x scripts/build_prusa30_libassert.sh
           NDK="$ANDROID_NDK_ROOT" ABI="arm64-v8a" API_LEVEL="23" \

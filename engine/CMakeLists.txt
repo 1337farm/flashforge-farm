@@ -799,6 +799,7 @@ target_include_directories(libslic3r_core PRIVATE
     ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main/jniImports/oneTBB/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main/jniImports/boost/include
+    ${PRUSA_GEN}
     ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/eigen/include
     ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/spdlog/include
     ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/fmt/include

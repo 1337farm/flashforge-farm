@@ -71,7 +71,7 @@ struct PaintSessionRef {
     // 0 = color (mm segmentation), 1 = support, 2 = seam, 3 = fuzzy skin.
     int mode = 0;
     Domain::TriangleMesh mesh;
-    BizAlgo::AABBMesh* emesh = nullptr;
+    Slic3r::AABBMesh* emesh = nullptr;
     std::unique_ptr<BizAlgo::TriangleSelector> selector;
 };
 // TODO(#212): opaque until the GL render stack ports to 3.0.
@@ -282,7 +282,7 @@ extern "C" {
         height = std::max(height, 0.1f);
 
         Domain::CutConnectorType connector_type = connector_type_from_int(type);
-        Domain::TriangleMesh mesh = BizAlgo::make_cylinder(1.0, 1.0, std::numbers::pi / 18.0);
+        Domain::TriangleMesh mesh = Slic3r::Biz::Algorithms::TriangleMesh::make_cylinder(1.0, 1.0, std::numbers::pi / 18.0);
         Domain::ModelVolume* volume = BizAlgo::ModelObject::add_volume(object, std::move(mesh), Domain::ModelVolumeType::NEGATIVE_VOLUME);
         if (volume == nullptr) return;
 
@@ -1124,7 +1124,7 @@ extern "C" {
         const Domain::TriangleSelector::TriangleSplittingData& data = facets_for_mode(obj->volumes[0], mode).get_data();
         if (!data.triangles_to_split.empty())
             s->selector->deserialize(data, true);
-        s->emesh = new BizAlgo::AABBMesh(s->mesh, true);
+        s->emesh = new Slic3r::AABBMesh(s->mesh, true);
         return (jlong) (intptr_t) s;
     }
 
@@ -1136,9 +1136,9 @@ extern "C" {
         env->GetDoubleArrayRegion(dirArr, 0, 3, d);
         Vec3d origin(o[0], o[1], o[2]);
         Vec3d dir(d[0], d[1], d[2]);
-        std::vector<BizAlgo::AABBMesh::hit_result> hits = s->emesh->query_ray_hits(origin, dir);
+        std::vector<Slic3r::AABBMesh::hit_result> hits = s->emesh->query_ray_hits(origin, dir);
         if (hits.empty()) return env->NewDoubleArray(0);
-        const BizAlgo::AABBMesh::hit_result& hit = hits.front();
+        const Slic3r::AABBMesh::hit_result& hit = hits.front();
         jdoubleArray arr = env->NewDoubleArray(4);
         Vec3d pos = hit.position();
         double out[4] = { (double) hit.face(), pos.x(), pos.y(), pos.z() };

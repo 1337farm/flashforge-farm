@@ -54,10 +54,13 @@ through merge (see §3). If blocked, hand off exact state, never silence.
   `SYNC_PAT`), never bare `GITHUB_TOKEN`, or PR runs gate behind approval.
 - Pushing a branch while automerge is enabled can make the bot's own sync
   push re-trigger these holds; approve held runs before re-checking.
-- **Main has no post-merge CI.** Since 2026-09-11 a squash merge to main
-  creates NO runs (push triggers verified dead: empty run list on merge
-  commits). Green branch protection is NOT evidence of CI on main. After
-  every merge, validate main explicitly (see §3.1).
+- **Main CI is dispatched, not pushed.** Automerge merges with GITHUB_TOKEN,
+  which suppresses push triggers, so a squash merge to main creates NO push
+  runs by design. The native `automerge` job closes the gap: after queueing
+  the merge it polls up to 20 min for the squash to land, then dispatches
+  both workflows on main. Green branch protection alone is NOT evidence of
+  CI on main — confirm the dispatched main runs exist (see §3.1); if the
+  dispatch itself failed, re-run it manually from the merge commit.
 - The sync-head trust gate verifies `SYNC_PAT` authenticates as the repo
   owner (`gh api user`) before pushing and fails loudly otherwise. A dead
   PAT (expired/revoked) previously fell back to `GITHUB_TOKEN` and silently

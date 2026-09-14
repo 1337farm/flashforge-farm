@@ -1205,7 +1205,10 @@ jobs:
     name: merge
     runs-on: ubuntu-24.04
     needs: [package-apk]
-    timeout-minutes: 10
+    # 30 min: the dispatch step below polls up to 20 min for the queued
+    # squash to land before refreshing main (GITHUB_TOKEN merges never
+    # trigger the push workflows, so this wait IS main's automatic CI).
+    timeout-minutes: 30
     # !cancelled() is REQUIRED: on native=false PRs package-apk still MUST
     # have run (its own if: guard), but the naive success() default would
     # still drop this job here whenever anything upstream skipped. Merge only
@@ -1231,15 +1234,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # A merge made with the default GITHUB_TOKEN does NOT trigger the
-          # push workflow on main (GitHub suppresses event re-triggering from
-          # that token), so without this dispatch the rolling releases
-          # (engine-latest / farm-apk-latest / dep-*-latest) would silently
-          # go stale on every auto-merge. Dispatch refresh deliberately:
-          # farm-apk-latest is only published when github.ref is main.
-          # --auto only queues the merge: the PR may still be open when this
-          # step runs, so confirm the merge actually landed before dispatching
-          # (otherwise every green PR run spawns a duplicate main run).
-          MERGED=$(gh pr view "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --json state --jq .state)
+          # push workflows on main (GitHub suppresses event re-triggering from
+          # that token), so without this dispatch main would get NO CI and the
+          # rolling releases (engine-latest / farm-apk-latest / dep-*-latest)
+          # would silently go stale on every auto-merge. Dispatch refresh
+          # deliberately: farm-apk-latest is only published when github.ref
+          # is main.
+          # --auto only queues the merge: it usually has NOT landed yet when
+          # this step runs, so poll until it does. A one-shot check here
+          # loses the race every time and main silently gets no CI at all
+          # (seen on #206: merge landed minutes after the check skipped).
+          MERGED=""
+          for i in $(seq 1 60); do
+            MERGED=$(gh pr view "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --json state --jq .state || echo UNKNOWN)
+            if [ "$MERGED" = "MERGED" ]; then break; fi
+            sleep 20
+          done
           if [ "$MERGED" = "MERGED" ]; then
             gh workflow run native-engine-build.yml --repo "${{ github.repository }}" --ref main
             echo "PR merged; dispatched main pipeline refresh."
@@ -1250,5 +1260,5 @@ jobs:
             gh workflow run prusa30-headless.yml --repo "${{ github.repository }}" --ref main
             echo "PR merged; dispatched prusa30-headless on main."
           else
-            echo "PR not yet merged (state=$MERGED); skipping dispatch — merge will trigger main via push."
+            echo "PR not merged within 20 min (state=$MERGED); skipping main dispatch."
           fi

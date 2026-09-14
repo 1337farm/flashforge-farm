@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <android/log.h>
-#include "farm_driver.cpp"
+
+#include "../farm_driver.hpp"
 
 #define TAG "FarmPrusaJNI"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)

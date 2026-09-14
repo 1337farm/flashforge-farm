@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(farm_prusa30_jni SHARED
     jni_farm_slice.cpp
+    ${CMAKE_SOURCE_DIR}/engine/prusa30/farm_driver.cpp
 )
 
 target_include_directories(farm_prusa30_jni PRIVATE

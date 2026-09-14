@@ -745,7 +745,9 @@ add_library(slic3r
         # target next (CI compile-fix loop); 2.x-only sources with no 3.0
         # counterpart stay listed as breaks in the issue — no shims invented.
 
-        src/main/jni/libnest2d/src/libnest2d.cpp
+        # libnest2d is NOT built here: its only in-tree user was the deleted
+        # 2.x Arrange (its libslic3r backend needs 2.x ExPolygon). Arrange
+        # returns via upstream slic3r-biz-arrange in #211.
 
         # compat/Orient.cpp is NOT built here: it serves the farm/app JNI
         # (emboss orientation) and needs the 3.0 Domain/Biz port (#211).

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/fetch-native-deps.sh — stage the native dependencies AND the OrcaSlicer
+# scripts/fetch-native-deps.sh — stage the native dependencies AND the PrusaSlicer 3.0
 # engine for a LOCAL app build.
 #
 # Fast path (default): download the CI-published rolling per-dep releases

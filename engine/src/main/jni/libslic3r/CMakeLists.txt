@@ -3,8 +3,8 @@ project(libslic3r)
 
 include(PrecompiledHeader)
 
-if(NOT DEFINED ORCA_CHECK_GCODE_PLACEHOLDERS)
-    set(ORCA_CHECK_GCODE_PLACEHOLDERS "0")
+if(NOT DEFINED PRUSA_CHECK_GCODE_PLACEHOLDERS)
+    set(PRUSA_CHECK_GCODE_PLACEHOLDERS "0")
 endif()
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/libslic3r_version.h.in ${CMAKE_CURRENT_BINARY_DIR}/libslic3r_version.h @ONLY)
@@ -185,8 +185,8 @@ set(lisbslic3r_sources
     Format/AMF.hpp
     Format/DRC.cpp
     Format/DRC.hpp
-    Format/bbs_3mf.cpp
-    Format/bbs_3mf.hpp
+    Format/prusa_3mf.cpp
+    Format/prusa_3mf.hpp
     format.hpp
     Format/OBJ.cpp
     Format/OBJ.hpp

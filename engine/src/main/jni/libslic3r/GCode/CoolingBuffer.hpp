@@ -39,7 +39,7 @@ private:
     // G-code snippet cached for the support layers preceding an object layer.
     std::string                 m_gcode;
     // Internal data.
-    // BBS: X,Y,Z,E,F,I,J
+    // X,Y,Z,E,F,I,J
     std::vector<char>           m_axis;
     std::vector<float>          m_current_pos;
     // Current known fan speed or -1 if not known yet.
@@ -55,7 +55,7 @@ private:
     // the PrintConfig slice of FullPrintConfig is constant, thus no thread synchronization is required.
     const PrintConfig          &m_config;
     unsigned int                m_current_extruder;
-    //BBS: current fan speed
+    // current fan speed
     int                         m_current_fan_speed;
 };
 

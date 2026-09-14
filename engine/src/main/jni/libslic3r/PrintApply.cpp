@@ -134,16 +134,16 @@ struct PrintObjectTrafoAndInstances
 };
 
 // Generate a list of trafos and XY offsets for instances of a ModelObject
-// Orca: Updated to include XYZ filament shrinkage compensation
+
 static std::vector<PrintObjectTrafoAndInstances> print_objects_from_model_object(const ModelObject &model_object, const Vec3d &shrinkage_compensation)
 {
     std::set<PrintObjectTrafoAndInstances> trafos;
     PrintObjectTrafoAndInstances           trafo;
-    //BBS: add useful logs for debug
+    // add useful logs for debug
     int index = 0;
     for (ModelInstance *model_instance : model_object.instances) {
         if (model_instance->is_printable()) {
-            // Orca: Updated with XYZ filament shrinkage compensation
+            
             Geometry::Transformation model_instance_transformation = model_instance->get_transformation();
             trafo.trafo = model_instance_transformation.get_matrix_with_applied_shrinkage_compensation(shrinkage_compensation);
             
@@ -218,7 +218,7 @@ static bool custom_per_printz_gcodes_tool_changes_differ(const std::vector<Custo
 }
 
 // Collect changes to print config, account for overrides of extruder retract values by filament presets.
-//BBS: add plate index
+// add plate index
 static t_config_option_keys print_config_diffs(
     const PrintConfig        &current_config,
     const DynamicPrintConfig &new_full_config,
@@ -242,7 +242,7 @@ static t_config_option_keys print_config_diffs(
         if (opt_new_filament != nullptr) {
             compute_filament_override_value(opt_key, opt_old, opt_new, opt_new_filament, new_full_config, print_diff, filament_overrides, filament_maps);
         } else if (*opt_new != *opt_old) {
-            //BBS: add plate_index logic for wipe_tower_x/wipe_tower_y
+            // add plate_index logic for wipe_tower_x/wipe_tower_y
             if (!opt_key.compare("wipe_tower_x") || !opt_key.compare("wipe_tower_y")) {
                 const ConfigOptionFloats* option_new = dynamic_cast<const ConfigOptionFloats*>(opt_new);
                 const ConfigOptionFloats* option_old = dynamic_cast<const ConfigOptionFloats*>(opt_old);
@@ -265,7 +265,7 @@ static t_config_option_keys print_config_diffs(
 }
 
 // Prepare for storing of the full print config into new_full_config to be exported into the G-code and to be used by the PlaceholderParser.
-//BBS: add plate index
+// add plate index
 static t_config_option_keys full_print_config_diffs(const DynamicPrintConfig &current_full_config, const DynamicPrintConfig &new_full_config, int plate_index)
 {
     t_config_option_keys full_config_diff;
@@ -273,7 +273,7 @@ static t_config_option_keys full_print_config_diffs(const DynamicPrintConfig &cu
         const ConfigOption *opt_old = current_full_config.option(opt_key);
         const ConfigOption *opt_new = new_full_config.option(opt_key);
         if (opt_old == nullptr || *opt_new != *opt_old) {
-            //BBS: add plate_index logic for wipe_tower_x/wipe_tower_y
+            // add plate_index logic for wipe_tower_x/wipe_tower_y
             if (opt_old && (!opt_key.compare("wipe_tower_x") || !opt_key.compare("wipe_tower_y"))) {
                 const ConfigOptionFloats* option_new = dynamic_cast<const ConfigOptionFloats*>(opt_new);
                 const ConfigOptionFloats* option_old = dynamic_cast<const ConfigOptionFloats*>(opt_old);
@@ -1116,14 +1116,14 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
     check_model_ids_validity(model);
 #endif /* _DEBUG */
 
-    //BBS: add more logs
+    // add more logs
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(", Line %1%: enter")%__LINE__;
     // Normalize the config.
 	new_full_config.option("print_settings_id",            true);
 	new_full_config.option("filament_settings_id",         true);
 	new_full_config.option("printer_settings_id",          true);
 
-    // BBS
+    // PRUSA
     std::vector <unsigned int> used_filaments = this->extruders(true);
     std::unordered_set <unsigned int> used_filament_set(used_filaments.begin(), used_filaments.end());
 
@@ -1186,14 +1186,14 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
 
     // Find modified keys of the various configs. Resolve overrides extruder retract values by filament profiles.
     DynamicPrintConfig   filament_overrides;
-    //BBS: add plate index
+    // add plate index
     t_config_option_keys print_diff       = print_config_diffs(m_config, new_full_config, filament_overrides, this->m_plate_index, filament_maps);
     t_config_option_keys full_config_diff = full_print_config_diffs(m_full_print_config, new_full_config, this->m_plate_index);
     // Collect changes to object and region configs.
     t_config_option_keys object_diff      = m_default_object_config.diff(new_full_config);
     t_config_option_keys region_diff      = m_default_region_config.diff(new_full_config);
 
-    //BBS: process the filament_map related logic
+    // process the filament_map related logic
     std::unordered_set<std::string> print_diff_set(print_diff.begin(), print_diff.end());
     if (print_diff_set.find("filament_map_mode") == print_diff_set.end())
     {
@@ -1240,7 +1240,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
         { apply_status = std::max<unsigned int>(apply_status, invalidated ? APPLY_STATUS_INVALIDATED : APPLY_STATUS_CHANGED); };
     if (! (print_diff.empty() && object_diff.empty() && region_diff.empty())) {
         update_apply_status(false);
-        //BBS: add more logs
+        // add more logs
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(", got print_diff %1%, object_diff %2%, region_diff %3%, set status to APPLY_STATUS_CHANGED")%print_diff.size() %object_diff.size() %region_diff.size();
     }
 
@@ -1256,12 +1256,12 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
     size_t num_extruders  = m_config.filament_diameter.size();
     bool   num_extruders_changed  = false;
     if (! full_config_diff.empty()) {
-        //BBS: add more logs
+        // add more logs
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(" %1%: found full_config_diff changed.")%__LINE__;
         update_apply_status(this->invalidate_step(psGCodeExport));
         m_placeholder_parser.clear_config();
         // clear_config() wiped the constructor-set "version"; restore it for custom G-code.
-        m_placeholder_parser.set("version", std::string(SoftFever_VERSION));
+        m_placeholder_parser.set("version", std::string(SLIC3R_VERSION));
         // Set the profile aliases for the PrintBase::output_filename()
 		m_placeholder_parser.set("print_preset",              new_full_config.option("print_settings_id")->clone());
 		m_placeholder_parser.set("filament_preset",           new_full_config.option("filament_settings_id")->clone());
@@ -1307,7 +1307,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
 		for (const ModelObject *model_object : m_model.objects)
 			model_object_status_db.add(*model_object, ModelObjectStatus::New);
     } else {
-        //BBS: replace model custom gcode with current plate custom gcode
+        // replace model custom gcode with current plate custom gcode
         m_model.curr_plate_index = model.curr_plate_index;
         if (m_model.get_curr_plate_custom_gcodes() != model.get_curr_plate_custom_gcodes()) {
             update_apply_status(num_extruders_changed ||
@@ -1327,7 +1327,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
 				model_object_status_db.add(*model_object, ModelObjectStatus::Old);
         } else if (model_object_list_extended(m_model, model)) {
             // Add new objects. Their volumes and configs will be synchronized later.
-            //BBS: we don't need to set invalid here, we judge it by comparing the print_object list
+            // we don't need to set invalid here, we judge it by comparing the print_object list
             //update_apply_status(this->invalidate_step(psGCodeExport));
             for (const ModelObject *model_object : m_model.objects)
                 model_object_status_db.add(*model_object, ModelObjectStatus::Old);
@@ -1336,15 +1336,15 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
                 m_model.objects.emplace_back(ModelObject::new_copy(*model.objects[i]));
 				m_model.objects.back()->set_model(&m_model);
             }
-            //BBS: add more logs
+            // add more logs
             BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(" %1%: new model objects added.")%__LINE__;
         } else {
-            //BBS: add more logs
+            // add more logs
             BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(" %1%: model object changed.")%__LINE__;
             // Reorder the objects, add new objects.
             // First stop background processing before shuffling or deleting the PrintObjects in the object list.
             this->call_cancel_callback();
-            //BBS: we don't need to set invalid here, we judge it by comparing the print_object list
+            // we don't need to set invalid here, we judge it by comparing the print_object list
             //update_apply_status(this->invalidate_step(psGCodeExport));
             // Second create a new list of objects.
             std::vector<ModelObject*> model_objects_old(std::move(m_model.objects));
@@ -1530,7 +1530,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
         // Walk over all new model objects and check, whether there are matching PrintObjects.
         for (ModelObject *model_object : m_model.objects) {
             ModelObjectStatus &model_object_status = const_cast<ModelObjectStatus&>(model_object_status_db.reuse(*model_object));
-            // Orca: Updated for XYZ filament shrink compensation
+            
             model_object_status.print_instances = print_objects_from_model_object(*model_object, this->shrinkage_compensation());
             std::vector<const PrintObjectStatus*> old;
             old.reserve(print_object_status_db.count(*model_object));
@@ -1586,7 +1586,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
             }
         }
         if (m_objects != print_objects_new) {
-            //BBS: add more logs
+            // add more logs
             BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(" %1%: found print object changed.")%__LINE__;
             this->call_cancel_callback();
 			update_apply_status(this->invalidate_all_steps());
@@ -1607,7 +1607,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
         }
         print_object_status_db.clear();
 
-        // BBS
+        // PRUSA
         for (PrintObject* object : m_objects) {
             auto ept_iter = std::find(print_diff.begin(), print_diff.end(), "enable_prime_tower");
             if (/*object->config().adaptive_layer_height &&*/ ept_iter != print_diff.end()) {
@@ -1616,7 +1616,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
         }
     }
 
-    //BBS: check the config again
+    // check the config again
     int new_used_filaments = this->extruders(true).size();
     t_config_option_keys new_changed_keys = new_full_config.normalize_fdm_2(objects().size(), new_used_filaments);
     if (new_changed_keys.size() > 0) {
@@ -1634,12 +1634,12 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
         update_apply_status(this->invalidate_step(psGCodeExport));
 
         if (full_config_diff.empty()) {
-            //BBS: previous empty
+            // previous empty
             BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(" %1%: full_config_diff previous empty, need to apply now.")%__LINE__;
 
             m_placeholder_parser.clear_config();
             // clear_config() wiped the constructor-set "version"; restore it for custom G-code.
-            m_placeholder_parser.set("version", std::string(SoftFever_VERSION));
+            m_placeholder_parser.set("version", std::string(SLIC3R_VERSION));
             // Set the profile aliases for the PrintBase::output_filename()
             m_placeholder_parser.set("print_preset",              new_full_config.option("print_settings_id")->clone());
             m_placeholder_parser.set("filament_preset",           new_full_config.option("filament_settings_id")->clone());
@@ -1781,7 +1781,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
     check_model_ids_equal(m_model, model);
 #endif /* _DEBUG */
 
-	//BBS: add timestamp logic
+	// add timestamp logic
 	if (apply_status != APPLY_STATUS_UNCHANGED)
 		m_modified_count++;
 	BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(" %1%: finished,  this %2%, m_modified_count %3%, apply_status %4%, m_support_used %5%")%__LINE__ %this %m_modified_count %apply_status %m_support_used;

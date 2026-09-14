@@ -27,7 +27,7 @@ enum class VendorType {
     Unknown = 0,
     Klipper,
     Marlin,
-    Marlin_BBL,
+    Marlin_PRUSA,
     Klipper_Qidi
 };
 namespace Slic3r {
@@ -80,10 +80,10 @@ enum BundleType{
     Subscribed,
 };
 
-// Orca: Bundle metadata structure for imported preset bundles
+
 struct BundleMetadata
 {
-    std::string                     id;         // Bundle ID: UUID (OrcaCloud) or name+timestamp (external)
+    std::string                     id;         // Bundle ID: UUID (PrusaCloud) or name+timestamp (external)
     std::string                     name;       // Display name
     std::string                     version;    // Bundle version
     std::string                     description;
@@ -111,8 +111,8 @@ struct BundleMetadata
 
 struct PresetBundleMetadata
 {
-    // To make sure write locks take precedent, pausereads needs to be true for when Orca needs to read or manipulate the container
-    // We only need to explicitly pause reads when entering a region in Orca which we deem necessary to quickly acquire write locks.
+    // To make sure write locks take precedent, pausereads needs to be true for when the application needs to read or manipulate the container
+    // We only need to explicitly pause reads when entering a region in the application which we deem necessary to quickly acquire write locks.
     std::unordered_map<std::string, BundleMetadata> m_bundles;
     std::shared_mutex RWMtx;
     std::atomic<bool> pauseReads{false};
@@ -158,7 +158,7 @@ public:
                                                     bool                            apply_extruder,
                                                     std::optional<std::vector<int>> filament_maps_new);
 
-    // ORCA: utility function to find the vendor for a given preset name
+    // utility function to find the vendor for a given preset name
     static std::string find_preset_vendor(const std::string& preset_name, Preset::Type type);
 
     PresetBundle();
@@ -187,13 +187,13 @@ public:
 
     // Load selections (current print, current filaments, current printer) from config.ini
     // This is done just once on application start up.
-    //BBS: change it to public
+    // change it to public
     void     load_selections(AppConfig &config, const PresetPreferences& preferred_selection = PresetPreferences());
 
-    // BBS Load user presets
+    // PRUSA Load user presets
     PresetsConfigSubstitutions load_user_presets(std::string user, ForwardCompatibilitySubstitutionRule rule);
     PresetsConfigSubstitutions load_user_presets(AppConfig &config, std::map<std::string, std::map<std::string, std::string>>& my_presets, ForwardCompatibilitySubstitutionRule rule);
-    // Orca: Import subscribed bundle presets (load and save to disk in one operation), handles one bundle at a time
+    
     PresetsConfigSubstitutions update_subscribed_presets(AppConfig& config,
                                                          const std::map<std::string, std::map<std::string, std::string>>& bundle_presets,
                                                          const BundleMetadata& remote_metadata,
@@ -240,38 +240,38 @@ public:
         const std::string& preferred_printer_variant = std::string(),
         const std::string& preferred_filament = std::string());
 
-    //BBS: add API to get previous machine
+    // add API to get previous machine
     int validate_presets(const std::string &file_name, DynamicPrintConfig& config, std::set<std::string>& different_gcodes);
 
-    //BBS: add function to generate differed preset for save
+    // add function to generate differed preset for save
     //the pointer should be freed by the caller
     Preset* get_preset_differed_for_save(Preset& preset);
     int get_differed_values_to_update(Preset& preset, std::map<std::string, std::string>& key_values);
 
 
-    //BBS: get vendor's current version
+    // get vendor's current version
     Semver get_vendor_profile_version(std::string vendor_name);
 
     std::optional<FilamentBaseInfo> get_filament_by_filament_id(const std::string& filament_id, const std::string& printer_name = std::string()) const;
 
-    // Orca: get vendor type
+    
     VendorType get_current_vendor_type();
     // Vendor related handy functions
-    bool is_bbl_vendor() { return get_current_vendor_type() == VendorType::Marlin_BBL; }
+    bool is_prusa_vendor() { return get_current_vendor_type() == VendorType::Marlin_PRUSA; }
 
-    // Whether using bbl network for print upload
-    bool use_bbl_network();
-    // Whether using bbl's device tab
-    bool use_bbl_device_tab();
+    // Whether using prusa network for print upload
+    bool use_prusa_network();
+    // Whether using prusa's device tab
+    bool use_prusa_device_tab();
 
     bool backup_user_folder() const;
 
-    //BBS: project embedded preset logic
+    // project embedded preset logic
     PresetsConfigSubstitutions load_project_embedded_presets(std::vector<Preset*> project_presets, ForwardCompatibilitySubstitutionRule substitution_rule);
     std::vector<Preset*> get_current_project_embedded_presets();
     void reset_project_embedded_presets();
 
-    //BBS: find printer model
+    // find printer model
     std::string get_texture_for_printer_model(std::string model_name);
     std::string get_stl_model_for_printer_model(std::string model_name);
     std::string get_hotend_model_for_printer_model(std::string model_name);
@@ -279,20 +279,20 @@ public:
     // Export selections (current print, current filaments, current printer) into config.ini
     void            export_selections(AppConfig &config);
 
-    // BBS
+    // PRUSA
     void            set_num_filaments(unsigned int n, std::vector<std::string> new_colors);
     void            set_num_filaments(unsigned int n, std::string new_col = "");
     void         update_num_filaments(unsigned int to_del_flament_id);
 
     void get_ams_cobox_infos(AMSComboInfo &combox_info);
     unsigned int sync_ams_list(std::vector<std::pair<DynamicPrintConfig *,std::string>> &unknowns, bool use_map, std::map<int, AMSMapInfo> &maps, bool enable_append, MergeFilamentInfo &merge_info, bool color_only = false);
-    //BBS: check whether this is the only edited filament
+    // check whether this is the only edited filament
     bool is_the_only_edited_filament(unsigned int filament_index);
 
     void reset_default_nozzle_volume_type();
 
     std::vector<int> get_used_tpu_filaments(const std::vector<int> &used_filaments);
-    // Orca: update selected filament and print
+    
     void           update_selections(AppConfig &config);
     void set_calibrate_printer(std::string name);
 
@@ -322,7 +322,7 @@ public:
     // Filament preset names for a multi-extruder or multi-material print.
     // extruders.size() should be the same as printers.get_edited_preset().config.nozzle_diameter.size()
     std::vector<std::string>    filament_presets;
-    // BBS: ams
+    // ams
     std::map<int, DynamicPrintConfig> filament_ams_list;
     std::vector<std::vector<std::string>> ams_multi_color_filment;
 
@@ -341,11 +341,11 @@ public:
     // and the system profiles will point to the VendorProfile instances owned by PresetBundle::vendors.
     VendorMap                   vendors;
 
-    // Orca: for OrcaFilamentLibrary
+    
     std::map<std::string, DynamicPrintConfig> m_config_maps;
     std::map<std::string, std::string> m_filament_id_maps;
 
-    // Orca: Bundle metadata and cached preset names
+    
     // std::map<std::string, BundleMetadata>  m_bundles;
     fs::path dir_user_presets_local;
     fs::path dir_user_presets_subscribed;
@@ -368,11 +368,11 @@ public:
     // full_config() with the some "useless" config removed.
     DynamicPrintConfig          full_config_secure(std::optional<std::vector<int>>filament_maps = std::nullopt) const;
 
-    //BBS: add some functions for multiple extruders
+    // add some functions for multiple extruders
     int get_printer_extruder_count() const;
     bool support_different_extruders();
 
-    // Orca: Ensure filament_presets has at least one slot per nozzle on FFF printers.
+    
     // Called from (load|update)_selections before the parallel project_config arrays
     // (filament_colour/colour_type/map) are sized off filament_presets.size(), so a
     // short saved filament list doesn't truncate the loaded colors.
@@ -414,15 +414,15 @@ public:
     // Don't do any config substitutions when loading a system profile, perform and report substitutions otherwise.
     /*std::pair<PresetsConfigSubstitutions, size_t> load_configbundle(
         const std::string &path, LoadConfigBundleAttributes flags, ForwardCompatibilitySubstitutionRule compatibility_rule);*/
-    //Orca: load config bundle from json, pass the base bundle to support cross vendor inheritance
+    
     std::pair<PresetsConfigSubstitutions, size_t> load_vendor_configs_from_json(
         const std::string &path, const std::string &vendor_name, LoadConfigBundleAttributes flags, ForwardCompatibilitySubstitutionRule compatibility_rule, const PresetBundle* base_bundle = nullptr);
 
     // Export a config bundle file containing all the presets and the names of the active presets.
     //void                        export_configbundle(const std::string &path, bool export_system_settings = false, bool export_physical_printers = false);
-    //BBS: add a function to export current configbundle as default
+    // add a function to export current configbundle as default
     //void export_current_configbundle(const std::string &path);
-    //BBS: add a function to export system presets for cloud-slicer
+    // add a function to export system presets for cloud-slicer
     //void export_system_configs(const std::string &path);
     std::vector<std::string> export_current_configs(const std::string &path, std::function<int(std::string const &)> override_confirm,
         bool include_modify, bool export_system_settings = false);
@@ -458,20 +458,20 @@ public:
     const int                   get_required_hrc_by_filament_type(const std::string& filament_type) const;
     // Save current preset of a provided type under a new name. If the name is different from the old one,
     // Unselected option would be reverted to the beginning values
-    //BBS: add project embedded preset logic
+    // add project embedded preset logic
     void                        save_changes_for_preset(const std::string& new_name, Preset::Type type, const std::vector<std::string>& unselected_options, bool save_to_project = false);
 
     std::pair<PresetsConfigSubstitutions, std::string> load_system_models_from_json(ForwardCompatibilitySubstitutionRule compatibility_rule);
     std::pair<PresetsConfigSubstitutions, std::string> load_system_filaments_json(ForwardCompatibilitySubstitutionRule compatibility_rule);
     VendorProfile                                      get_custom_vendor_models() const;
 
-    //orca: add 'custom' as default
-    static const char *ORCA_DEFAULT_BUNDLE;
-	static const char *ORCA_DEFAULT_PRINTER_MODEL;
-	static const char *ORCA_DEFAULT_PRINTER_VARIANT;
-	static const char *ORCA_DEFAULT_FILAMENT;
-    static const char *ORCA_FILAMENT_LIBRARY;
-    static const char *ORCA_DEFAULT_FILAMENT_PLACEHOLDER;
+    //prusa: add 'custom' as default
+    static const char *PRUSA_DEFAULT_BUNDLE;
+	static const char *PRUSA_DEFAULT_PRINTER_MODEL;
+	static const char *PRUSA_DEFAULT_PRINTER_VARIANT;
+	static const char *PRUSA_DEFAULT_FILAMENT;
+    static const char *PRUSA_FILAMENT_LIBRARY;
+    static const char *PRUSA_DEFAULT_FILAMENT_PLACEHOLDER;
 
 
     static std::array<Preset::Type, 3>  types_list(PrinterTechnology pt) {
@@ -480,12 +480,12 @@ public:
         return      { Preset::TYPE_PRINTER, Preset::TYPE_SLA_PRINT, Preset::TYPE_SLA_MATERIAL };
     }
 
-    // Orca: for validation only
+    
     bool has_errors() const;
 
 private:
     //std::pair<PresetsConfigSubstitutions, std::string> load_system_presets(ForwardCompatibilitySubstitutionRule compatibility_rule);
-    //BBS: add json related logic
+    // add json related logic
     std::pair<PresetsConfigSubstitutions, std::string> load_system_presets_from_json(ForwardCompatibilitySubstitutionRule compatibility_rule);
     // Merge one vendor's presets with the other vendor's presets, report duplicates.
     std::vector<std::string>    merge_presets(PresetBundle &&other);
@@ -509,7 +509,7 @@ private:
     DynamicPrintConfig          full_fff_config(bool apply_extruder, std::optional<std::vector<int>> filament_maps=std::nullopt) const;
     DynamicPrintConfig          full_sla_config() const;
 
-    // Orca: used for validation only
+    
     bool validation_mode = false;
     std::string vendor_to_validate = "";
     int m_errors = 0;

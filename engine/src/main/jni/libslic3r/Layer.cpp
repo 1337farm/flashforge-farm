@@ -67,7 +67,7 @@ void Layer::make_slices()
 
 static inline bool layer_needs_raw_backup(const Layer *layer)
 {
-    // BBS: backup raw slice for generating support
+    // backup raw slice for generating support
     //return ! (layer->regions().size() == 1 && (layer->id() > 0 || layer->object()->config().elefant_foot_compensation.value == 0));
     return true;
 }
@@ -102,7 +102,7 @@ void Layer::restore_untyped_slices_no_extra_perimeters()
 {
     if (layer_needs_raw_backup(this)) {
         for (LayerRegion *layerm : m_regions)
-            //BBS: remove extra_perimeters. Always false
+            // remove extra_perimeters. Always false
         	//if (! layerm->region().config().extra_perimeters.value)
             	layerm->slices.set(layerm->raw_slices, stInternal);
     } else {
@@ -160,7 +160,7 @@ bool Layer::is_perimeter_compatible(const PrintRegion& a, const PrintRegion& b)
 		&& config.detect_thin_wall                  == other_config.detect_thin_wall
 		&& config.infill_wall_overlap              == other_config.infill_wall_overlap
         && config.top_bottom_infill_wall_overlap              == other_config.top_bottom_infill_wall_overlap
-        // Orca: these flags directly change the effective wall count produced by the perimeter
+        // These flags directly change the effective wall count produced by the perimeter
         // generator. If two regions disagree on any of them, merging their slices into one shared make_perimeters
         // call would silently use the first region's flag for both.
         && config.only_one_wall_first_layer == other_config.only_one_wall_first_layer
@@ -243,7 +243,7 @@ void Layer::make_perimeters()
 
 	            // make perimeters
 	            SurfaceCollection fill_surfaces;
-                //BBS
+                //PRUSA
                 ExPolygons fill_no_overlap;
 	            layerm_config->make_perimeters(new_slices, layerms, &fill_surfaces, &fill_no_overlap);
 
@@ -254,7 +254,7 @@ void Layer::make_perimeters()
 	                    ExPolygons expp = intersection_ex(fill_surfaces.surfaces, (*l)->slices.surfaces);
 	                    (*l)->fill_expolygons = expp;
 	                    (*l)->fill_surfaces.set(std::move(expp), fill_surfaces.surfaces.front());
-                        //BBS: Separate fill_no_overlap
+                        // Separate fill_no_overlap
                         (*l)->fill_no_overlap_expolygons = intersection_ex((*l)->slices.surfaces, fill_no_overlap);
 	                }
 
@@ -325,7 +325,7 @@ void Layer::export_region_fill_surfaces_to_svg(const char *path) const
     svg.Close();
 }
 
-//BBS: method to simplify support path
+// method to simplify support path
 void Layer::simplify_support_entity_collection(ExtrusionEntityCollection* entity_collection)
 {
     for (size_t i = 0; i < entity_collection->entities.size(); i++) {
@@ -341,7 +341,7 @@ void Layer::simplify_support_entity_collection(ExtrusionEntityCollection* entity
             throw Slic3r::InvalidArgument("Invalid extrusion entity supplied to simplify_support_entity_collection()");
     }
 }
-//BBS: method to simplify support path
+// method to simplify support path
 void Layer::simplify_support_path(ExtrusionPath * path)
 {
     const auto print_config = this->object()->print()->config();
@@ -356,7 +356,7 @@ void Layer::simplify_support_path(ExtrusionPath * path)
         path->simplify(scaled_resolution);
     }
 }
-//BBS: method to simplify support path
+// method to simplify support path
 void Layer::simplify_support_multi_path(ExtrusionMultiPath* multipath)
 {
     const auto print_config = this->object()->print()->config();
@@ -373,7 +373,7 @@ void Layer::simplify_support_multi_path(ExtrusionMultiPath* multipath)
         }
     }
 }
-//BBS: method to simplify support path
+// method to simplify support path
 void Layer::simplify_support_loop(ExtrusionLoop* loop)
 {
     const auto print_config = this->object()->print()->config();
@@ -408,7 +408,7 @@ coordf_t Layer::get_sparse_infill_max_void_area()
         if (density == 0.)
             return -1;
 
-        //BBS: rough estimation and need to be optimized
+        // rough estimation and need to be optimized
         double spacing = flow.scaled_spacing() * (100 - density) / density;
         switch (pattern) {
             case ipConcentric:

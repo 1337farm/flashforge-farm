@@ -1323,7 +1323,7 @@ static inline std::vector<std::vector<ExPolygons>> segmentation_top_and_bottom_l
     triangles_by_color_bottom.assign(num_facets_states, std::vector<ExPolygons>(num_layers * 2));
     triangles_by_color_top.assign(num_facets_states, std::vector<ExPolygons>(num_layers * 2));
 
-    // BBS: use shell_triangles_by_color_bottom & shell_triangles_by_color_top to save the top and bottom embedded layers's color information
+    // use shell_triangles_by_color_bottom & shell_triangles_by_color_top to save the top and bottom embedded layers's color information
     std::vector<std::vector<ExPolygons>> shell_triangles_by_color_bottom(num_facets_states);
     std::vector<std::vector<ExPolygons>> shell_triangles_by_color_top(num_facets_states);
     shell_triangles_by_color_bottom.assign(num_facets_states, std::vector<ExPolygons>(num_layers * 2));
@@ -1340,7 +1340,7 @@ static inline std::vector<std::vector<ExPolygons>> segmentation_top_and_bottom_l
         int     top_shell_layers        { 0 };
         // Maximum number of bottom layers for a queried color.
         int     bottom_shell_layers     { 0 };
-        //BBS: spacing according to width and layer height
+        // spacing according to width and layer height
         float   extrusion_spacing{ 0.f };
     };
     auto layer_color_stat = [&layers = std::as_const(layers), &print_object](const size_t layer_idx, const size_t color_idx) -> LayerColorStat {
@@ -1351,7 +1351,7 @@ static inline std::vector<std::vector<ExPolygons>> segmentation_top_and_bottom_l
                 // color_idx == 0 means "don't know" extruder aka the underlying extruder.
                 // As this region may split existing regions, we collect statistics over all regions for color_idx == 0.
                 color_idx == 0 || config.outer_wall_filament_id == int(color_idx)) {
-                //BBS: the extrusion line width is outer wall rather than inner wall
+                // the extrusion line width is outer wall rather than inner wall
                 const double nozzle_diameter = print_object.print()->config().nozzle_diameter.get_at(0);
                 double outer_wall_line_width = config.get_abs_value("outer_wall_line_width", nozzle_diameter);
                 out.extrusion_width     = std::max<float>(out.extrusion_width, outer_wall_line_width);
@@ -1390,7 +1390,7 @@ static inline std::vector<std::vector<ExPolygons>> segmentation_top_and_bottom_l
                             float offset = 0.f;
                             ExPolygons layer_slices_trimmed = input_expolygons[layer_idx];
                             for (int last_idx = int(layer_idx) - 1; last_idx > std::max(int(layer_idx - stat.top_shell_layers), int(0)); --last_idx) {
-                                //BBS: offset width should be 2*spacing to avoid too narrow area which has overlap of wall line
+                                // offset width should be 2*spacing to avoid too narrow area which has overlap of wall line
                                 //offset -= stat.extrusion_width ;
                                 offset -= (stat.extrusion_spacing + stat.extrusion_width);
                                 layer_slices_trimmed = intersection_ex(layer_slices_trimmed, input_expolygons[last_idx]);
@@ -1410,7 +1410,7 @@ static inline std::vector<std::vector<ExPolygons>> segmentation_top_and_bottom_l
                             float offset = 0.f;
                             ExPolygons layer_slices_trimmed = input_expolygons[layer_idx];
                             for (size_t last_idx = layer_idx + 1; last_idx < std::min(layer_idx + stat.bottom_shell_layers, num_layers); ++last_idx) {
-                                //BBS: offset width should be 2*spacing to avoid too narrow area which has overlap of wall line
+                                // offset width should be 2*spacing to avoid too narrow area which has overlap of wall line
                                 //offset -= stat.extrusion_width;
                                 offset -= (stat.extrusion_spacing + stat.extrusion_width);
                                 layer_slices_trimmed = intersection_ex(layer_slices_trimmed, input_expolygons[last_idx]);
@@ -1445,7 +1445,7 @@ static inline std::vector<std::vector<ExPolygons>> segmentation_top_and_bottom_l
 
             painted_exploys = union_ex(painted_exploys);
 
-            //BBS: merge the top and bottom shell layers
+            // merge the top and bottom shell layers
             for (size_t color_idx = 0; color_idx < triangles_by_color_merged.size(); ++color_idx) {
                 auto &self = triangles_by_color_merged[color_idx][layer_idx];
 
@@ -2079,7 +2079,7 @@ std::vector<std::vector<ExPolygons>> segmentation_by_painting(const PrintObject 
                             Vec3f line_start_f = facet[0] + t * (facet[2] - facet[0]);
                             Vec3f line_end_f;
 
-                            // BBS: When one side of a triangle coincides with the slice_z.
+                            // When one side of a triangle coincides with the slice_z.
                             if ((is_equal(facet[0].z(), facet[1].z()) && is_equal(facet[1].z(), layer->slice_z))
                                 || (is_equal(facet[1].z(), facet[2].z()) && is_equal(facet[1].z(), layer->slice_z))) {
                                 line_end_f = facet[1];

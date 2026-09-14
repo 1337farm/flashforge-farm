@@ -1,9 +1,9 @@
 name: prusa30-headless
 
-# Compile-fix loop for the Orca -> PrusaSlicer 3.0 swap. Fetches the pinned
+# Compile-fix loop for the PrusaSlicer 3.0 bring-up. Fetches the pinned Fetches the pinned
 # upstream tree, applies our headless patch, then configures/builds
 # engine/prusa30 against the Android NDK. Isolated from native-engine-build.yml
-# (which still builds the Orca engine) so the 3.0 bring-up does not break the
+# (which builds the legacy 2.x engine) so the 3.0 bring-up does not break the
 # shipping app. A red run IS the error list that drives the next fix PR.
 
 on:
@@ -41,7 +41,7 @@ env:
   # which requires libc++ >= 15. NDK r23 ships clang 14 / libc++ 14 and fails
   # (libslic3r TypeInfo.hpp "constexpr function's return type 'std::string' is
   # not a literal type"). r26d = clang 17 / libc++ 17. Native engine stays on
-  # its own r23 NDK (Orca) — this workflow is isolated.
+  # its own r23 NDK (legacy 2.x) — this workflow is isolated.
   NDK_VERSION: "26.3.11579264"
   PRUSA_REF: "6f510128d7c2e543b62919b74bea7e876f564205"
   BOOST_VER: "1.86.0"
@@ -1556,7 +1556,7 @@ jobs:
       - name: Bridge Boost archives into stage/lib (FindBoost search path)
         run: |
           # FindBoost probes <prefix>/stage/lib for BOOST_ROOT layouts; our
-          # NDK archives live one level deeper (lib/<abi>/lib, Orca layout).
+          # NDK archives live one level deeper (lib/<abi>/lib, layout).
           # Relative symlinks keep working whatever the runner workspace is.
           mkdir -p engine/prusa30/jniImports/boost/stage/lib
           for a in engine/prusa30/jniImports/boost/lib/$ABI/lib/libboost_*.a; do

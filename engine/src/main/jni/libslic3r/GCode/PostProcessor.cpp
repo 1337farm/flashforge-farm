@@ -12,7 +12,7 @@
 #include <boost/nowide/convert.hpp>
 #include <boost/nowide/fstream.hpp>
 
-// BBS
+// PRUSA
 #include <iostream>
 #include <fstream>
 
@@ -194,7 +194,7 @@ namespace Slic3r {
 #define L(s) (s)
 #define _(s) Slic3r::I18N::translate(s)
 
-// BBS
+// PRUSA
 void gcode_add_line_number(const std::string& path, const DynamicPrintConfig& config)
 {
     const ConfigOptionBool* opt = config.opt<ConfigOptionBool>("gcode_add_line_number");

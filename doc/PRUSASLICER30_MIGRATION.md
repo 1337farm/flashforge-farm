@@ -1,7 +1,7 @@
 # PrusaSlicer 3.0 Engine Migration — grounded design (not speculative)
 
 This is the authoritative, code-grounded migration plan for swapping the
-OrcaSlicer-derived engine in `engine/` for the PrusaSlicer 3.0 core
+legacy-derived engine in `engine/` for the PrusaSlicer 3.0 core
 (`prusa3d/PrusaSlicer`, `master`). Every pin/module/version below was extracted
 from a fresh shallow clone of upstream, *not* guessed.
 
@@ -61,7 +61,7 @@ domain/biz/libslic3r API — there is no upstream headless driver to reuse.
 
 ## Config API (the big surface change)
 
-The Orca `DynamicPrintConfig` / `PresetBundle` model is gone. 3.0 uses:
+The legacy `DynamicPrintConfig` / `PresetBundle` model is gone. 3.0 uses:
 
 - `Slic3r::Domain::ConfigPack` (`std::variant<ConfigPackFDM, ConfigPackSLA>`)
 - `Slic3r::Domain::ConfigContainer` → `.build_print_config()`
@@ -111,8 +111,8 @@ must be extended and the prebuilt staging (`jniImports/`, `occt/`) re-bumped.
   tree is fetched at build time by `engine/prusa30/fetch_prusaslicer.sh`
   (pinned via `PRUSA_REF`, default = latest 3.0-alpha) and patched with
   `engine/prusa30/patches/0001-src-allow-headless-build.patch`.
-- **Replace-in-place**: `engine/` stops vendoring the Orca tree and points at
-  the fetched 3.0 headless build. The Orca source is removed as part of the
+- **Replace-in-place**: `engine/` stops vendoring the legacy tree and points at
+  the fetched 3.0 headless build. The legacy source is removed as part of the
   same swap; there is no parallel `engine30/` tree.
 - The swap breaks `engine`/`apk` on `main` until the headless build + driver go
   green; that's accepted and driven to green via CI PRs.
@@ -157,7 +157,7 @@ interactor split first. This is the real remaining unknown, not `IPrint`.
 3. **Headless slice driver** — `engine/prusa30/farm_driver.cpp` driving the
    interactor layer (`FileLoadingLogic` + `ConfigLoad` + `init_print`/`update`/
    `slice`) or re-implementing the thin project orchestration headless; replaces
-   `slic3r-app-cli` and the Orca `Print::apply/process` path.
+   `slic3r-app-cli` and the legacy `Print::apply/process` path.
 4. **JNI bridge rewrite** — target `Domain::ConfigPack`/`ConfigContainer`/
    `Model`/`IPrint` for the offline slice path.
 5. **Feature port** — painting (`Biz::Algorithms::TriangleSelector`),
@@ -165,7 +165,7 @@ interactor split first. This is the real remaining unknown, not `IPrint`.
 6. **Validation** — golden G-code/3MF byte-compare (the shipped corpus harness).
 
 The import/convert tooling already shipped (#107–#115) maps foreign profiles
-into the *old* Orca key space; step 4 re-points its target to the 3.0
+into the *old* legacy key space; step 4 re-points its target to the 3.0
 `ConfigDef`/`ConfigPack` so imports land natively.
 > **Open blocker (verified):** `FileLoadingLogic` / `ConfigLoad` live in the
 > GUI-gated `slic3r-shared` module; upstream's headless split of it is not done

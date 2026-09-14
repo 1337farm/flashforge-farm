@@ -191,7 +191,7 @@ enum ConfigOptionType {
     coBools         = coBool + coVectorType,
     // a generic enum
     coEnum          = 9,
-    // BBS: vector of enums
+    // vector of enums
     coEnums         = coEnum + coVectorType,
     coPointsGroups  = 10 + coVectorType,
     coIntsGroups    = 11 + coVectorType
@@ -236,8 +236,8 @@ class  ConfigOptionDef;
 struct ConfigOptionDeleter { void operator()(ConfigOption* p); };
 using  ConfigOptionUniquePtr = std::unique_ptr<ConfigOption, ConfigOptionDeleter>;
 
-// When parsing a configuration value, if the old_value is not understood by this OrcaSlicer version,
-// it is being substituted with some default value that this OrcaSlicer could work with.
+// When parsing a configuration value, if the old_value is not understood by this slicer version,
+// it is being substituted with some default value that this slicer could work with.
 // This structure serves to inform the user about the substitutions having been done during file import.
 struct ConfigSubstitution {
     const ConfigOptionDef   *opt_def { nullptr };
@@ -351,7 +351,7 @@ public:
     // Set a single vector item from either a scalar option or the first value of a vector option.vector of ConfigOptions.
     // This function is useful to split values from multiple extrder / filament settings into separate configurations.
     virtual void set_at(const ConfigOption* rhs, size_t i, size_t j) = 0;
-    // BBS
+    // PRUSA
     virtual void set_at_to_nil(size_t i)                                                                                    = 0;
     virtual void append(const ConfigOption* rhs)                                                                            = 0;
     virtual void set(const ConfigOption* rhs, size_t start, size_t len)                                                     = 0;
@@ -446,7 +446,7 @@ public:
             throw ConfigurationError("ConfigOptionVector::set_at(): Assigning an incompatible type");
     }
 
-    //BBS
+    //PRUSA
     virtual void set_at_to_nil(size_t i) override {}
 
     void append(const ConfigOption *rhs) override
@@ -632,7 +632,7 @@ public:
 
     // Resize this vector by duplicating the /*last*/first value.
     // If the current vector is empty, the default value is used instead.
-    // BBS: support scaler opt_default
+    // support scaler opt_default
     void resize(size_t n, const ConfigOption *opt_default = nullptr) override
     {
         //assert(opt_default == nullptr || opt_default->is_vector());
@@ -1140,7 +1140,7 @@ public:
 
     std::vector<std::string> vserialize() const override
     {
-        //BBS: add serialize
+        // add serialize
         /*std::vector<std::string> result;
         result.resize(this->values.size());
         for (int i = 0; i < this->values.size(); i++)
@@ -1519,7 +1519,7 @@ public:
         std::vector<std::string> vv;
         for (Pointfs::const_iterator it = this->values.begin(); it != this->values.end(); ++it) {
             std::ostringstream ss;
-            //BBS: add json format
+            // add json format
             //ss << *it;
             ss << (*it)(0);
             ss << "x";
@@ -1830,7 +1830,7 @@ public:
     {
         UNUSED(append);
 
-        // Orca: take the first value if input is an array
+        // Take the first value if input is an array
         std::istringstream is(str);
         std::string        item_str;
         if (std::getline(is, item_str, ',')) {
@@ -2111,7 +2111,7 @@ private:
 	template<class Archive> void serialize(Archive& ar) { ar(cereal::base_class<ConfigOptionInt>(this)); }
 };
 
-// BBS
+// PRUSA
 template <bool NULLABLE>
 class ConfigOptionEnumsGenericTempl : public ConfigOptionInts
 {
@@ -2388,7 +2388,7 @@ public:
                 archive(*opt);
                 return opt;
             }
-            // BBS
+            // PRUSA
             case coEnums: {
                 auto opt = new ConfigOptionEnumsGeneric(this->enum_keys_map);
                 archive(*opt);
@@ -2442,7 +2442,7 @@ public:
             case coBool: archive(*static_cast<const ConfigOptionBool*>(opt)); break;
             case coBools: archive(*static_cast<const ConfigOptionBools*>(opt)); break;
             case coEnum: archive(*static_cast<const ConfigOptionEnumGeneric*>(opt)); break;
-            // BBS
+            // PRUSA
             case coEnums: archive(*static_cast<const ConfigOptionEnumsGeneric*>(opt)); break;
             case coIntsGroups: archive(*static_cast<const ConfigOptionIntsGroups*>(opt)); break;
             case coPointsGroups: archive(*static_cast<const ConfigOptionPointsGroups*>(opt)); break;
@@ -2481,7 +2481,7 @@ public:
     std::string                         sidetext;
     // Format of this parameter on a command line.
     std::string                         cli;
-    //BBS: add cli command line params
+    // add cli command line params
     std::string                         cli_params;
     // Set for type == coFloatOrPercent.
     // It provides a link to a configuration value, of which this option provides a ratio.
@@ -2708,7 +2708,7 @@ public:
     void apply_only(const ConfigBase &other, const t_config_option_keys &keys, bool ignore_nonexistent = false);
 
     // Are the two configs equal? Ignoring options not present in both configs.
-    //BBS: add skipped_keys logic
+    // add skipped_keys logic
     bool equals(const ConfigBase &other, const std::set<std::string>* skipped_keys = nullptr) const;
     // Returns options differing in the two configs, ignoring options not present in both configs.
     t_config_option_keys diff(const ConfigBase &other) const;
@@ -2758,9 +2758,9 @@ public:
     double get_abs_value(const t_config_option_key &opt_key, double ratio_over) const;
     void setenv_() const;
     ConfigSubstitutions load(const std::string &file, ForwardCompatibilitySubstitutionRule compatibility_rule);
-    //BBS support load from ini string
+    //PRUSA support load from ini string
     ConfigSubstitutions load_string_map(std::map<std::string, std::string> &key_values, ForwardCompatibilitySubstitutionRule compatibility_rule);
-    //BBS: add json support
+    // add json support
     int load_from_json(const std::string &file, ConfigSubstitutionContext& substitutions, bool load_inherits_in_config, std::map<std::string, std::string>& key_values, std::string& reason);
     ConfigSubstitutions load_from_json(const std::string &file, ForwardCompatibilitySubstitutionRule compatibility_rule, std::map<std::string, std::string>& key_values, std::string& reason);
 
@@ -2773,7 +2773,7 @@ public:
     ConfigSubstitutions load(const boost::property_tree::ptree &tree, ForwardCompatibilitySubstitutionRule compatibility_rule);
     void save(const std::string &file) const;
 
-    //BBS: add json support
+    // add json support
     void save_to_json(const std::string &file, const std::string &name, const std::string &from, const std::string &version) const;
 
 	// Set all the nullable values to nils.
@@ -2914,7 +2914,7 @@ public:
     }
 
     // Are the two configs equal? Ignoring options not present in both configs.
-    //BBS: add skipped_keys logic
+    // add skipped_keys logic
     bool equals(const DynamicConfig &other, const std::set<std::string>* skipped_keys = nullptr) const;
     // Returns options differing in the two configs, ignoring options not present in both configs.
     t_config_option_keys diff(const DynamicConfig &other) const;
@@ -2940,7 +2940,7 @@ public:
     // Thus the virtual method getInt() is used to retrieve the enum value.
     template<typename ENUM>
     ENUM                opt_enum(const t_config_option_key &opt_key) const                      { return static_cast<ENUM>(this->option(opt_key)->getInt()); }
-    // BBS
+    // PRUSA
     int                 opt_enum(const t_config_option_key &opt_key, unsigned int idx) const    { return dynamic_cast<const ConfigOptionEnumsGeneric*>(this->option(opt_key))->get_at(idx); }
 
     bool                opt_bool(const t_config_option_key &opt_key) const                      { return this->option<ConfigOptionBool>(opt_key)->value != 0; }

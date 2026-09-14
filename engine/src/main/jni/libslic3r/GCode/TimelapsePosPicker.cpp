@@ -456,7 +456,7 @@ namespace Slic3r {
     {
         if (!obj)
             return {};
-        // in bambu studio, each object only has one instance
+        // in prusa studio, each object only has one instance
         const auto& instance = obj->instances().front();
         auto instance_bbox = get_real_instance_bbox(instance);
         Point min_p{ instance_bbox.min.x(),instance_bbox.min.y() };

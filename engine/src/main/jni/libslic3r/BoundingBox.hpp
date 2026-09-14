@@ -39,7 +39,7 @@ public:
     void scale(double factor);
     PointType size() const;
     double radius() const;
-    double area() const { return double(this->max(0) - this->min(0)) * (this->max(1) - this->min(1));    } // BBS
+    double area() const { return double(this->max(0) - this->min(0)) * (this->max(1) - this->min(1));    } // PRUSA
     void translate(coordf_t x, coordf_t y) { assert(this->defined); PointType v(x, y); this->min += v; this->max += v; }
     void translate(const PointType &v) { this->min += v; this->max += v; }
     void offset(coordf_t delta);
@@ -142,7 +142,7 @@ public:
         : BoundingBox3Base(points.begin(), points.end())
     {}
 
-    Polygon polygon(bool is_scaled = false) const;//BBS: 2D footprint polygon
+    Polygon polygon(bool is_scaled = false) const;// 2D footprint polygon
     void merge(const PointType &point);
     void merge(const PointsType &points);
     void merge(const BoundingBox3Base<PointType> &bb);

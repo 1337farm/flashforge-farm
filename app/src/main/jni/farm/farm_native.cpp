@@ -32,7 +32,7 @@
 #include "libslic3r/calib.hpp"
 #include "libslic3r/Geometry/ConvexHull.hpp"
 #include "libslic3r/Format/3mf.hpp"
-#include "bbl/Orient.hpp"
+#include "compat/Orient.hpp"
 #include "Viewer.hpp"
 
 #include "GLModel.hpp"
@@ -1197,7 +1197,7 @@ extern "C" {
             if (config->option("curr_bed_type", false) == nullptr)
                 config->set_key_value("curr_bed_type", new ConfigOptionEnum<BedType>(btPEI));
 
-            // An imported project config can itself declare multiple filaments (e.g. a Bambu 3MF's
+            // An imported project config can itself declare multiple filaments (e.g. a Prusa 3MF's
             // project_settings carries 8-entry filament_colour/filament_diameter vectors) while other
             // per-filament vectors it carries stay single-entry (filament_map, filament_self_index,
             // filament_is_support, ...). Desktop's preset layer keeps these consistent; here we must
@@ -1382,7 +1382,7 @@ extern "C" {
 
             // Always normalize the purge/flush matrix to the engine's expected layout:
             // nozzle_diameter.size() blocks, each filament_colour.size() x filament_colour.size().
-            // Imported project configs (e.g. a Bambu 3MF) can carry a wipe tower with a mis-sized
+            // Imported project configs (e.g. a Prusa 3MF) can carry a wipe tower with a mis-sized
             // matrix even when the app's multicolor path above didn't run, which makes
             // _make_wipe_tower / reorder_extruders_for_minimum_flush_volume index out of bounds.
             {
@@ -1419,9 +1419,9 @@ extern "C" {
             }
 
             // flashforge-farm incorrectly suppresses standard tool changes (T0, T1, etc.) if it thinks
-            // the printer is a Bambu Lab machine (is_BBL_printer == true). We force it to false
+            // the printer is a Prusa Lab machine (is_prusa_printer == true). We force it to false
             // to ensure standard G-code emission for regular Klipper/Marlin printers.
-            print->is_BBL_printer() = false;
+            print->is_prusa_printer() = false;
 
             __android_log_print(ANDROID_LOG_WARN, "FarmPaint", "step: assigned extruders, validating config");
 
@@ -2566,7 +2566,7 @@ extern "C" {
     // Build a GLModel from the committed mmu painting on an object's volume[0] (no active session),
     // so painted colors persist on the model after exiting paint mode. Returns the triangle count.
     // Accumulate, in the object's merged-mesh coordinate space, the facets painted with the given
-    // filament state across ALL model-part volumes. A Bambu/Orca "assembly" loads as one
+    // filament state across ALL model-part volumes. A Prusa "assembly" loads as one
     // ModelObject with several volumes (figure + accessories), each carrying its own paint data;
     // the rendered GLModel is obj->mesh() (all model-part volumes merged, each transformed by its
     // volume matrix then the instance matrix). The overlay must merge the same volumes with the

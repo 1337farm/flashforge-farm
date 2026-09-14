@@ -51,7 +51,7 @@ public:
     	return out;
     }
 
-    // BBS
+    // PRUSA
     bool is_support_overriddable(const ExtrusionRole role, const PrintObject& object) const;
     bool is_support_overriddable_and_mark(const ExtrusionRole role, const PrintObject& object) {
         bool out = this->is_support_overriddable(role, object);
@@ -75,7 +75,7 @@ private:
 
     // This function is called from mark_wiping_extrusions and sets extruder that it should be printed with (-1 .. as usual)
     void set_extruder_override(const ExtrusionEntity* entity, const PrintObject* object, size_t copy_id, int extruder, size_t num_of_copies);
-    // BBS
+    // PRUSA
     void set_support_extruder_override(const PrintObject* object, size_t copy_id, int extruder, size_t num_of_copies);
     void set_support_interface_extruder_override(const PrintObject* object, size_t copy_id, int extruder, size_t num_of_copies);
 
@@ -86,7 +86,7 @@ private:
     }
 
     std::map<std::tuple<const ExtrusionEntity*, const PrintObject *>, ExtruderPerCopy> entity_map;  // to keep track of who prints what
-    // BBS
+    // PRUSA
     std::map<const PrintObject*, int> support_map;
     std::map<const PrintObject*, int> support_intf_map;
     bool something_overridable = false;
@@ -263,7 +263,7 @@ private:
     void 				collect_extruder_statistics(bool prime_multi_material);
     void                reorder_extruders_for_minimum_flush_volume(bool reorder_first_layer);
 
-    // BBS
+    // PRUSA
     std::vector<unsigned int> generate_first_layer_tool_order(const Print& print);
     std::vector<unsigned int> generate_first_layer_tool_order(const PrintObject& object);
 

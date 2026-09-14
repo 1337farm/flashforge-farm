@@ -24,7 +24,7 @@
 
 #include "GCode/PressureEqualizer.hpp"
 #include "GCode/SmallAreaInfillFlowCompensator.hpp"
-// ORCA: post processor below used for Dynamic Pressure advance
+// post processor below used for Dynamic Pressure advance
 #include "GCode/AdaptivePAProcessor.hpp"
 
 #include "GCode/TimelapsePosPicker.hpp"
@@ -76,7 +76,7 @@ class WipeTowerIntegration {
 public:
     WipeTowerIntegration(
         const PrintConfig                                           &print_config,
-        // BBS: add partplate logic
+        // add partplate logic
         const int                                                    plate_idx,
         const Vec3d                                                  plate_origin,
         const std::vector<WipeTower::ToolChangeResult>              &priming,
@@ -146,7 +146,7 @@ private:
     int                                                          m_tool_change_idx;
     double                                                       m_last_wipe_tower_print_z;
 
-    // BBS
+    // PRUSA
     Vec3d                                                        m_plate_origin;
     bool                                                         m_single_extruder_multi_material;
     bool                                                         m_enable_timelapse_print;
@@ -204,7 +204,7 @@ public:
         m_second_layer_things_done(false),
         m_silent_time_estimator_enabled(false),
         m_last_obj_copy(nullptr, Point(std::numeric_limits<coord_t>::max(), std::numeric_limits<coord_t>::max())),
-        // BBS
+        // PRUSA
         m_toolchange_count(0),
         m_nominal_z(0.)
         {}
@@ -214,7 +214,7 @@ public:
     // throws CanceledException through print->throw_if_canceled().
     void            do_export(Print* print, const char* path, GCodeProcessorResult* result = nullptr, ThumbnailsGeneratorCallback thumbnail_cb = nullptr);
     void            export_layer_filaments(GCodeProcessorResult* result);
-    //BBS: set offset for gcode writer
+    // set offset for gcode writer
     void set_gcode_offset(double x, double y) { m_writer.set_xy_offset(x, y); m_processor.set_xy_offset(x, y);}
 
     // Exported for the helper classes (OozePrevention, Wipe) and for the Perl binding for unit tests.
@@ -254,10 +254,10 @@ public:
     std::string     retract(bool toolchange = false, bool is_last_retraction = false, LiftType lift_type = LiftType::NormalLift, bool apply_instantly = false, ExtrusionRole role = erNone);
     std::string     unretract() { return m_writer.unlift() + m_writer.unretract(); }
     std::string     set_extruder(unsigned int extruder_id, double print_z, bool by_object=false, int toolchange_temp_override = -1);
-    bool is_BBL_Printer();
+    bool is_prusa_printer();
     WipeTowerType wipe_tower_type();
 
-    // SoftFever
+    // PrusaSlicer
     std::string set_object_info(Print* print);
 
     // append full config to the given string
@@ -270,7 +270,7 @@ public:
         LayerToPrint() : object_layer(nullptr), support_layer(nullptr), original_object(nullptr) {}
         const Layer* 		object_layer;
         const SupportLayer* support_layer;
-        const PrintObject*  original_object; //BBS: used for shared object logic
+        const PrintObject*  original_object; // used for shared object logic
         const Layer* 		layer()   const
         {
             if (object_layer != nullptr)
@@ -358,7 +358,7 @@ private:
         // If set to size_t(-1), then print all copies of all objects.
         // Otherwise print a single copy of a single object.
         const size_t                     single_object_idx = size_t(-1),
-        // BBS
+        // PRUSA
         const bool                       prime_extruder = false);
     // Process all layers of all objects (non-sequential mode) with a parallel pipeline:
     // Generate G-code, run the filters (vase mode, cooling buffer), run the G-code analyser
@@ -378,10 +378,10 @@ private:
         std::vector<LayerToPrint>                layers_to_print,
         const size_t                             single_object_idx,
         GCodeOutputStream                       &output_stream,
-        // BBS
+        // PRUSA
         const bool                               prime_extruder = false);
 
-    //BBS
+    //PRUSA
     void check_placeholder_parser_failed();
     size_t get_extruder_id(unsigned int filament_id) const;
 
@@ -390,15 +390,15 @@ private:
     bool            last_pos_defined() const { return m_last_pos_defined; }
     void            set_extruders(const std::vector<unsigned int> &extruder_ids);
     std::string     preamble();
-    // BBS
+    // PRUSA
     std::string     change_layer(coordf_t print_z);
-    // Orca: pass the complete collection of region perimeters to the extrude loop to check whether the wipe before external loop
+    // Pass the complete collection of region perimeters to the extrude loop to check whether the wipe before external loop
     // should be executed
     std::string extrude_entity(const ExtrusionEntity&      entity,
                                const std::string&          description       = "",
                                double                      speed             = -1.,
                                const ExtrusionEntitiesPtr& region_perimeters = ExtrusionEntitiesPtr());
-    // Orca: pass the complete collection of region perimeters to the extrude loop to check whether the wipe before external loop
+    // Pass the complete collection of region perimeters to the extrude loop to check whether the wipe before external loop
     // should be executed
     std::string extrude_loop(const ExtrusionLoop&        loop,
                              const std::string&          description,
@@ -408,7 +408,7 @@ private:
     std::string extrude_multi_path(const ExtrusionMultiPath& multipath, const std::string& description = "", double speed = -1.);
     std::string extrude_path(const ExtrusionPath& path, const std::string& description = "", double speed = -1.);
 
-    // Orca: Adaptive PA variables
+    // Adaptive PA variables
     // Used for adaptive PA when extruding paths with multiple, varying flow segments.
     // This contains the sum of the mm3_per_mm values weighted by the length of each path segment.
     // The m_multi_flow_segment_path_pa_set constrains the PA change request to the first extrusion segment.
@@ -419,7 +419,7 @@ private:
     // Adaptive PA last set flow to enable issuing of PA change commands when adaptive PA for overhangs
     // is enabled
     double          m_last_mm3_mm = 0;
-    // Orca: Adaptive PA code segment end
+    // Adaptive PA code segment end
 
     // Extruding multiple objects with soluble / non-soluble / combined supports
     // on a multi-material printer, trying to minimize tool switches.
@@ -473,7 +473,7 @@ private:
 		const PrintObject 		&print_object;
 		// Instance idx of the copy of a print object.
 		const size_t			 instance_id;
-        //BBS: Unique id to label object to support skiping during printing
+        // Unique id to label object to support skiping during printing
         const size_t             label_object_id;
 	};
 
@@ -490,7 +490,7 @@ private:
     std::string     extrude_infill(const Print& print, const std::vector<ObjectByExtruder::Island::Region>& by_region, bool ironing);
     std::string     extrude_support(const ExtrusionEntityCollection& support_fills, const ExtrusionRole support_extrusion_role);
 
-    // BBS
+    // PRUSA
     LiftType to_lift_type(ZHopType z_hop_types);
 
     std::set<ObjectID>              m_objsWithBrim; // indicates the objs with brim
@@ -557,7 +557,7 @@ private:
     bool m_enable_exclude_object;
     std::vector<size_t> m_label_objects_ids;
     std::string _encode_label_ids_to_base64(std::vector<size_t> ids);
-    // ORCA: Add support for role based fan speed control
+    // Add support for role based fan speed control
     std::array<bool, ExtrusionRole::erCount> m_is_role_based_fan_on;
     std::array<int, ExtrusionRole::erCount>  m_role_based_fan_marker_layer;
     // Markers for the Pressure Equalizer to recognize the extrusion type.
@@ -588,10 +588,10 @@ private:
 
     // Always check gcode placeholders when building in debug mode.
 #if !defined(NDEBUG)
-#define ORCA_CHECK_GCODE_PLACEHOLDERS 1
+#define PRUSA_CHECK_GCODE_PLACEHOLDERS 1
 #endif
     
-#if ORCA_CHECK_GCODE_PLACEHOLDERS
+#if PRUSA_CHECK_GCODE_PLACEHOLDERS
     std::map<std::string, std::vector<std::string>> m_placeholder_error_messages;
 #endif
 
@@ -636,7 +636,7 @@ private:
     //some post-processing on the file, with their data class
     std::unique_ptr<FanMover> m_fan_mover;
 
-    // BBS
+    // PRUSA
     Print* m_curr_print = nullptr;
     unsigned int m_toolchange_count;
     coordf_t m_nominal_z;
@@ -646,7 +646,7 @@ private:
 
     std::set<unsigned int>                  m_initial_layer_extruders;
     std::vector<std::vector<unsigned int>>  m_sorted_layer_filaments;
-    // BBS
+    // PRUSA
     int get_bed_temperature(const int extruder_id, const bool is_first_layer, const BedType bed_type) const;
     int get_highest_bed_temperature(const bool is_first_layer,const Print &print) const;
 
@@ -657,7 +657,7 @@ private:
     void _print_first_layer_bed_temperature(GCodeOutputStream &file, Print &print, const std::string &gcode, unsigned int first_printing_extruder_id, bool wait);
     void _print_first_layer_extruder_temperatures(GCodeOutputStream &file, Print &print, const std::string &gcode, unsigned int first_printing_extruder_id, bool wait);
     // On the first printing layer. This flag triggers first layer speeds.
-    //BBS
+    //PRUSA
     bool    on_first_layer() const { return m_layer != nullptr && m_layer->id() == 0 && abs(m_layer->bottom_z()) < EPSILON; }
     int layer_id() const {
         if (m_layer == nullptr)

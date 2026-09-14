@@ -26,7 +26,7 @@ enum StringExceptionType {
     STRING_EXCEPT_COUNT
 };
 
-// BBS: error with object
+// error with object
 struct StringObjectException
 {
     std::string string;
@@ -395,7 +395,7 @@ public:
     virtual std::vector<ObjectID> print_object_ids() const = 0;
 
     // Validate the print, return empty string if valid, return error if process() cannot (or should not) be started.
-    //BBS: add more paremeters to validate
+    // add more paremeters to validate
     virtual StringObjectException validate(StringObjectException *warning = nullptr, Polygons* collison_polygons = nullptr, std::vector<std::pair<Polygon, float>>* height_polygons = nullptr) const { return {}; }
 
     enum ApplyStatus {
@@ -513,13 +513,13 @@ public:
     // If filename_set is empty, than the path may be a file or directory. If it is a file, then the macro will not be processed.
     std::string                output_filepath(const std::string &path, const std::string &filename_base = std::string()) const;
 
-    //BBS: get/set plate id
+    // get/set plate id
     int get_plate_index() const { return m_plate_index; }
     void set_plate_index(int index) { m_plate_index = index; }
     bool get_no_check_flag() const { return m_no_check; }
     void set_no_check_flag(bool no_check) { m_no_check = no_check; }
 
-    //SoftFever plate name
+    //PrusaSlicer plate name
     std::string get_plate_name() const { return m_plate_name; }
     void set_plate_name(const std::string& name) { m_plate_name = name; }
 protected:
@@ -534,7 +534,7 @@ protected:
 	// If no status callback is registered, the message is printed to console.
     void 				   status_update_warnings(int step, PrintStateBase::WarningLevel warning_level,
         const std::string &message, const PrintObjectBase* print_object = nullptr, PrintStateBase::SlicingNotificationType message_id = PrintStateBase::SlicingDefaultNotification);
-    //BBS: add api to update printobject's warnings
+    // add api to update printobject's warnings
 	void                   status_update_warnings(int step, PrintStateBase::WarningLevel warning_level,
 	    const std::string& message, PrintObjectBase &object, PrintStateBase::SlicingNotificationType message_id = PrintStateBase::SlicingDefaultNotification);
 
@@ -554,11 +554,11 @@ protected:
     DynamicPrintConfig						m_ori_full_print_config;  //original full print config without extruder applied
     PlaceholderParser                       m_placeholder_parser;
 
-    //BBS: add plate id into print base
+    // add plate id into print base
     int m_plate_index{ 0 };
     bool m_no_check = false;
 
-    // SoftFever: current plate name
+    // current plate name
     std::string m_plate_name;
 
     // Callback to be evoked regularly to update state of the UI thread.

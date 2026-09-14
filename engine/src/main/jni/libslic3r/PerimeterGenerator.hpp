@@ -92,10 +92,10 @@ public:
     ExtrusionEntityCollection   *loops;
     ExtrusionEntityCollection   *gap_fill;
     SurfaceCollection           *fill_surfaces;
-    //BBS
+    //PRUSA
     ExPolygons                  *fill_no_overlap;
 
-    //BBS
+    //PRUSA
     Flow                        smaller_ext_perimeter_flow;
     std::vector<Polygons>       m_lower_polygons_series;
     std::vector<Polygons>       m_external_lower_polygons_series;
@@ -125,7 +125,7 @@ public:
         ExtrusionEntityCollection*  gap_fill,
         // Infills without the gap fills
         SurfaceCollection*          fill_surfaces,
-        //BBS
+        //PRUSA
         ExPolygons*                 fill_no_overlap)
         : slices(slices), compatible_regions(compatible_regions), upper_slices(nullptr), lower_slices(nullptr), layer_height(layer_height),
             slice_z(slice_z), layer_id(-1), perimeter_flow(flow), ext_perimeter_flow(flow),
@@ -146,7 +146,7 @@ public:
     double      ext_mm3_per_mm()        const { return m_ext_mm3_per_mm; }
     double      mm3_per_mm()            const { return m_mm3_per_mm; }
     double      mm3_per_mm_overhang()   const { return m_mm3_per_mm_overhang; }
-    //BBS
+    //PRUSA
     double      smaller_width_ext_mm3_per_mm()   const { return m_ext_mm3_per_mm_smaller_width; }
     Polygons    lower_slices_polygons() const { return m_lower_slices_polygons; }
 
@@ -163,7 +163,7 @@ private:
     double      m_ext_mm3_per_mm;
     double      m_mm3_per_mm;
     double      m_mm3_per_mm_overhang;
-    //BBS
+    //PRUSA
     double      m_ext_mm3_per_mm_smaller_width;
     Polygons    m_lower_slices_polygons;
 };

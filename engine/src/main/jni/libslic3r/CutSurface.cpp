@@ -2760,14 +2760,14 @@ struct SurfacePatchEx
 using SurfacePatchesEx = std::vector<SurfacePatchEx>;
 
 
-using BBS = std::vector<BoundingBoxf3>;
+using BBoxVec = std::vector<BoundingBoxf3>;
 /// <summary>
 /// Create bounding boxes for AOI
 /// </summary>
 /// <param name="cuts">Cutted AOI from models</param>
 /// <param name="cut_models">Source points of cuts</param>
 /// <returns>Bounding boxes</returns>
-BBS create_bbs(const VCutAOIs &cuts, const CutMeshes &cut_models);
+BBoxVec create_bbs(const VCutAOIs &cuts, const CutMeshes &cut_models);
 
 using Primitive = CGAL::AABB_face_graph_triangle_primitive<CutMesh>;
 using Traits    = CGAL::AABB_traits<EpicKernel, Primitive>;
@@ -2791,7 +2791,7 @@ Trees create_trees(const CutMeshes &models);
 /// <returns>True when exist bounding boxes intersection</returns>
 bool has_bb_intersection(const BoundingBoxf3  &bb,
                          size_t                model_index,
-                         const BBS            &bbs,
+                         const BBoxVec          &bbs,
                          const ModelCut2index &m2i);
 
 /// <summary>
@@ -2880,7 +2880,7 @@ priv::Trees priv::create_trees(const CutMeshes &models) {
 
 bool priv::has_bb_intersection(const BoundingBoxf3  &bb,
                                size_t                model_index,
-                               const BBS            &bbs,
+                               const BBoxVec          &bbs,
                                const ModelCut2index &m2i)
 {
     const auto&offsets = m2i.get_offsets();

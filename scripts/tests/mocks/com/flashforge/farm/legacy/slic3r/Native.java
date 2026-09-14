@@ -376,7 +376,7 @@ public class Native {
     }
 
     // Zip bundle extraction mock helper
-    public static String orca_bundle_read(String archivePath, String extractDir) throws IOException, JSONException {
+    public static String profile_bundle_read(String archivePath, String extractDir) throws IOException, JSONException {
         // Return a mock JSON bundle
         JSONObject result = new JSONObject();
         result.put("bundle_structure_json", "{}");

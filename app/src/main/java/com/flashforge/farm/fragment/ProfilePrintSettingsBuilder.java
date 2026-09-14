@@ -9,17 +9,17 @@ import com.flashforge.farm.slic3r.ConfigOptionDef;
 import com.flashforge.farm.slic3r.PrintConfigDef;
 import com.flashforge.farm.utils.ViewUtils;
 
-public final class OrcaPrintSettingsBuilder {
+public final class ProfilePrintSettingsBuilder {
     private final PrintConfigFragment fragment;
     private final PrintConfigDef def;
 
-    private OrcaPrintSettingsBuilder(PrintConfigFragment fragment) {
+    private ProfilePrintSettingsBuilder(PrintConfigFragment fragment) {
         this.fragment = fragment;
         this.def = PrintConfigDef.getInstance();
     }
 
     public static List<ProfileListFragment.OptionElement> build(PrintConfigFragment fragment) {
-        return new OrcaPrintSettingsBuilder(fragment).build();
+        return new ProfilePrintSettingsBuilder(fragment).build();
     }
 
     private List<ProfileListFragment.OptionElement> build() {

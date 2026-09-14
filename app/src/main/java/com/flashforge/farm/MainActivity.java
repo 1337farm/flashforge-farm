@@ -329,7 +329,7 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                if (isOrcaBundleFile(fileName)) {
+                if (isProfileBundleFile(fileName)) {
                     loadConvertedProfile(uri);
                     return;
                 }
@@ -445,14 +445,14 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadConvertedProfile(Uri uri) {
         String tag = UUID.randomUUID().toString();
-        Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(SnackbarsLayout.Type.LOADING, R.string.OrcaConversionPleaseWait).tag(tag));
+        Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(SnackbarsLayout.Type.LOADING, R.string.ProfileConversionPleaseWait).tag(tag));
 
         IOUtils.IO_POOL.submit(() -> {
             File copiedArchive = null;
-            File extractDir = new File(FarmApp.getModelCacheDir(), "orca_conv_" + UUID.randomUUID());
+            File extractDir = new File(FarmApp.getModelCacheDir(), "profile_conv_" + UUID.randomUUID());
             try {
-                copiedArchive = File.createTempFile("orca_conv_", ".zip", FarmApp.getModelCacheDir());
-                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 2, getString(R.string.OrcaConversionCopying)));
+                copiedArchive = File.createTempFile("profile_conv_", ".zip", FarmApp.getModelCacheDir());
+                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 2, getString(R.string.ProfileConversionCopying)));
                 try (InputStream in = getContentResolver().openInputStream(uri);
                      FileOutputStream fos = new FileOutputStream(copiedArchive)) {
                     if (in == null) {
@@ -465,18 +465,18 @@ public class MainActivity extends AppCompatActivity {
                     while ((c = in.read(buffer)) != -1) {
                         fos.write(buffer, 0, c);
                         total += c;
-                        Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, (int) Math.min((total / 1024 / 10), 15), getString(R.string.OrcaConversionCopying)));
+                        Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, (int) Math.min((total / 1024 / 10), 15), getString(R.string.ProfileConversionCopying)));
                     }
                 }
-                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 18, getString(R.string.OrcaConversionReading)));
+                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 18, getString(R.string.ProfileConversionReading)));
 
                 if (!extractDir.mkdirs() && !extractDir.isDirectory()) {
                     throw new IOException("Failed to create temporary extraction directory");
                 }
 
-                String manifest = Native.orca_bundle_read(copiedArchive.getAbsolutePath(), extractDir.getAbsolutePath());
+                String manifest = Native.profile_bundle_read(copiedArchive.getAbsolutePath(), extractDir.getAbsolutePath());
                 if (manifest == null) {
-                    throw new IOException("Failed to read Orca bundle");
+                    throw new IOException("Failed to read profile bundle");
                 }
 
                 JSONObject root = new JSONObject(manifest);
@@ -485,16 +485,16 @@ public class MainActivity extends AppCompatActivity {
                     Bus.DISMISS_SNACKBAR.postValue(new NeedDismissSnackbarEvent(tag));
                     ViewUtils.postOnMainThread(() -> new FarmAlertDialogBuilder(this)
                             .setTitle(R.string.MenuFileImportProfilesFailed)
-                            .setMessage(R.string.OrcaConversionNotAConfigBundle)
+                            .setMessage(R.string.ProfileConversionNotAConfigBundle)
                             .setPositiveButton(android.R.string.ok, null)
                             .show());
                     return;
                 }
 
-                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 20, getString(R.string.OrcaConversionImporting, 0)));
+                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 20, getString(R.string.ProfileConversionImporting, 0)));
 
-                importOrcaBundle(root, p -> Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 20 + (int) (p * 75), getString(R.string.OrcaConversionImporting, 20 + (int) (p * 75)))));
-                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 100, getString(R.string.OrcaConversionImporting, 100)));
+                importProfileBundle(root, p -> Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 20 + (int) (p * 75), getString(R.string.ProfileConversionImporting, 20 + (int) (p * 75)))));
+                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 100, getString(R.string.ProfileConversionImporting, 100)));
                 Bus.DISMISS_SNACKBAR.postValue(new NeedDismissSnackbarEvent(tag));
             } catch (IOUtils.MissingProfileException ep) {
                 Bus.DISMISS_SNACKBAR.postValue(new NeedDismissSnackbarEvent(tag));
@@ -527,9 +527,9 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private boolean isOrcaBundleFile(String fileName) {
+    private boolean isProfileBundleFile(String fileName) {
         String lower = fileName.toLowerCase();
-        return lower.endsWith(".orca_printer") || lower.endsWith(".orca_filament") || lower.endsWith(".zip");
+        return lower.endsWith(".prusa_printer") || lower.endsWith(".prusa_filament") || lower.endsWith(".zip");
     }
 
     private boolean is3mfFile(String fileName) {
@@ -817,7 +817,7 @@ public class MainActivity extends AppCompatActivity {
             }
             resolveBundleInherits(w.printerConfigs, w::findPrinter, name -> FarmApp.CONFIG.findPrinter(name));
 
-            // Some Orca/Bambu project 3MFs (including desktop-saved projects with DRC geometry)
+            // Some legacy project 3MFs (including desktop-saved projects with DRC geometry)
             // only store the active settings in Metadata/project_settings.config instead of
             // separate process/filament/machine profile files. Convert that JSON into normal
             // mobile ConfigObjects so the loaded project uses the printer, filament, and print
@@ -920,7 +920,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void importOrcaBundle(JSONObject root, java.util.function.DoubleConsumer onProgress) throws Exception {
+    private void importProfileBundle(JSONObject root, java.util.function.DoubleConsumer onProgress) throws Exception {
         JSONObject bundle = new JSONObject(root.getString("bundle_structure_json"));
 
         HashMap<String, String> files = new HashMap<>();
@@ -1224,7 +1224,7 @@ public class MainActivity extends AppCompatActivity {
                     .show();
             return;
         }
-        if (isOrcaBundleFile(fileName)) {
+        if (isProfileBundleFile(fileName)) {
             loadConvertedProfile(uri);
             return;
         }

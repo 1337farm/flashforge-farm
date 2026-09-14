@@ -3,7 +3,7 @@
 #
 # This is the prusa30 counterpart to the oneTBB leg of
 # scripts/build_all_deps_android.sh (which builds the openvdb-android
-# tbb-aarch64 FORK for the Orca engine). PrusaSlicer 3.0 pins stock oneTBB
+# tbb-aarch64 FORK for the PrusaSlicer 3.0 engine). PrusaSlicer 3.0 pins stock oneTBB
 # v2021.12.0 (engine/prusa30/deps-manifest.json) and resolves it via
 # find_package(TBB) in cmake/modules/GlobalDependencies.cmake, so we stage a
 # real `cmake --install` prefix tree (include/ + lib/ + lib/cmake/TBB/

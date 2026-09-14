@@ -184,7 +184,7 @@ IndexedMesh::query_ray_hits(const Vec3d &s, const Vec3d &dir) const
 
     // Remove duplicates. They sometimes appear, for example when the ray is cast
     // along an axis of a cube due to floating-point approximations in igl (?)
-    // BBS: STUDIO-2591 A mesh with overlapping faces cannot be painted
+    // STUDIO-2591 A mesh with overlapping faces cannot be painted
     //hits.erase(std::unique(hits.begin(), hits.end(),
     //                       [](const igl::Hit<float>& a, const igl::Hit<float>& b)
     //                       { return a.t == b.t; }),

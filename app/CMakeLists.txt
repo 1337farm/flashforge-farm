@@ -1,4 +1,4 @@
-# FarmApp — thin JNI bridge around the shared OrcaSlicer engine.
+# FarmApp — thin JNI bridge around the shared PrusaSlicer engine.
 #
 # The engine (libslic3r C++ source + its full header tree) lives in the
 # top-level engine/ folder of this repository, cleanly separated from the
@@ -39,7 +39,7 @@ set(SRC ${CMAKE_SOURCE_DIR}/src/main)
 set(JNI_IMPORTS ${ENGINE_ROOT}/src/main/jniImports)
 set(OCCT_ROOT ${ENGINE_ROOT}/src/main/occt)
 
-# --- the OrcaSlicer engine (libslic3r.so built from engine/ in this repo) --
+# --- the PrusaSlicer engine (libslic3r.so built from engine/ in this repo) --
 add_library(slic3r SHARED IMPORTED)
 set_target_properties(slic3r PROPERTIES IMPORTED_LOCATION
         ${ENGINE_OUTPUT}/${ANDROID_ABI}/libslic3r.so)
@@ -69,7 +69,7 @@ file(GLOB ENGINE_INCLUDE_SUBDIRS "${ENGINE_JNI}/*/")
 # (and any sibling the engine excludes) so the flattened roots stay safe.
 list(FILTER ENGINE_INCLUDE_SUBDIRS EXCLUDE REGEX "/CGAL/?$")
 target_include_directories(farm PRIVATE
-        ${ENGINE_JNI}                       # libslic3r/, bbl/, render/, expat/, clipper/, cereal/, ...
+        ${ENGINE_JNI}                       # libslic3r/, render/, expat/, clipper/, cereal/, ...
         ${ENGINE_INCLUDE_SUBDIRS}               # flattened sys-style includes (<expat.h>, <nlopt.h>, ...)
         ${ENGINE_JNI}/render                # flat render headers: GLModel.hpp, GLShader.hpp, bed_utils.hpp
         ${ENGINE_JNI}/libvgcode/include     # vgcode flat include: Viewer.hpp

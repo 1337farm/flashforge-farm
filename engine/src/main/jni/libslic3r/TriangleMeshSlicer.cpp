@@ -4,7 +4,7 @@
 #include "TriangleMesh.hpp"
 #include "TriangleMeshSlicer.hpp"
 #include "Utils.hpp"
-// BBS
+// PRUSA
 #include "MeshBoolean.hpp"
 
 #include <algorithm>

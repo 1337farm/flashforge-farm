@@ -21,14 +21,14 @@
 #include <CGAL/Polygon_mesh_processing/remesh.h>
 #include <CGAL/Polygon_mesh_processing/repair_polygon_soup.h>
 #include <CGAL/Polygon_mesh_processing/orientation.h>
-// BBS: for segment
+// for segment
 #if 0
 #include <CGAL/mesh_segmentation.h>
 #include <CGAL/property_map.h>
 #include <CGAL/boost/graph/copy_face_graph.h>
 #include <CGAL/boost/graph/Face_filtered_graph.h>
 #endif
-// BBS: for boolean using mcut
+// for boolean using mcut
 #include "mcut/include/mcut/mcut.h"
 
 namespace Slic3r {
@@ -298,7 +298,7 @@ void minus(CGALMesh &A, CGALMesh &B) { _cgal_do(_cgal_diff, A, B); }
 void plus(CGALMesh &A, CGALMesh &B) { _cgal_do(_cgal_union, A, B); }
 void intersect(CGALMesh &A, CGALMesh &B) { _cgal_do(_cgal_intersection, A, B); }
 bool does_self_intersect(const CGALMesh &mesh) { return CGALProc::does_self_intersect(mesh.m); }
-// BBS
+// PRUSA
 #if 0
 void segment(CGALMesh& src, std::vector<CGALMesh>& dst, double smoothing_alpha = 0.5, int segment_number=5)
 {
@@ -575,7 +575,7 @@ CGALMeshPtr clone(const CGALMesh &m)
 
 
 namespace mcut {
-/* BBS: MusangKing
+/* PRUSA: MusangKing
  * mcut mesh array format for Boolean Opts calculation
  */
 struct McutMesh

@@ -6,7 +6,7 @@
 #include "MultiPoint.hpp"
 #include <string>
 #include <vector>
-//BBS: new necessary header file
+// new necessary header file
 #include "ArcFitter.hpp"
 
 namespace Slic3r {
@@ -51,13 +51,13 @@ public:
 		pl.points.reserve(points.size());
 		for (const Vec2d &pt : points)
 			pl.points.emplace_back(Point::new_scale(pt(0), pt(1)));
-        //BBS: new_scale doesn't support arc, so clean
+        // new_scale doesn't support arc, so clean
         pl.fitting_result.clear();
 		return pl;
     }
     
     void append(const Point &point) {
-        //BBS: don't need to append same point
+        // don't need to append same point
         if (!this->empty() && this->last_point() == point)
             return;
         MultiPoint::append(point);
@@ -65,7 +65,7 @@ public:
     }
 
     void append_before(const Point& point) {
-        //BBS: don't need to append same point
+        // don't need to append same point
         if (!this->empty() && this->first_point() == point)
             return;
         if (this->size() == 1) {
@@ -80,14 +80,14 @@ public:
     }
 
     void append(const Points &src) {
-        //BBS: don't need to append same point
+        // don't need to append same point
         if (!this->empty() && !src.empty() && this->last_point() == src[0])
             this->append(src.begin() + 1, src.end());
         else
             this->append(src.begin(), src.end());
     }
     void append(const Points::const_iterator &begin, const Points::const_iterator &end) {
-        //BBS: don't need to append same point
+        // don't need to append same point
         if (!this->empty() && begin != end && this->last_point() == *begin)
             MultiPoint::append(begin + 1, end);
         else
@@ -125,11 +125,11 @@ public:
     bool is_straight() const;
     bool is_closed() const { return this->points.front() == this->points.back(); }
 
-    //BBS: store arc fitting result
+    // store arc fitting result
     std::vector<PathFittingData> fitting_result;
-    //BBS: simplify points by arc fitting
+    // simplify points by arc fitting
     void simplify_by_fitting_arc(double tolerance);
-    //BBS: 
+    // 
     Polylines equally_spaced_lines(double distance) const;
 
 private:

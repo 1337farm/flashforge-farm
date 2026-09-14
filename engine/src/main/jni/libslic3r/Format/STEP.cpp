@@ -56,22 +56,22 @@ bool StepPreProcessor::preprocess(const char* path, std::string &output_path)
     std::string temp_line;
     while (std::getline(infile, temp_line)) {
         if (m_encode_type == EncodedType::UTF8) {
-            //BBS: continue to judge whether is other type
+            // continue to judge whether is other type
             if (isUtf8(temp_line)) {
-                //BBS: do nothing, but must be checked before checking whether is GBK
+                // do nothing, but must be checked before checking whether is GBK
             }
-            //BBS: not utf8, then maybe GBK
+            // not utf8, then maybe GBK
             else if (isGBK(temp_line)) {
                 m_encode_type = EncodedType::GBK;
             }
-            //BBS: not UTF8 and not GBK, then maybe some kind of special encoded type which we can't handle
+            // not UTF8 and not GBK, then maybe some kind of special encoded type which we can't handle
             // Load the step as UTF and user will see garbage characters in slicer but we have no solution at the moment
             else {
                 m_encode_type = EncodedType::OTHER;
             }
         }
         if (m_encode_type == EncodedType::GBK)
-            //BBS: transform to UTF8 format if is GBK
+            // transform to UTF8 format if is GBK
             //todo: use gbkToUtf8 function to replace
             temp_file << decode_path(temp_line.c_str()) << std::endl;
         else
@@ -255,7 +255,7 @@ static void getNamedSolids(const TopLoc_Location& location,
 //    application->NewDocument(file_after_preprocess.c_str(), document);
 //    STEPCAFControl_Reader reader;
 //    reader.SetNameMode(true);
-//    //BBS: Todo, read file is slow which cause the progress_bar no update and gui no response
+//    // Todo, read file is slow which cause the progress_bar no update and gui no response
 //    IFSelect_ReturnStatus stat = reader.ReadFile(file_after_preprocess.c_str());
 //    if (stat != IFSelect_RetDone || !reader.Transfer(document)) {
 //        application->Close(document);
@@ -290,7 +290,7 @@ static void getNamedSolids(const TopLoc_Location& location,
 //    tbb::parallel_for(tbb::blocked_range<size_t>(0, namedSolids.size()), [&](const tbb::blocked_range<size_t> &range) {
 //        for (size_t i = range.begin(); i < range.end(); i++) {
 //            BRepMesh_IncrementalMesh mesh(namedSolids[i].solid, linear_defletion, false, angle_defletion, true);
-//            // BBS: calculate total number of the nodes and triangles
+//            // calculate total number of the nodes and triangles
 //            int aNbNodes     = 0;
 //            int aNbTriangles = 0;
 //            for (TopExp_Explorer anExpSF(namedSolids[i].solid, TopAbs_FACE); anExpSF.More(); anExpSF.Next()) {
@@ -303,7 +303,7 @@ static void getNamedSolids(const TopLoc_Location& location,
 //            }
 //
 //            if (aNbTriangles == 0 || aNbNodes == 0)
-//                // BBS: No triangulation on the shape.
+//                // No triangulation on the shape.
 //                continue;
 //
 //            stl[i].stats.type                = inmemory;
@@ -313,9 +313,9 @@ static void getNamedSolids(const TopLoc_Location& location,
 //
 //            std::vector<Vec3f> points;
 //            points.reserve(aNbNodes);
-//            // BBS: count faces missing triangulation
+//            // count faces missing triangulation
 //            Standard_Integer aNbFacesNoTri = 0;
-//            // BBS: fill temporary triangulation
+//            // fill temporary triangulation
 //            Standard_Integer aNodeOffset    = 0;
 //            Standard_Integer aTriangleOffet = 0;
 //            for (TopExp_Explorer anExpSF(namedSolids[i].solid, TopAbs_FACE); anExpSF.More(); anExpSF.Next()) {
@@ -326,14 +326,14 @@ static void getNamedSolids(const TopLoc_Location& location,
 //                    ++aNbFacesNoTri;
 //                    continue;
 //                }
-//                // BBS: copy nodes
+//                // copy nodes
 //                gp_Trsf aTrsf = aLoc.Transformation();
 //                for (Standard_Integer aNodeIter = 1; aNodeIter <= aTriangulation->NbNodes(); ++aNodeIter) {
 //                    gp_Pnt aPnt = aTriangulation->Node(aNodeIter);
 //                    aPnt.Transform(aTrsf);
 //                    points.emplace_back(std::move(Vec3f(aPnt.X(), aPnt.Y(), aPnt.Z())));
 //                }
-//                // BBS: copy triangles
+//                // copy triangles
 //                const TopAbs_Orientation anOrientation = anExpSF.Current().Orientation();
 //                Standard_Integer anId[3] = {};
 //                for (Standard_Integer aTriIter = 1; aTriIter <= aTriangulation->NbTriangles(); ++aTriIter) {
@@ -342,7 +342,7 @@ static void getNamedSolids(const TopLoc_Location& location,
 //                    aTri.Get(anId[0], anId[1], anId[2]);
 //                    if (anOrientation == TopAbs_REVERSED)
 //                        std::swap(anId[1], anId[2]);
-//                    // BBS: save triangles facets
+//                    // save triangles facets
 //                    stl_facet facet;
 //                    facet.vertex[0] = points[anId[0] + aNodeOffset - 1].cast<float>();
 //                    facet.vertex[1] = points[anId[1] + aNodeOffset - 1].cast<float>();
@@ -390,7 +390,7 @@ static void getNamedSolids(const TopLoc_Location& location,
 //            }
 //        }
 //
-//        //BBS: maybe mesh is empty from step file. Don't add
+//        // maybe mesh is empty from step file. Don't add
 //        if (stl[i].stats.number_of_facets > 0) {
 //            TriangleMesh triangle_mesh;
 //            triangle_mesh.from_stl(stl[i]);
@@ -405,7 +405,7 @@ static void getNamedSolids(const TopLoc_Location& location,
 //    shapeTool.reset(nullptr);
 //    application->Close(document);
 //
-//    //BBS: no valid shape from the step, delete the new object as well
+//    // no valid shape from the step, delete the new object as well
 //    if (new_object->volumes.size() == 0) {
 //        model->delete_object(new_object);
 //        return false;
@@ -546,7 +546,7 @@ Step::Step_Status Step::mesh(Model* model,
         tbb::parallel_for(tbb::blocked_range<size_t>(0, namedSolids.size()), [&](const tbb::blocked_range<size_t>& range) {
             for (size_t i = range.begin(); i < range.end(); i++) {
                 BRepMesh_IncrementalMesh mesh(namedSolids[i].solid, linear_defletion, false, angle_defletion, true);
-                // BBS: calculate total number of the nodes and triangles
+                // calculate total number of the nodes and triangles
                 int aNbNodes = 0;
                 int aNbTriangles = 0;
                 for (TopExp_Explorer anExpSF(namedSolids[i].solid, TopAbs_FACE); anExpSF.More(); anExpSF.Next()) {
@@ -559,7 +559,7 @@ Step::Step_Status Step::mesh(Model* model,
                 }
 
                 if (aNbTriangles == 0 || aNbNodes == 0)
-                    // BBS: No triangulation on the shape.
+                    // No triangulation on the shape.
                     continue;
 
                 stl[i].stats.type = inmemory;
@@ -569,9 +569,9 @@ Step::Step_Status Step::mesh(Model* model,
 
                 std::vector<Vec3f> points;
                 points.reserve(aNbNodes);
-                // BBS: count faces missing triangulation
+                // count faces missing triangulation
                 Standard_Integer aNbFacesNoTri = 0;
-                // BBS: fill temporary triangulation
+                // fill temporary triangulation
                 Standard_Integer aNodeOffset = 0;
                 Standard_Integer aTriangleOffet = 0;
                 for (TopExp_Explorer anExpSF(namedSolids[i].solid, TopAbs_FACE); anExpSF.More(); anExpSF.Next()) {
@@ -582,14 +582,14 @@ Step::Step_Status Step::mesh(Model* model,
                         ++aNbFacesNoTri;
                         continue;
                     }
-                    // BBS: copy nodes
+                    // copy nodes
                     gp_Trsf aTrsf = aLoc.Transformation();
                     for (Standard_Integer aNodeIter = 1; aNodeIter <= aTriangulation->NbNodes(); ++aNodeIter) {
                         gp_Pnt aPnt = aTriangulation->Node(aNodeIter);
                         aPnt.Transform(aTrsf);
                         points.emplace_back(std::move(Vec3f(aPnt.X(), aPnt.Y(), aPnt.Z())));
                     }
-                    // BBS: copy triangles
+                    // copy triangles
                     const TopAbs_Orientation anOrientation = anExpSF.Current().Orientation();
                     Standard_Integer anId[3] = {};
                     for (Standard_Integer aTriIter = 1; aTriIter <= aTriangulation->NbTriangles(); ++aTriIter) {
@@ -598,7 +598,7 @@ Step::Step_Status Step::mesh(Model* model,
                         aTri.Get(anId[0], anId[1], anId[2]);
                         if (anOrientation == TopAbs_REVERSED)
                             std::swap(anId[1], anId[2]);
-                        // BBS: save triangles facets
+                        // save triangles facets
                         stl_facet facet;
                         facet.vertex[0] = points[anId[0] + aNodeOffset - 1].cast<float>();
                         facet.vertex[1] = points[anId[1] + aNodeOffset - 1].cast<float>();
@@ -625,7 +625,7 @@ Step::Step_Status Step::mesh(Model* model,
             if (cb_cancel)
                 return;
 
-            //BBS: maybe mesh is empty from step file. Don't add
+            // maybe mesh is empty from step file. Don't add
             if (stl[i].stats.number_of_facets > 0) {
                 TriangleMesh triangle_mesh;
                 triangle_mesh.from_stl(stl[i]);
@@ -675,7 +675,7 @@ Step::Step_Status Step::mesh(Model* model,
         }
     }
 
-    //BBS: no valid shape from the step, delete the new object as well
+    // no valid shape from the step, delete the new object as well
     if (new_object->volumes.size() == 0) {
         model->delete_object(new_object);
         return Step_Status::MESH_ERROR;

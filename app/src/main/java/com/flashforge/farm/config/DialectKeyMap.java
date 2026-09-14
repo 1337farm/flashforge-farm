@@ -12,7 +12,7 @@ import java.util.Set;
 public final class DialectKeyMap {
     private DialectKeyMap() {}
 
-    private static Map<String, String> orcaKeys() {
+    private static Map<String, String> legacyKeys() {
         Map<String, String> m = new HashMap<>();
         m.put("printable_area", "bed_shape");
         m.put("printable_height", "max_print_height");
@@ -151,7 +151,7 @@ public final class DialectKeyMap {
         m.put("ironing_type", "ironing");
         return m;
     }
-    private static Map<String, Map<String, String>> orcaValues() {
+    private static Map<String, Map<String, String>> legacyValues() {
         Map<String, Map<String, String>> m = new HashMap<>();
         m.put("gap_fill_target", new HashMap<String, String>() {{
             put("everywhere", "1");
@@ -184,7 +184,7 @@ public final class DialectKeyMap {
         }});
         return m;
     }
-    private static Set<String> orcaRemoved() {
+    private static Set<String> legacyRemoved() {
         Set<String> s = new LinkedHashSet<>();
         s.add("hot_plate_temp");
         s.add("hot_plate_temp_initial_layer");
@@ -205,7 +205,7 @@ public final class DialectKeyMap {
         return s;
     }
 
-    private static Map<String, String> bambuKeys() {
+    private static Map<String, String> compatKeys() {
         Map<String, String> m = new HashMap<>();
         m.put("printable_area", "bed_shape");
         m.put("printable_height", "max_print_height");
@@ -344,7 +344,7 @@ public final class DialectKeyMap {
         m.put("ironing_type", "ironing");
         return m;
     }
-    private static Map<String, Map<String, String>> bambuValues() {
+    private static Map<String, Map<String, String>> compatValues() {
         Map<String, Map<String, String>> m = new HashMap<>();
         m.put("gap_fill_target", new HashMap<String, String>() {{
             put("everywhere", "1");
@@ -377,7 +377,7 @@ public final class DialectKeyMap {
         }});
         return m;
     }
-    private static Set<String> bambuRemoved() {
+    private static Set<String> compatRemoved() {
         Set<String> s = new LinkedHashSet<>();
         s.add("hot_plate_temp");
         s.add("hot_plate_temp_initial_layer");
@@ -849,12 +849,12 @@ public final class DialectKeyMap {
         Map<String, Map<String, String>> r = new HashMap<>();
         Map<String, Map<String, Map<String, String>>> v = new HashMap<>();
         Map<String, Set<String>> d = new HashMap<>();
-        r.put("orca", orcaKeys());
-        v.put("orca", orcaValues());
-        d.put("orca", orcaRemoved());
-        r.put("bambu", bambuKeys());
-        v.put("bambu", bambuValues());
-        d.put("bambu", bambuRemoved());
+        r.put("legacy", legacyKeys());
+        v.put("legacy", legacyValues());
+        d.put("legacy", legacyRemoved());
+        r.put("compat", compatKeys());
+        v.put("compat", compatValues());
+        d.put("compat", compatRemoved());
         r.put("prusaslicer", prusaslicerKeys());
         v.put("prusaslicer", prusaslicerValues());
         d.put("prusaslicer", prusaslicerRemoved());

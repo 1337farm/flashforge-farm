@@ -132,7 +132,7 @@ public:
 private:
     // Source definition of the print bed geometry (PrintConfig::printable_area)
     std::vector<Vec2d>  m_bed_shape;
-    //BBS: extruder shapes
+    // extruder shapes
     std::vector<std::vector<Vec2d>>  m_extruder_shapes; //original data from config
     std::vector<BuildExtruderVolume> m_extruder_volumes;
     BuildSharedVolume m_shared_volume;  //used for rendering

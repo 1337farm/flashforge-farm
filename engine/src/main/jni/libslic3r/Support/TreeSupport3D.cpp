@@ -124,7 +124,7 @@ static std::vector<std::pair<TreeSupportSettings, std::vector<size_t>>> group_me
 {
     std::vector<std::pair<TreeSupportSettings, std::vector<size_t>>> grouped_meshes;
 
-    // Orca: Recompute static mesh-group state for this support generation pass.
+    
     TreeSupportSettings::zero_top_z_gap = false;
 
     //FIXME this is ugly, it does not belong here.
@@ -709,7 +709,7 @@ static std::optional<std::pair<Point, size_t>> polyline_sample_next_point_at_dis
         (support_params.interface_angle + (layer_idx & 1) ? float(- M_PI / 4.) : float(+ M_PI / 4.)) :
         support_params.base_angle;
 
-    // ORCA: use top-specific interface density after separating top/bottom settings.
+    // use top-specific interface density after separating top/bottom settings.
     fill_params.density     = float(roof ? support_params.top_interface_density : scaled<float>(filler->spacing) / (scaled<float>(filler->spacing) + float(support_infill_distance)));
     fill_params.dont_adjust = true;
 
@@ -1611,7 +1611,7 @@ static Point move_inside_if_outside(const Polygons &polygons, Point from, int di
             coord_t safe_movement_distance =
                 (current_elem.use_min_xy_dist ? config.xy_min_distance : config.xy_distance) +
                 (std::min(config.z_distance_top_layers, config.z_distance_bottom_layers) > 0 ? config.min_feature_size : 0);
-            // Orca:
+            
             // safe_movement_distance is used as the safe_offset_inc() step, so keep it non-zero
             // to preserve branch movement with zero-clearance support settings.
             if (safe_movement_distance == 0)
@@ -2941,7 +2941,7 @@ static std::pair<float, float> extrude_branch(
             nprev = v1;
             float radius     = unscaled<float>(support_element_radius(config, prev));
             if (has_root && prev.state.layer_idx == 0) {
-                // Orca: Buildplate roots need a flat foot. A rounded cap can extend far
+                
                 // below the bed and make the first layer slice cut unrelated trunk geometry.
                 const Vec3f normal(0.f, 0.f, 1.f);
                 const Vec3f bottom_center(float(p1.x()), float(p1.y()), 0.f);
@@ -3154,7 +3154,7 @@ static void organic_smooth_branches_avoid_collisions(
     static constexpr const double max_nudge_smoothing = 0.2;
     static constexpr const size_t num_iter = 100; // 1000;
 
-    // Orca: 
+    
     // Collision and Laplacian smoothing run iteratively; keep each candidate reachable from linked upper/lower layers to avoid accumulated drift.
     auto limit_candidate_to_linked_layers = [&collision_spheres, &linear_data_layers, &config](const size_t collision_sphere_id, Vec2d candidate) {
         auto constrain_to_anchor = [](Vec2d candidate, const Vec2d &current_pos, const Vec2d &anchor, double allowed_shift) {
@@ -3596,7 +3596,7 @@ static void generate_support_areas(Print &print, TreeSupport* tree_support, cons
         SupportGeneratorLayersPtr raft_layers = generate_raft_base(print_object, support_params, print_object.slicing_parameters(), top_contacts, interface_layers, base_interface_layers, intermediate_layers, layer_storage);
         SupportGeneratorLayersPtr layers_sorted = generate_support_layers(print_object, raft_layers, bottom_contacts, top_contacts, intermediate_layers, interface_layers, base_interface_layers);
 
-        // BBS: This is a hack to avoid the support being generated outside the bed area. See #4769.
+        // This is a hack to avoid the support being generated outside the bed area. See #4769.
         tbb::parallel_for_each(layers_sorted.begin(), layers_sorted.end(), [&](SupportGeneratorLayer *layer) {
             if (layer) layer->polygons = intersection(layer->polygons, volumes.m_bed_area);
         });
@@ -3879,16 +3879,16 @@ void organic_draw_branches(
 
                     std::vector<Polygons> slices = slice_mesh(partial_mesh, slice_z, mesh_slicing_params, throw_on_cancel);
 
-                    // ORCA: guard against empty slices from meshing.
+                    // guard against empty slices from meshing.
                     if (slices.empty())
                         continue;
 
                     bottom_contacts.clear();
-                    // ORCA: trim tiny fragments to reduce degenerate polygon booleans.
+                    // trim tiny fragments to reduce degenerate polygon booleans.
                     const double tiny_area = tiny_area_threshold();
                     //FIXME parallelize?
                     for (LayerIndex i = 0; i < LayerIndex(slices.size()); ++i) {
-                        // ORCA: safety offset when trimming collision/bed to improve robustness.
+                        // safety offset when trimming collision/bed to improve robustness.
                         slices[i] = diff_clipped(slices[i], volumes.getCollision(0, layer_begin + i, true), ApplySafetyOffset::Yes); // FIXME parent_uses_min || draw_area.element->state.use_min_xy_dist);
                         slices[i] = intersection(slices[i], volumes.m_bed_area, ApplySafetyOffset::Yes);
                         remove_small(slices[i], tiny_area);
@@ -3901,7 +3901,7 @@ void organic_draw_branches(
                         num_empty = std::find_if(slices.begin(), slices.end(), [](auto &s) { return !s.empty(); }) - slices.begin();
                     }
 
-                    // ORCA: trim leading empty slices to keep layer indices aligned.
+                    // trim leading empty slices to keep layer indices aligned.
                     if (num_empty >= slices.size())
                         continue;
 
@@ -3910,7 +3910,7 @@ void organic_draw_branches(
                         layer_begin += LayerIndex(num_empty);
                     }
 
-                    // ORCA: use the trimmed front slice as the contact reference.
+                    // use the trimmed front slice as the contact reference.
                     Polygons slice_front_contact = slices.front();
 
                     if (branch.has_root) {
@@ -3919,7 +3919,7 @@ void organic_draw_branches(
                                 // If bottom Z gap is non-zero, keep bottom contacts even when not touching the model.
                                 Polygons contacts;
 
-                                // ORCA: non-zero bottom Z should not be clipped by placeable areas.
+                                // non-zero bottom Z should not be clipped by placeable areas.
                                 if (config.support_rests_on_model && config.z_distance_bottom_layers > 0 && layer_begin > 0)
                                     contacts = slice_front_contact;
                                 else {
@@ -3929,7 +3929,7 @@ void organic_draw_branches(
 
                                 remove_small(contacts, tiny_area);
 
-                                // ORCA: ensure bottom contacts exist if clipping removed them.
+                                // ensure bottom contacts exist if clipping removed them.
                                 if (contacts.empty() && config.support_rests_on_model && layer_begin > 0 && !slice_front_contact.empty())
                                     contacts = slice_front_contact;
                                 if (!contacts.empty())
@@ -3988,7 +3988,7 @@ void organic_draw_branches(
                                 if (!bottom_extra_slices.empty()) {
                                     const int contact_idx = int(bottom_extra_slices.size()) - 1; // Use the lowest contact slice as the footprint.
 
-                                    // ORCA: non-zero bottom Z should not be clipped by placeable areas.
+                                    // non-zero bottom Z should not be clipped by placeable areas.
                                     if (config.support_rests_on_model && config.z_distance_bottom_layers > 0 && layer_begin > 0)
                                         contacts = intersection_clipped(bottom_extra_slices[contact_idx].polygons, Polygons{volumes.m_bed_area}, ApplySafetyOffset::Yes);
                                     else {
@@ -4010,7 +4010,7 @@ void organic_draw_branches(
                                 if (!contacts.empty())
                                     bottom_contacts.emplace_back(std::move(contacts));
 
-                                // ORCA: ensure bottom contacts exist if clipping removed them.
+                                // ensure bottom contacts exist if clipping removed them.
                                 if (bottom_contacts.empty() && config.support_rests_on_model && layer_begin > 0 && !slice_front_contact.empty())
                                     bottom_contacts.emplace_back(slice_front_contact);
                             }
@@ -4021,14 +4021,14 @@ void organic_draw_branches(
                                 *it_dst ++ = std::move(it_src->polygons);
                         }
 
-                        // ORCA: retain bottom contacts even when no placeable areas intersect.
+                        // retain bottom contacts even when no placeable areas intersect.
                         if (branch.has_root && config.support_rests_on_model && branch.path.front()->state.layer_idx > 0 &&
                             config.settings.support_floor_layers > 0 && config.z_distance_bottom_layers > 0 &&
                             bottom_contacts.empty() && !slice_front_contact.empty())
                             bottom_contacts.emplace_back(slice_front_contact);
 
                     }
-                    // ORCA: bottom contacts provide the footprint; interface layers are built later.
+                    // bottom contacts provide the footprint; interface layers are built later.
 
                     recover_pending_branch_roofs(interface_placer, branch.path, layer_begin, slices);
 
@@ -4036,7 +4036,7 @@ void organic_draw_branches(
                         slices.pop_back();
                     }
 
-                    // ORCA: recompute layer_end after trimming trailing empty slices.
+                    // recompute layer_end after trimming trailing empty slices.
                     layer_end = layer_begin + LayerIndex(slices.size());
 
                     if (layer_begin < layer_end) {
@@ -4059,7 +4059,7 @@ void organic_draw_branches(
                             Polygons &src = slices[j];
                             bool has_bottom_contacts = j < int(bottom_contacts.size()) && !bottom_contacts[j].empty();
 
-                            // ORCA: preserve bottom contacts even if base polygons are empty.
+                            // preserve bottom contacts even if base polygons are empty.
                             if (!src.empty() || has_bottom_contacts) {
                                 Slice &dst = tree.slices[i - new_begin];
                                 if (++ dst.num_branches > 1) {
@@ -4088,7 +4088,7 @@ void organic_draw_branches(
             Tree &tree = trees[tree_id];
             for (Slice &slice : tree.slices)
                 if (slice.num_branches > 1) {
-                    // ORCA: avoid union_ on empty containers.
+                    // avoid union_ on empty containers.
                     if (!slice.polygons.empty())
                         slice.polygons = union_(slice.polygons);
                     if (!slice.bottom_contacts.empty())
@@ -4113,7 +4113,7 @@ void organic_draw_branches(
                 Slice &src = tree.slices[i - tree.first_layer_id];
                 bool has_bottom_contacts = !src.bottom_contacts.empty();
 
-                // ORCA: preserve bottom contacts even if base polygons are empty.
+                // preserve bottom contacts even if base polygons are empty.
                 if (!src.polygons.empty() || has_bottom_contacts) {
                     Slice &dst = slices[i];
 
@@ -4137,7 +4137,7 @@ void organic_draw_branches(
         for (size_t layer_idx = range.begin(); layer_idx < range.end(); ++layer_idx) {
             Slice &slice = slices[layer_idx];
             assert(intermediate_layers[layer_idx] == nullptr);
-            // ORCA: avoid union_ on empty inputs.
+            // avoid union_ on empty inputs.
             Polygons base_layer_polygons     = slice.polygons.empty() ? Polygons{} :
                 (slice.num_branches > 1 ? union_(slice.polygons) : std::move(slice.polygons));
             Polygons bottom_contact_polygons = slice.bottom_contacts.empty() ? Polygons{} :

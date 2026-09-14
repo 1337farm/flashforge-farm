@@ -1,6 +1,6 @@
 {
   "dialects": {
-    "bambu": {
+    "compat": {
       "before_layer_change_gcode": {
         "key": "before_layer_gcode",
         "kind": "rename",
@@ -49,17 +49,17 @@
       "cool_plate_temp": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "cool_plate_temp_initial_layer": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "curr_bed_type": {
         "key": null,
         "kind": "removed",
-        "note": "Orca bed-slot selector enum"
+        "note": "Legacy bed-slot selector enum"
       },
       "deretraction_speed": {
         "key": "deretract_speed",
@@ -99,12 +99,12 @@
       "eng_plate_temp": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "eng_plate_temp_initial_layer": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "extra_perimeters_on_overhangs": {
         "key": "extra_perimeters",
@@ -149,7 +149,7 @@
       "filament_map": {
         "key": null,
         "kind": "removed",
-        "note": "Orca virtual->physical filament map"
+        "note": "Legacy virtual->physical filament map"
       },
       "filament_retract_when_changing_layer": {
         "key": "filament_retract_layer_change",
@@ -189,17 +189,17 @@
       "flush_multiplier": {
         "key": null,
         "kind": "removed",
-        "note": "Orca purge multiplier"
+        "note": "Legacy purge multiplier"
       },
       "flush_volumes_matrix": {
         "key": null,
         "kind": "removed",
-        "note": "Orca purge-matrix layout only"
+        "note": "Legacy purge-matrix layout only"
       },
       "flush_volumes_vector": {
         "key": null,
         "kind": "removed",
-        "note": "Orca purge vector"
+        "note": "Legacy purge vector"
       },
       "fuzzy_skin_point_distance": {
         "key": "fuzzy_skin_point_dist",
@@ -209,7 +209,7 @@
       "gap_fill_target": {
         "key": "gap_fill_enabled",
         "kind": "enum_remap",
-        "note": "Orca enum -> legacy bool gap_fill_enabled",
+        "note": "Legacy enum -> legacy bool gap_fill_enabled",
         "values": {
           "everywhere": "1",
           "nowhere": "0",
@@ -224,12 +224,12 @@
       "hot_plate_temp": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "hot_plate_temp_initial_layer": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "infill_combination": {
         "key": "infill_every_layers",
@@ -299,7 +299,7 @@
       "ironing_type": {
         "key": "ironing",
         "kind": "enum_remap",
-        "note": "Orca ironing_type enum -> Prusa ironing bool",
+        "note": "Legacy ironing_type enum -> Prusa ironing bool",
         "values": {
           "all solid layers": "1",
           "all top surfaces": "1",
@@ -444,7 +444,7 @@
       "print_sequence": {
         "key": null,
         "kind": "enum_remap",
-        "note": "Orca print_sequence enum -> Prusa complete_objects bool",
+        "note": "Legacy print_sequence enum -> Prusa complete_objects bool",
         "values": {
           "by layer": "0",
           "by object": "1",
@@ -500,7 +500,7 @@
       "single_extruder_multi_material": {
         "key": null,
         "kind": "removed",
-        "note": "Orca SEMM toggle; no native equivalent"
+        "note": "Legacy SEMM toggle; no native equivalent"
       },
       "skirt_loops": {
         "key": "skirts",
@@ -660,18 +660,18 @@
       "support_type": {
         "key": null,
         "kind": "type_changed",
-        "note": "Orca normal/tree(auto) enum -> Prusa support_style (snug/organic)",
+        "note": "Legacy normal/tree(auto) enum -> Prusa support_style (snug/organic)",
         "transform": "support_type"
       },
       "textured_plate_temp": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "textured_plate_temp_initial_layer": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "top_one_wall_type": {
         "key": "top_one_perimeter_type",
@@ -761,7 +761,7 @@
       "wall_sequence": {
         "key": "external_perimeters_first",
         "kind": "enum_remap",
-        "note": "Orca wall_sequence enum -> Prusa external_perimeters_first bool",
+        "note": "Legacy wall_sequence enum -> Prusa external_perimeters_first bool",
         "values": {
           "inner wall/outer wall": "0",
           "inner/outer": "0",
@@ -787,7 +787,7 @@
         "note": ""
       }
     },
-    "orca": {
+    "legacy": {
       "before_layer_change_gcode": {
         "key": "before_layer_gcode",
         "kind": "rename",
@@ -836,17 +836,17 @@
       "cool_plate_temp": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "cool_plate_temp_initial_layer": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "curr_bed_type": {
         "key": null,
         "kind": "removed",
-        "note": "Orca bed-slot selector enum"
+        "note": "Legacy bed-slot selector enum"
       },
       "deretraction_speed": {
         "key": "deretract_speed",
@@ -886,12 +886,12 @@
       "eng_plate_temp": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "eng_plate_temp_initial_layer": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "extra_perimeters_on_overhangs": {
         "key": "extra_perimeters",
@@ -936,7 +936,7 @@
       "filament_map": {
         "key": null,
         "kind": "removed",
-        "note": "Orca virtual->physical filament map"
+        "note": "Legacy virtual->physical filament map"
       },
       "filament_retract_when_changing_layer": {
         "key": "filament_retract_layer_change",
@@ -976,17 +976,17 @@
       "flush_multiplier": {
         "key": null,
         "kind": "removed",
-        "note": "Orca purge multiplier"
+        "note": "Legacy purge multiplier"
       },
       "flush_volumes_matrix": {
         "key": null,
         "kind": "removed",
-        "note": "Orca purge-matrix layout only"
+        "note": "Legacy purge-matrix layout only"
       },
       "flush_volumes_vector": {
         "key": null,
         "kind": "removed",
-        "note": "Orca purge vector"
+        "note": "Legacy purge vector"
       },
       "fuzzy_skin_point_distance": {
         "key": "fuzzy_skin_point_dist",
@@ -996,7 +996,7 @@
       "gap_fill_target": {
         "key": "gap_fill_enabled",
         "kind": "enum_remap",
-        "note": "Orca enum -> legacy bool gap_fill_enabled",
+        "note": "Legacy enum -> legacy bool gap_fill_enabled",
         "values": {
           "everywhere": "1",
           "nowhere": "0",
@@ -1011,12 +1011,12 @@
       "hot_plate_temp": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "hot_plate_temp_initial_layer": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "infill_combination": {
         "key": "infill_every_layers",
@@ -1086,7 +1086,7 @@
       "ironing_type": {
         "key": "ironing",
         "kind": "enum_remap",
-        "note": "Orca ironing_type enum -> Prusa ironing bool",
+        "note": "Legacy ironing_type enum -> Prusa ironing bool",
         "values": {
           "all solid layers": "1",
           "all top surfaces": "1",
@@ -1231,7 +1231,7 @@
       "print_sequence": {
         "key": null,
         "kind": "enum_remap",
-        "note": "Orca print_sequence enum -> Prusa complete_objects bool",
+        "note": "Legacy print_sequence enum -> Prusa complete_objects bool",
         "values": {
           "by layer": "0",
           "by object": "1",
@@ -1287,7 +1287,7 @@
       "single_extruder_multi_material": {
         "key": null,
         "kind": "removed",
-        "note": "Orca SEMM toggle; no native equivalent"
+        "note": "Legacy SEMM toggle; no native equivalent"
       },
       "skirt_loops": {
         "key": "skirts",
@@ -1447,18 +1447,18 @@
       "support_type": {
         "key": null,
         "kind": "type_changed",
-        "note": "Orca normal/tree(auto) enum -> Prusa support_style (snug/organic)",
+        "note": "Legacy normal/tree(auto) enum -> Prusa support_style (snug/organic)",
         "transform": "support_type"
       },
       "textured_plate_temp": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "textured_plate_temp_initial_layer": {
         "key": null,
         "kind": "removed",
-        "note": "Orca per-plate bed temp slot"
+        "note": "Legacy per-plate bed temp slot"
       },
       "top_one_wall_type": {
         "key": "top_one_perimeter_type",
@@ -1548,7 +1548,7 @@
       "wall_sequence": {
         "key": "external_perimeters_first",
         "kind": "enum_remap",
-        "note": "Orca wall_sequence enum -> Prusa external_perimeters_first bool",
+        "note": "Legacy wall_sequence enum -> Prusa external_perimeters_first bool",
         "values": {
           "inner wall/outer wall": "0",
           "inner/outer": "0",

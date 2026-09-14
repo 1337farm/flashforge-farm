@@ -71,7 +71,7 @@ class Print;
         std::map<size_t, double>                            wipe_tower_volumes_per_extruder;
         std::map<size_t, double>                            support_volumes_per_extruder;
         std::map<size_t, double>                            total_volumes_per_extruder;
-        //BBS: the flush amount of every filament
+        // the flush amount of every filament
         std::map<size_t, double>                            flush_per_filament;
         std::map<ExtrusionRole, std::pair<double, double>>  used_filaments_per_role;
 
@@ -198,18 +198,18 @@ class Print;
             float travel_dist{ 0.0f }; // mm
             float fan_speed{ 0.0f }; // percentage
             float temperature{ 0.0f }; // Celsius degrees
-// ORCA: Add Pressure Advance visualization support
+// Add Pressure Advance visualization support
             float pressure_advance{ 0.0f };
-            // ORCA: Add Acceleration visualization support
+            // Add Acceleration visualization support
             float acceleration{ 0.0f }; // mm/s^2
-            // ORCA: Add Jerk visualization support
+            // Add Jerk visualization support
             float jerk{ 0.0f }; // mm/s
             std::array<float, static_cast<size_t>(PrintEstimatedStatistics::ETimeMode::Count)> time{ 0.0f, 0.0f }; // s
             float layer_duration{ 0.0f }; // s
             unsigned int layer_id{ 0 };
             bool internal_only{ false };
 
-            //BBS
+            //PRUSA
             int  object_label_id{-1};
             float print_z{0.0f};
 
@@ -230,16 +230,16 @@ class Print;
         // Positions of ends of lines of the final G-code this->filename after TimeProcessor::post_process() finalizes the G-code.
         std::vector<size_t> lines_ends;
         Pointfs printable_area;
-        //BBS: add bed exclude area
+        // add bed exclude area
         Pointfs bed_exclude_area;
         Pointfs wrapping_exclude_area;
         std::vector<Pointfs> extruder_areas;
         std::vector<double> extruder_heights;
-        //BBS: add toolpath_outside
+        // add toolpath_outside
         bool toolpath_outside;
-        //BBS: add object_label_enabled
+        // add object_label_enabled
         bool label_object_enabled;
-        //BBS : extra retraction when change filament,experiment func
+        //PRUSA : extra retraction when change filament,experiment func
         bool long_retraction_when_cut {0};
         int timelapse_warning_code {0};
         bool support_traditional_timelapse{true};
@@ -259,7 +259,7 @@ class Print;
         PrintEstimatedStatistics print_statistics;
         std::vector<CustomGCode::Item> custom_gcode_per_print_z;
         bool spiral_vase_mode;
-        //BBS
+        //PRUSA
         std::vector<SliceWarning> warnings;
         int nozzle_hrc;
         std::vector<NozzleType> nozzle_type;
@@ -274,7 +274,7 @@ class Print;
         BedType bed_type = BedType::btCount;
         void reset();
 
-        //BBS: add mutex for protection of gcode result
+        // add mutex for protection of gcode result
         mutable std::mutex result_mutex;
         GCodeProcessorResult& operator=(const GCodeProcessorResult &other)
         {
@@ -372,7 +372,7 @@ class Print;
             Used_Filament_Length_Placeholder,
         };
 
-        static const std::string& reserved_tag(ETags tag) { return s_IsBBLPrinter ? Reserved_Tags[static_cast<unsigned char>(tag)] : Reserved_Tags_compatible[static_cast<unsigned char>(tag)]; }
+        static const std::string& reserved_tag(ETags tag) { return s_IsPrusaPrinter ? Reserved_Tags[static_cast<unsigned char>(tag)] : Reserved_Tags_compatible[static_cast<unsigned char>(tag)]; }
         // checks the given gcode for reserved tags and returns true when finding the 1st (which is returned into found_tag) 
         static bool contains_reserved_tag(const std::string& gcode, std::string& found_tag);
         // checks the given gcode for reserved tags and returns true when finding any
@@ -386,7 +386,7 @@ class Print;
         static const float Wipe_Width;
         static const float Wipe_Height;
 
-        static bool s_IsBBLPrinter;
+        static bool s_IsPrusaPrinter;
 
     private:
         using AxisCoords = std::array<double, 4>;
@@ -485,12 +485,12 @@ class Print;
             {
                 float feedrate; // mm/s
                 float safe_feedrate; // mm/s
-                //BBS: feedrate of X-Y-Z-E axis. But when the move is G2 and G3, X-Y will be
+                // feedrate of X-Y-Z-E axis. But when the move is G2 and G3, X-Y will be
                 //same value which means feedrate in X-Y plane.
                 AxisCoords axis_feedrate; // mm/s
                 AxisCoords abs_axis_feedrate; // mm/s
 
-                //BBS: unit vector of enter speed and exit speed in x-y-z space.
+                // unit vector of enter speed and exit speed in x-y-z space.
                 //For line move, there are same. For arc move, there are different.
                 Vec3f enter_direction;
                 Vec3f exit_direction;
@@ -557,7 +557,7 @@ class Print;
             std::vector<G1LinesCacheItem> g1_times_cache;
             float first_layer_time;
             std::vector<ActualSpeedMove> actual_speed_moves;
-            //BBS: prepare stage time before print model, including start gcode time and mostly same with start gcode time
+            // prepare stage time before print model, including start gcode time and mostly same with start gcode time
             float prepare_time;
 
             void reset();
@@ -579,7 +579,7 @@ class Print;
             double support_volume_cache;
             std::map<size_t, double>support_volumes_per_filament;
 
-            //BBS: the flush amount of every filament
+            // the flush amount of every filament
             std::map<size_t, double> flush_per_filament;
 
             double total_volume_cache;
@@ -629,7 +629,7 @@ class Print;
             // Additional load / unload times for a filament exchange sequence.
             float filament_load_times;
             float filament_unload_times;
-            //Orca:  time for tool change
+            // Time for tool change
             float machine_tool_change_time;
 
             std::array<TimeMachine, static_cast<size_t>(PrintEstimatedStatistics::ETimeMode::Count)> machines;
@@ -788,7 +788,7 @@ class Print;
         std::vector<int> m_physical_extruder_map;
         bool m_manual_filament_change;
 
-        //BBS: x, y offset for gcode generated
+        // x, y offset for gcode generated
         double          m_x_offset{ 0 };
         double          m_y_offset{ 0 };
 
@@ -803,7 +803,7 @@ class Print;
         float m_travel_dist; // mm
         float m_fan_speed; // percentage
         float m_z_offset; // mm
-// ORCA: Add Pressure Advance visualization support
+// Add Pressure Advance visualization support
         float m_pressure_advance;
         ExtrusionRole m_extrusion_role;
         std::vector<int> m_filament_maps;
@@ -835,7 +835,7 @@ class Print;
         enum class EProducer
         {
             Unknown,
-            OrcaSlicer,
+            PrusaSlicer,
             Slic3rPE,
             Slic3r,
             SuperSlicer,
@@ -906,10 +906,10 @@ class Print;
 
         float get_first_layer_time(PrintEstimatedStatistics::ETimeMode mode) const;
 
-        //BBS: set offset for gcode writer
+        // set offset for gcode writer
         void set_xy_offset(double x, double y) { m_x_offset = x; m_y_offset = y; }
 
-        // Orca: if true, only change new layer if ETags::Layer_Change occurs
+        // If true, only change new layer if ETags::Layer_Change occurs
         // otherwise when we got a lift of z during extrusion, a new layer will be added
         void detect_layer_based_on_tag(bool enabled) { m_detect_layer_based_on_tag = enabled; }
 
@@ -923,7 +923,7 @@ class Print;
         // Process tags embedded into comments
         void process_tags(const std::string_view comment, bool producers_enabled);
         bool process_producers_tags(const std::string_view comment);
-        bool process_bambuslicer_tags(const std::string_view comment);
+        bool process_prusaslicer_tags(const std::string_view comment);
         bool process_cura_tags(const std::string_view comment);
         bool process_simplify3d_tags(const std::string_view comment);
         bool process_craftware_tags(const std::string_view comment);
@@ -949,7 +949,7 @@ class Print;
         void process_VG1(const GCodeReader::GCodeLine& line);
 
 
-        // BBS: handle delay command
+        // handle delay command
         void process_G4(const GCodeReader::GCodeLine& line);
 
         // Retract
@@ -973,7 +973,7 @@ class Print;
         // Move to origin
         void process_G28(const GCodeReader::GCodeLine& line);
 
-        // BBS
+        // PRUSA
         void process_G29(const GCodeReader::GCodeLine& line);
 
         // Set to Absolute Positioning
@@ -1009,7 +1009,7 @@ class Print;
         // Disable fan
         void process_M107(const GCodeReader::GCodeLine& line);
 
-// ORCA: Add Pressure Advance visualization support
+// Add Pressure Advance visualization support
         // Set pressure advance
         void process_M900(const GCodeReader::GCodeLine& line);
         void process_M572(const GCodeReader::GCodeLine &line);
@@ -1027,13 +1027,13 @@ class Print;
         // Set tool (MakerWare)
         void process_M135(const GCodeReader::GCodeLine& line);
 
-        //BBS: Set bed temperature
+        // Set bed temperature
         void process_M140(const GCodeReader::GCodeLine& line);
 
-        //BBS: wait bed temperature
+        // wait bed temperature
         void process_M190(const GCodeReader::GCodeLine& line);
 
-        //BBS: wait chamber temperature
+        // wait chamber temperature
         void process_M191(const GCodeReader::GCodeLine& line);
 
         // Set max printing acceleration
@@ -1054,7 +1054,7 @@ class Print;
         // Set extrude factor override percentage
         void process_M221(const GCodeReader::GCodeLine& line);
 
-        // BBS: handle delay command. M400 is defined by BBL only
+        // handle delay command. M400 is defined by PRUSA only
         void process_M400(const GCodeReader::GCodeLine& line);
 
         // Repetier: Store x, y and z position
@@ -1086,7 +1086,7 @@ class Print;
         // 2) update used filament data
         void run_post_process();
 
-        //BBS: different path_type is only used for arc move
+        // different path_type is only used for arc move
         void store_move_vertex(EMoveType type, EMovePathType path_type = EMovePathType::Noop_move, bool internal_only = false);
 
         void set_extrusion_role(ExtrusionRole role);
@@ -1094,8 +1094,8 @@ class Print;
         float minimum_feedrate(PrintEstimatedStatistics::ETimeMode mode, float feedrate) const;
         float minimum_travel_feedrate(PrintEstimatedStatistics::ETimeMode mode, float feedrate) const;
         // Machine limit arrays are indexed by time mode only: [0]=Normal, [1]=Stealth.
-        // Do NOT add an extruder_id parameter — OrcaSlicer does not use BambuStudio's
-        // per-nozzle machine limits (filament_map_2 / get_config_idx_for_filament).
+        // Do NOT add an extruder_id parameter — per-nozzle machine limits are
+        // not supported (filament_map_2 / get_config_idx_for_filament).
         float get_axis_max_feedrate(PrintEstimatedStatistics::ETimeMode mode, Axis axis) const;
         float get_axis_max_acceleration(PrintEstimatedStatistics::ETimeMode mode, Axis axis) const;
         float get_axis_max_jerk_with_jd(PrintEstimatedStatistics::ETimeMode mode, Axis axis, float acceleration) const;
@@ -1124,7 +1124,6 @@ class Print;
 
         double extract_absolute_position_on_axis(Axis axis, const GCodeReader::GCodeLine& line, double area_filament_cross_section);
 
-        //BBS:
         void update_slice_warnings();
 
         // get current used filament

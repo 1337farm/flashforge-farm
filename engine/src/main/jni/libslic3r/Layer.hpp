@@ -57,7 +57,7 @@ public:
     ExPolygons                  fill_expolygons;
     // collection of surfaces for infill generation
     SurfaceCollection           fill_surfaces;
-    // BBS: Unspecified fill polygons, used for interecting when we don't want the infill/perimeter overlap
+    // Unspecified fill polygons, used for interecting when we don't want the infill/perimeter overlap
     ExPolygons                  fill_no_overlap_expolygons;
 
     // collection of expolygons representing the bridged areas (thus not
@@ -81,7 +81,7 @@ public:
 
     void    slices_to_fill_surfaces_clipped();
     void    prepare_fill_surfaces();
-    //BBS
+    //PRUSA
     void    make_perimeters(const SurfaceCollection &slices, const LayerRegionPtrs &compatible_regions, SurfaceCollection* fill_surfaces, ExPolygons* fill_no_overlap);
     void    process_external_surfaces(const Layer *lower_layer, const Polygons *lower_layer_covered);
     double  infill_area_threshold() const;
@@ -99,7 +99,7 @@ public:
 
     // Is there any valid extrusion assigned to this LayerRegion?
     bool    has_extrusions() const { return ! this->perimeters.entities.empty() || ! this->fills.entities.empty(); }
-    //BBS
+    //PRUSA
     void    simplify_infill_extrusion_entity() { simplify_entity_collection(&fills); }
     void    simplify_wall_extrusion_entity() { simplify_entity_collection(&perimeters); }
 private:
@@ -140,7 +140,7 @@ public:
     //Extrusions estimated to be seriously malformed, estimated during "Estimating curled extrusions" step. These lines should be avoided during fast travels.
     CurledLines         curled_lines;
 
-    // BBS
+    // PRUSA
     mutable ExPolygons          sharp_tails;
     mutable ExPolygons          cantilevers;
     mutable std::vector<float>  sharp_tails_height;
@@ -154,10 +154,10 @@ public:
     // These lslices are also used to detect overhangs and overlaps between successive layers, therefore it is important
     // that the 1st lslice is not compensated by the Elephant foot compensation algorithm.
     ExPolygons 				 lslices;
-    ExPolygons 				 lslices_extrudable;  // BBS: the extrudable part of lslices used for tree support
+    ExPolygons 				 lslices_extrudable;  // the extrudable part of lslices used for tree support
     std::vector<BoundingBox> lslices_bboxes;
 
-    // BBS
+    // PRUSA
     ExPolygons              loverhangs;
     BoundingBox             loverhangs_bbox;
     size_t                  region_count() const { return m_regions.size(); }
@@ -206,10 +206,10 @@ public:
     // Is there any valid extrusion assigned to this LayerRegion?
     virtual bool            has_extrusions() const { for (auto layerm : m_regions) if (layerm->has_extrusions()) return true; return false; }
 
-    //BBS
+    //PRUSA
     void simplify_wall_extrusion_path() { for (auto layerm : m_regions) layerm->simplify_wall_extrusion_entity();}
     void simplify_infill_extrusion_path() { for (auto layerm : m_regions) layerm->simplify_infill_extrusion_entity(); }
-    //BBS: this function calculate the maximum void grid area of sparse infill of this layer. Just estimated value
+    // this function calculate the maximum void grid area of sparse infill of this layer. Just estimated value
     coordf_t get_sparse_infill_max_void_area();
 
     // FN_HIGHER_EQUAL: the provided object pointer has a Z value >= of an internal threshold.
@@ -259,7 +259,7 @@ protected:
         m_id(id), m_object(object) {}
     virtual ~Layer();
 
-//BBS: method to simplify support path
+// method to simplify support path
     void    simplify_support_entity_collection(ExtrusionEntityCollection* entity_collection);
     void    simplify_support_path(ExtrusionPath* path);
     void    simplify_support_multi_path(ExtrusionMultiPath* multipath);

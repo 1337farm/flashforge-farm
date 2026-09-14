@@ -109,7 +109,7 @@ public:
     virtual bool is_collection() const { return false; }
     virtual bool is_loop() const { return false; }
     virtual bool can_reverse() const { return true; }
-    virtual bool can_sort() const { return true; }//BBS: only used in ExtrusionEntityCollection
+    virtual bool can_sort() const { return true; }// only used in ExtrusionEntityCollection
     virtual void set_reverse() {}
     virtual ExtrusionEntity* clone() const = 0;
     // Create a new object, initialize it with this object using the move semantics.
@@ -141,7 +141,7 @@ public:
     virtual double length() const = 0;
     virtual double total_volume() const = 0;
     
-    // Orca: Used for inner/outer/inner mode - classic perimeter generator
+    // Used for inner/outer/inner mode - classic perimeter generator
     int inset_idx = -1;
 
     static std::string role_to_string(ExtrusionRole role);
@@ -291,9 +291,8 @@ public:
     void   collect_points3(Points3 &dst) const { append(dst, this->polyline.points); }
     double total_volume() const override { return mm3_per_mm * unscale<double>(length()); }
 
-    //BBS: add new simplifing method by fitting arc
+    // add new simplifing method by fitting arc
     void simplify_by_fitting_arc(double tolerance);
-    //BBS:
     bool is_force_no_extrusion() const { return m_no_extrusion; }
     void set_force_no_extrusion(bool no_extrusion) { m_no_extrusion = no_extrusion; }
     void set_extrusion_role(ExtrusionRole extrusion_role) { m_role = extrusion_role; }
@@ -304,7 +303,7 @@ private:
     void _inflate_collection(const Polylines &polylines, ExtrusionEntityCollection* collection) const;
     bool m_can_reverse = true;
     ExtrusionRole m_role;
-    //BBS
+    //PRUSA
     bool m_no_extrusion = false;
 };
 
@@ -601,7 +600,7 @@ inline void extrusion_entities_append_paths(ExtrusionEntitiesPtr &dst, Polylines
     polylines.clear();
 }
 
-//BBS: a kind of special extrusion path has start and end wiping for half spacing
+// a kind of special extrusion path has start and end wiping for half spacing
 inline void extrusion_entities_append_paths_with_wipe(ExtrusionEntitiesPtr &dst, Polylines &&polylines, ExtrusionRole role, double mm3_per_mm, float width, float height)
 {
     dst.reserve(dst.size() + polylines.size());

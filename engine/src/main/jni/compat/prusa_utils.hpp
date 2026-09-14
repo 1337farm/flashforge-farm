@@ -1,5 +1,5 @@
-#ifndef BBL_UTILS_HPP
-#define BBL_UTILS_HPP
+#ifndef PRUSA_UTILS_HPP
+#define PRUSA_UTILS_HPP
 
 #include "libslic3r/Point.hpp"
 
@@ -9,7 +9,7 @@
 
 namespace Slic3r {
     // rotation_from_two_vectors() and extract_euler_angles() are now provided by
-    // libslic3r/Geometry.{hpp,cpp} in the OrcaSlicer engine; the local shims were removed
+    // libslic3r/Geometry.{hpp,cpp} in the PrusaSlicer engine; the local shims were removed
     // to avoid ambiguous-overload errors.
 
     double area_of_boundingbox(BoundingBoxf3 bb) {
@@ -33,4 +33,4 @@ namespace Slic3r {
     }
 }
 
-#endif //BBL_UTILS_HPP
+#endif //PRUSA_UTILS_HPP

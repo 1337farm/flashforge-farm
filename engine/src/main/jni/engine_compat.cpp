@@ -1,4 +1,4 @@
-// Engine compatibility shims for the OrcaSlicer engine swap.
+// Engine compatibility shims for the PrusaSlicer engine swap.
 //
 // This translation unit provides:
 //   1. The single nanosvg implementation (the rest of the engine only includes the header).

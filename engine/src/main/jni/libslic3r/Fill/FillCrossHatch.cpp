@@ -12,7 +12,7 @@ namespace Slic3r {
 // It introduces transform layers between direction shifts for better line cohesion, which fixes the weakness of line infill.
 // The transform technique is inspired by David Eccles, improved 3D honeycomb but we made a more flexible implementation.
 // This method notably increases printing speed, meeting the demands of modern high-speed 3D printers, and reduces noise for most layers.
-// By Bambu Lab
+// By Prusa
 
 // graph credits: David Eccles (gringer).
 // But we made a different definition for points.
@@ -195,7 +195,7 @@ void FillCrossHatch ::_fill_surface_single(
     bb.merge(align_to_grid(bb.min, Point(line_spacing * 4, line_spacing * 4)));
 
     // generate pattern
-    //Orca: optimize the cross-hatch infill pattern to improve strength when low infill density is used.
+    // Optimize the cross-hatch infill pattern to improve strength when low infill density is used.
     double repeat_ratio = 1.0;
     if (params.density < 0.3)
         repeat_ratio = std::clamp(1.0 - std::exp(-5 * params.density), 0.2, 1.0);

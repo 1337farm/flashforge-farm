@@ -20,11 +20,11 @@
 #include "EmbossShape.hpp"
 #include "TriangleSelector.hpp"
 
-//BBS: add bbs 3mf
-#include "Format/bbs_3mf.hpp"
-//BBS: add step
+// add prusa 3mf
+#include "Format/prusa_3mf.hpp"
+// add step
 #include "Format/STEP.hpp"
-//BBS: add stl
+// add stl
 #include "Format/STL.hpp"
 #include "Format/OBJ.hpp"
 
@@ -59,9 +59,9 @@ class ModelWipeTower;
 class Print;
 class SLAPrint;
 class TriangleSelector;
-//BBS: add Preset
+// add Preset
 class Preset;
-class BBLProject;
+class PrusaProject;
 
 class KeyStore;
 
@@ -355,7 +355,7 @@ class ModelObject final : public ObjectBase
 {
 public:
     std::string             name;
-    //BBS: add module name for assemble
+    // add module name for assemble
     std::string             module_name;
     std::string             input_file;    // XXX: consider fs::path
     // Instances of this ModelObject. Each instance defines a shift on the print bed, rotation around the Z axis and a uniform scaling.
@@ -393,7 +393,7 @@ public:
         when user expects that. */
     Vec3d                   origin_translation;
 
-    // BBS: save for compare with new load volumes
+    // save for compare with new load volumes
     std::vector<ObjectID>   volume_ids;
 
     // Connectors to be added into the object before cut and are used to create a solid/negative volumes during a cut perform
@@ -402,7 +402,7 @@ public:
 
     Model*                  get_model() { return m_model; }
     const Model*            get_model() const { return m_model; }
-    // BBS: production extension
+    // production extension
     int                     get_backup_id() const;
     template<typename T> const T* get_config_value(const DynamicPrintConfig& global_config, const std::string& config_option) {
         if (config.has(config_option))
@@ -476,7 +476,7 @@ public:
 	// A snug bounding box of non-transformed (non-rotated, non-scaled, non-translated) sum of all object volumes.
     BoundingBoxf3 full_raw_mesh_bounding_box() const;
 
-    //BBS: add instance convex hull bounding box
+    // add instance convex hull bounding box
     BoundingBoxf3 instance_convex_hull_bounding_box(size_t instance_idx, bool dont_translate = false) const;
     BoundingBoxf3 instance_convex_hull_bounding_box(const ModelInstance* instance, bool dont_translate = false) const;
 
@@ -519,10 +519,10 @@ public:
     void split(ModelObjectPtrs*new_objects, bool remap_paint);
     void merge();
 
-    // BBS: Boolean opts - Musang King
+    // Boolean opts - Musang King
     bool make_boolean(ModelObject *cut_object, const std::string &boolean_opts);
 
-    ModelObjectPtrs merge_volumes(std::vector<int>& vol_indeces);//BBS
+    ModelObjectPtrs merge_volumes(std::vector<int>& vol_indeces);//PRUSA
     // Support for non-uniform scaling of instances. If an instance is rotated by angles, which are not multiples of ninety degrees,
     // then the scaling in world coordinate system is not representable by the Geometry::Transformation structure.
     // This situation is solved by baking in the instance transformation into the mesh vertices.
@@ -689,7 +689,7 @@ private:
         ar(cereal::base_class<ObjectBase>(this));
         Internal::StaticSerializationWrapper<ModelConfigObject> config_wrapper(config);
         Internal::StaticSerializationWrapper<LayerHeightProfile> layer_heigth_profile_wrapper(layer_height_profile);
-        // BBS: add backup, check modify
+        // add backup, check modify
         SaveObjectGaurd gaurd(*this);
         ar(name, module_name, input_file, instances, volumes, config_wrapper, layer_config_ranges, layer_heigth_profile_wrapper,
             sla_support_points, sla_points_status, sla_drain_holes, printable, origin_translation, brim_points,
@@ -719,8 +719,7 @@ enum class ConversionType : int {
 };
 
 enum class En3mfType : int {
-    From_Orca,
-    From_BBS,
+    From_Legacy,
     From_Prusa,
     From_Other
 };
@@ -734,7 +733,7 @@ public:
     void set_data(TriangleSelector::TriangleSplittingData &&data) { m_data = std::move(data); this->touch(); }
     bool set(const TriangleSelector& selector);
     indexed_triangle_set get_facets(const ModelVolume& mv, EnforcerBlockerType type) const;
-    // BBS
+    // PRUSA
     void get_facets(const ModelVolume& mv, std::vector<indexed_triangle_set>& facets_per_type) const;
     void                 set_enforcer_block_type_limit(const ModelVolume  &mv,
                                                        EnforcerBlockerType max_type,
@@ -886,7 +885,7 @@ public:
     // Remap painting data from previous saved source to this mesh
     void restore_painting(const std::optional<TriangleSelector::SavedPainting>& saved, bool keep_existing_paint = false);
 
-    // BBS: quick access for volume extruders, 1 based
+    // quick access for volume extruders, 1 based
     mutable std::vector<int> mmuseg_extruders;
     mutable Timestamp        mmuseg_ts;
 
@@ -922,7 +921,7 @@ public:
 
     bool                is_splittable() const;
 
-    // BBS
+    // PRUSA
     std::vector<int>    get_extruders() const;
     void                update_extruder_count(size_t extruder_count);
     void                update_extruder_count_when_delete_filament(size_t extruder_count, size_t filament_id, int replace_filament_id = -1);
@@ -951,7 +950,7 @@ public:
     void                calculate_convex_hull();
     const TriangleMesh& get_convex_hull() const;
     const std::shared_ptr<const TriangleMesh>& get_convex_hull_shared_ptr() const { return m_convex_hull; }
-    //BBS: add convex_hell_2d related logic
+    // add convex_hell_2d related logic
     const Polygon& get_convex_hull_2d(const Transform3d &trafo_instance) const;
     void invalidate_convex_hull_2d()
     {
@@ -1015,7 +1014,7 @@ public:
     bool is_fuzzy_skin_painted() const { return !this->fuzzy_skin_facets.empty(); }
     bool is_any_painted() const { return is_fdm_support_painted() || is_seam_painted() || is_mm_painted() || is_fuzzy_skin_painted(); }
     
-    // Orca: Implement prusa's filament shrink compensation approach
+    // Implement prusa's filament shrink compensation approach
     // Returns 0-based indices of extruders painted by multi-material painting gizmo.
      std::vector<size_t> get_extruders_from_multi_material_painting() const;
 
@@ -1043,13 +1042,13 @@ private:
     t_model_material_id             	m_material_id;
     // The convex hull of this model's mesh.
     std::shared_ptr<const TriangleMesh> m_convex_hull;
-    //BBS: add convex hull 2d related logic
-    mutable Polygon                     m_convex_hull_2d; //BBS, used for convex_hell_2d acceleration
-    mutable Transform3d                 m_cached_trans_matrix; //BBS, used for convex_hell_2d acceleration
-    mutable Polygon                     m_cached_2d_polygon;   //BBS, used for convex_hell_2d acceleration
+    // add convex hull 2d related logic
+    mutable Polygon                     m_convex_hull_2d; //PRUSA, used for convex_hell_2d acceleration
+    mutable Transform3d                 m_cached_trans_matrix; //PRUSA, used for convex_hell_2d acceleration
+    mutable Polygon                     m_cached_2d_polygon;   //PRUSA, used for convex_hell_2d acceleration
     Geometry::Transformation        	m_transformation;
 
-    //BBS: add convex_hell_2d related logic
+    // add convex_hell_2d related logic
     void  calculate_convex_hull_2d(const Geometry::Transformation &transformation) const;
 
     // flag to optimize the checking if the volume is splittable
@@ -1179,7 +1178,7 @@ private:
 	}
 	template<class Archive> void load(Archive &ar) {
 		bool has_convex_hull;
-        // BBS: add backup, check modify
+        // add backup, check modify
         bool mesh_changed = false;
         auto tr = m_transformation;
         ar(name, source, m_mesh, m_type, m_material_id, m_transformation, m_is_splittable, has_convex_hull, cut_info);
@@ -1261,8 +1260,8 @@ public:
     bool printable;
     bool auto_drop;
     bool use_loaded_id_for_label {false};
-    int arrange_order = 0; // BBS
-    size_t loaded_id = 0; // BBS
+    int arrange_order = 0; // PRUSA
+    size_t loaded_id = 0; // PRUSA
 
     size_t get_labeled_id() const
     {
@@ -1293,7 +1292,7 @@ public:
         m_assemble_transformation.set_rotation(m_assemble_transformation.get_rotation() + Geometry::extract_euler_angles(Eigen::Quaterniond(Eigen::AngleAxisd(angle, axis)).toRotationMatrix()));
     }
 
-    // BBS
+    // PRUSA
     void set_offset_to_assembly(const Vec3d& offset) { m_offset_to_assembly = offset; }
     Vec3d get_offset_to_assembly() const { return m_offset_to_assembly; }
 
@@ -1309,7 +1308,7 @@ public:
     void set_rotation(const Vec3d& rotation) { m_transformation.set_rotation(rotation); }
     void set_rotation(Axis axis, double rotation) { m_transformation.set_rotation(axis, rotation); }
 
-    // BBS
+    // PRUSA
     void rotate(Matrix3d rotation_matrix) {
         auto rotation = m_transformation.get_rotation_matrix();
         rotation      = rotation_matrix * rotation;
@@ -1344,10 +1343,10 @@ public:
     bool is_printable() const { return object->printable && printable && (print_volume_state == ModelInstancePVS_Inside); }
     bool is_assemble_initialized() { return m_assemble_initialized; }
 
-    //BBS
+    //PRUSA
     double get_auto_brim_width(double deltaT, double adhesion) const;
     double get_auto_brim_width() const;
-    // BBS
+    // PRUSA
     Polygon convex_hull_2d();
     void invalidate_convex_hull_2d();
 
@@ -1385,7 +1384,7 @@ protected:
 private:
     // Parent object, owning this instance.
     ModelObject* object;
-    Polygon convex_hull; // BBS
+    Polygon convex_hull; // PRUSA
 
     // Constructor, which assigns a new unique ID.
     explicit ModelInstance(ModelObject* object)
@@ -1412,7 +1411,7 @@ private:
 	friend class UndoRedo::StackImpl;
 	// Used for deserialization, therefore no IDs are allocated.
 	ModelInstance() : ObjectBase(-1), object(nullptr) { assert(this->id().invalid()); }
-    // BBS. Add added members to archive.
+    // PRUSA. Add added members to archive.
     template<class Archive> void serialize(Archive& ar) {
         ar(m_transformation, print_volume_state, printable, auto_drop, m_assemble_transformation, m_offset_to_assembly, m_assemble_initialized);
     }
@@ -1422,7 +1421,7 @@ private:
 class ModelWipeTower final : public ObjectBase
 {
 public:
-    // BBS: add partplate logic
+    // add partplate logic
 	std::vector<Vec2d>      positions;
 	double 	                rotation;
 
@@ -1449,7 +1448,7 @@ private:
     template<typename Archive> void serialize(Archive &ar) { ar(positions, rotation); }
 };
 
-// BBS structure stores extruder parameters and speed map of all models
+// PRUSA structure stores extruder parameters and speed map of all models
 struct ExtruderParams
 {
     std::string materialName;
@@ -1530,7 +1529,7 @@ public:
     ModelObjectPtrs     objects;
     // Wipe tower object.
     ModelWipeTower	wipe_tower;
-    // BBS static members store extruder parameters and speed map of all models
+    // PRUSA static members store extruder parameters and speed map of all models
     static std::map<size_t, ExtruderParams> extruderParamsMap;
     static GlobalSpeedMap printSpeedMap;
 
@@ -1552,13 +1551,13 @@ public:
             design_info = std::make_shared<ModelDesignInfo>();
         }
         design_info->Designer = designer;
-        //BBS tips: clean design user id when set designer
+        //PRUSA tips: clean design user id when set designer
         design_info->DesignerUserId = designer_user_id;
     }
 
     // Extensions for color print
     // CustomGCode::Info custom_gcode_per_print_z;
-    //BBS: replace model custom gcode with current plate custom gcode
+    // replace model custom gcode with current plate custom gcode
     int curr_plate_index{ 0 };
     std::map<int, CustomGCode::Info> plates_custom_gcodes; //map<plate_index, CustomGCode::Info>
 
@@ -1576,7 +1575,7 @@ public:
     /* To be able to return an object from own copy / clone methods. Hopefully the compiler will do the "Copy elision" */
     /* (Omits copy and move(since C++11) constructors, resulting in zero - copy pass - by - value semantics). */
     Model(const Model &rhs) : ObjectBase(-1) { assert(this->id().invalid()); this->assign_copy(rhs); assert(this->id().valid()); assert(this->id() == rhs.id()); }
-    // BBS: remove explicit, prefer use move constructor in function return model
+    // remove explicit, prefer use move constructor in function return model
     Model(Model &&rhs) : ObjectBase(-1) { assert(this->id().invalid()); this->assign_copy(std::move(rhs)); assert(this->id().valid()); assert(this->id() == rhs.id()); }
     Model& operator=(const Model &rhs) { this->assign_copy(rhs); assert(this->id().valid()); assert(this->id() == rhs.id()); return *this; }
     Model& operator=(Model &&rhs) { this->assign_copy(std::move(rhs)); assert(this->id().valid()); assert(this->id() == rhs.id()); return *this; }
@@ -1592,35 +1591,35 @@ public:
                                 double                                                  angle_defletion,
                                 bool                                                    is_split_compound);
 
-    //BBS: add part plate related logic
-    // BBS: backup
-    //BBS: is_xxx is used for is_bbs_3mf when loading 3mf, is used for is_inches when loading amf
+    // add part plate related logic
+    // backup
+    // is_xxx is used for is_prusa_3mf when loading 3mf, is used for is_inches when loading amf
     static Model read_from_file(
         const std::string& input_file,
         DynamicPrintConfig* config = nullptr, ConfigSubstitutionContext* config_substitutions = nullptr,
         LoadStrategy options = LoadStrategy::AddDefaultInstances, PlateDataPtrs* plate_data = nullptr,
         std::vector<Preset*>* project_presets = nullptr, bool* is_xxx = nullptr, Semver* file_version = nullptr, Import3mfProgressFn proFn = nullptr,
                                 ImportstlProgressFn        stlFn                = nullptr,
-                                BBLProject *               project              = nullptr,
+                                PrusaProject *               project              = nullptr,
                                 int                        plate_id             = 0,
                                 ObjImportColorFn           objFn                = nullptr
                                 );
-    // BBS
+    // PRUSA
     static bool    obj_import_vertex_color_deal(const std::vector<unsigned char> &vertex_filament_ids, const unsigned char &first_extruder_id, Model *model);
     static bool    obj_import_face_color_deal(const std::vector<unsigned char> &face_filament_ids, const unsigned char &first_extruder_id, Model *model);
     static double findMaxSpeed(const ModelObject* object);
     static double getThermalLength(const ModelVolume* modelVolumePtr);
     static double getThermalLength(const std::vector<ModelVolume*> modelVolumePtrs);
     static Polygon getBedPolygon() { return Model::printSpeedMap.bed_poly; }
-    //BBS static functions that update extruder params and speed table
+    //PRUSA static functions that update extruder params and speed table
     static void setPrintSpeedTable(const DynamicPrintConfig& config, const PrintConfig& print_config);
     static void setExtruderParams(const DynamicPrintConfig& config, int extruders_count);
 
-    // BBS: backup
+    // backup
     static Model read_from_archive(
         const std::string& input_file,
         DynamicPrintConfig* config, ConfigSubstitutionContext* config_substitutions, En3mfType& out_file_type,
-        LoadStrategy options = LoadStrategy::AddDefaultInstances, PlateDataPtrs* plate_data = nullptr, std::vector<Preset*>* project_presets = nullptr, Semver* file_version = nullptr, Import3mfProgressFn proFn = nullptr, BBLProject* project = nullptr);
+        LoadStrategy options = LoadStrategy::AddDefaultInstances, PlateDataPtrs* plate_data = nullptr, std::vector<Preset*>* project_presets = nullptr, Semver* file_version = nullptr, Import3mfProgressFn proFn = nullptr, PrusaProject* project = nullptr);
 
     // Add a new ModelObject to this Model, generate a new ID for this ModelObject.
     ModelObject* add_object();
@@ -1631,7 +1630,7 @@ public:
     bool         delete_object(ObjectID id);
     bool         delete_object(ModelObject* object);
     void         clear_objects();
-    // BBS: backup, reuse objects
+    // backup, reuse objects
     void         collect_reusable_objects(std::vector<ObjectBase *> & objects);
     void         set_object_backup_id(ModelObject const & object, int uuid);
     int          get_object_backup_id(ModelObject const & object); // generate new if needed
@@ -1682,10 +1681,10 @@ public:
     std::string   propose_export_file_name_and_path() const;
     // Propose an output path, replace extension. The new_extension shall contain the initial dot.
     std::string   propose_export_file_name_and_path(const std::string &new_extension) const;
-    //BBS: add auxiliary files temp path
+    // add auxiliary files temp path
     std::string   get_auxiliary_file_temp_path();
 
-    // BBS: backup
+    // backup
     std::string   get_backup_path();
     std::string   get_backup_path(const std::string &sub_path);
     void          set_backup_path(const std::string &path);
@@ -1724,8 +1723,8 @@ private:
         ar(materials, objects, wipe_tower_wrapper);
     }
 
-    //BBS: add aux temp directory
-    // BBS: backup
+    // add aux temp directory
+    // backup
     std::string backup_path;
     bool need_backup = false;
     std::map<int, int> object_backup_id_map; // ObjectId -> backup id;
@@ -1786,7 +1785,7 @@ static const double SINKING_MIN_Z_THRESHOLD = 0.05;
 namespace cereal
 {
     template <class Archive> struct specialize<Archive, Slic3r::ModelVolume, cereal::specialization::member_load_save> {};
-    // BBS: backup
+    // backup
     template <class Archive> struct specialize<Archive, Slic3r::Model, cereal::specialization::member_load_save> {};
     template <class Archive> struct specialize<Archive, Slic3r::ModelObject, cereal::specialization::member_load_save> {};
     template <class Archive> struct specialize<Archive, Slic3r::ModelConfigObject, cereal::specialization::member_serialize> {};

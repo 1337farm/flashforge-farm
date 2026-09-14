@@ -21,7 +21,7 @@
 #include "Print.hpp"
 static const int overhang_sampling_number = 6;
 static const double narrow_loop_length_threshold = 10;
-//BBS: when the width of expolygon is smaller than
+// when the width of expolygon is smaller than
 //ext_perimeter_width + ext_perimeter_spacing  * (1 - SMALLER_EXT_INSET_OVERLAP_TOLERANCE),
 //we think it's small detail area and will generate smaller line width for it
 static constexpr double SMALLER_EXT_INSET_OVERLAP_TOLERANCE = 0.22;
@@ -37,7 +37,7 @@ public:
     Polygon                             polygon;
     // Is it a contour or a hole?
     bool                                is_contour;
-    // BBS: is perimeter using smaller width
+    // is perimeter using smaller width
     bool is_smaller_width_perimeter;
     // Depth in the hierarchy. External perimeter has depth = 0. An external perimeter could be both a contour and a hole.
     unsigned short                      depth;
@@ -124,24 +124,24 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
             loop_role = loop.is_contour? elrDefault : elrHole;
         }
 
-        // BBS: get lower polygons series, width, mm3_per_mm
+        // get lower polygons series, width, mm3_per_mm
         const std::vector<Polygons> *lower_polygons_series;
         double extrusion_mm3_per_mm;
         double extrusion_width;
         if (is_external) {
             if (is_small_width) {
-                //BBS: smaller width external perimeter
+                // smaller width external perimeter
                 lower_polygons_series = &perimeter_generator.m_smaller_external_lower_polygons_series;
                 extrusion_mm3_per_mm = perimeter_generator.smaller_width_ext_mm3_per_mm();
                 extrusion_width = perimeter_generator.smaller_ext_perimeter_flow.width();
             } else {
-                //BBS: normal external perimeter
+                // normal external perimeter
                 lower_polygons_series = &perimeter_generator.m_external_lower_polygons_series;
                 extrusion_mm3_per_mm = perimeter_generator.ext_mm3_per_mm();
                 extrusion_width = perimeter_generator.ext_perimeter_flow.width();
             }
         } else {
-            //BBS: normal perimeter
+            // normal perimeter
             lower_polygons_series = &perimeter_generator.m_lower_polygons_series;
             extrusion_mm3_per_mm = perimeter_generator.mm3_per_mm();
             extrusion_width = perimeter_generator.perimeter_flow.width();
@@ -159,7 +159,7 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
             BoundingBox bbox(polygon.points);
             bbox.offset(SCALED_EPSILON);
 
-            // Always reverse extrusion if use fuzzy skin: https://github.com/OrcaSlicer/OrcaSlicer/pull/2413#issuecomment-1769735357
+            // Always reverse extrusion if use fuzzy skin: https://github.com/prusaslicer/prusa/pull/2413#issuecomment-1769735357
             if (overhangs_reverse && perimeter_generator.has_fuzzy_skin) {
                 if (loop.is_contour) {
                     steep_overhang_contour = true;
@@ -216,7 +216,7 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
             }
 
             ExtrusionPath path(role);
-            //BBS.
+            //PRUSA.
             path.polyline = Polyline3(polygon.split_at_first_point());
             path.mm3_per_mm = extrusion_mm3_per_mm;
             path.width = extrusion_width;
@@ -262,7 +262,7 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
             else
                 eloop->make_clockwise();
 
-            // Orca: Reverse print order for thin wall holes.
+            // Reverse print order for thin wall holes.
             if (reverse_thin_wall_hole) {
                 std::reverse(out.entities.begin(), out.entities.end());
             }
@@ -419,7 +419,7 @@ static ExtrusionEntityCollection traverse_extrusions(const PerimeterGenerator& p
             extrusion_paths_append(paths, clip_extrusion(extrusion_path, lower_slices_paths, ClipperLib_Z::ctIntersection), role,
                                    is_external ? perimeter_generator.ext_perimeter_flow : perimeter_generator.perimeter_flow);
 
-            // Always reverse extrusion if use fuzzy skin: https://github.com/OrcaSlicer/OrcaSlicer/pull/2413#issuecomment-1769735357
+            // Always reverse extrusion if use fuzzy skin: https://github.com/prusaslicer/prusa/pull/2413#issuecomment-1769735357
             if (overhangs_reverse && perimeter_generator.has_fuzzy_skin) {
                 if (pg_extrusion.is_contour) {
                     steep_overhang_contour = true;
@@ -539,7 +539,7 @@ static ExtrusionEntityCollection traverse_extrusions(const PerimeterGenerator& p
                 }
                 assert(extrusion_loop.paths.front().first_point() == extrusion_loop.paths.back().last_point());
                 extrusion_coll.append(std::move(extrusion_loop));
-                // Orca: Reverse the order of paths for thin wall holes. We define thin wall hole as a hole with only one perimeter.
+                // Reverse the order of paths for thin wall holes. We define thin wall hole as a hole with only one perimeter.
                 const bool thin_wall_hole = !pg_extrusion.is_contour && pg_extrusions.size() == 2;
                 if (thin_wall_hole && perimeter_generator.config->wall_sequence != WallSequence::OuterInner)
                     std::reverse(extrusion_coll.entities.begin(), extrusion_coll.entities.end());
@@ -623,11 +623,11 @@ void PerimeterGenerator::split_top_surfaces(const ExPolygons &orig_polygons, ExP
     auto nozzle_diameter = this->print_config->nozzle_diameter.get_at(this->config->outer_wall_filament_id - 1);
     // Check whether surface be bridge or not
     if (this->lower_slices != NULL) {
-        // BBS: get the Polygons below the polygon this layer
+        // get the Polygons below the polygon this layer
         Polygons lower_polygons_series_clipped =
             ClipperUtils::clip_clipper_polygons_with_subject_bbox(*this->lower_slices, last_box);
         double bridge_offset = std::max(double(ext_perimeter_spacing), (double(perimeter_width)));
-        // SoftFever: improve bridging
+        // improve bridging
         const float bridge_margin =
             std::min(float(scale_(BRIDGE_INFILL_MARGIN)), float(scale_(nozzle_diameter * BRIDGE_INFILL_MARGIN / 0.4)));
         bridge_checker = offset_ex(diff_ex(orig_polygons, lower_polygons_series_clipped, ApplySafetyOffset::Yes),
@@ -1156,7 +1156,7 @@ void PerimeterGenerator::process_classic()
 
     coord_t ext_perimeter_spacing   = this->ext_perimeter_flow.scaled_spacing();
     coord_t ext_perimeter_spacing2;
-    // Orca: ignore precise_outer_wall if wall_sequence is not InnerOuter
+    // Ignore precise_outer_wall if wall_sequence is not InnerOuter
     if(config->precise_outer_wall && config->wall_sequence == WallSequence::InnerOuter)
         ext_perimeter_spacing2 = scaled<coord_t>(0.5f * (this->ext_perimeter_flow.width() + this->perimeter_flow.width()));
     else
@@ -1191,10 +1191,10 @@ void PerimeterGenerator::process_classic()
     coord_t ext_min_spacing     = coord_t(ext_perimeter_spacing  * (1 - INSET_OVERLAP_TOLERANCE));
     bool    has_gap_fill 		= this->config->gap_infill_speed.value > 0;
 
-    // BBS: this flow is for smaller external perimeter for small area
+    // this flow is for smaller external perimeter for small area
     coord_t ext_min_spacing_smaller = coord_t(ext_perimeter_spacing * (1 - SMALLER_EXT_INSET_OVERLAP_TOLERANCE));
     this->smaller_ext_perimeter_flow = this->ext_perimeter_flow;
-    // BBS: to be checked
+    // to be checked
     this->smaller_ext_perimeter_flow = this->smaller_ext_perimeter_flow.with_width(SCALING_FACTOR *
         (ext_perimeter_width - 0.5 * SMALLER_EXT_INSET_OVERLAP_TOLERANCE * ext_perimeter_spacing));
     m_ext_mm3_per_mm_smaller_width = this->smaller_ext_perimeter_flow.mm3_per_mm();
@@ -1212,9 +1212,9 @@ void PerimeterGenerator::process_classic()
     Surfaces all_surfaces = this->slices->surfaces;
 
     process_no_bridge(all_surfaces, perimeter_spacing, ext_perimeter_width);
-    // BBS: don't simplify too much which influence arc fitting when export gcode if arc_fitting is enabled
+    // don't simplify too much which influence arc fitting when export gcode if arc_fitting is enabled
     double surface_simplify_resolution = (print_config->enable_arc_fitting && !this->has_fuzzy_skin) ? 0.2 * m_scaled_resolution : m_scaled_resolution;
-    //BBS: reorder the surface to reduce the travel time
+    // reorder the surface to reduce the travel time
     ExPolygons surface_exp;
     for (const Surface &surface : all_surfaces)
         surface_exp.push_back(surface.expolygon);
@@ -1267,7 +1267,7 @@ void PerimeterGenerator::process_classic()
                     } else {
                         coord_t ext_perimeter_smaller_width = this->smaller_ext_perimeter_flow.scaled_width();
                         for (const ExPolygon& expolygon : last) {
-                            // BBS: judge whether it's narrow but not too long island which is hard to place two line
+                            // judge whether it's narrow but not too long island which is hard to place two line
                             ExPolygons expolys;
                             expolys.push_back(expolygon);
                             ExPolygons offset_result = offset2_ex(expolys,
@@ -1275,12 +1275,12 @@ void PerimeterGenerator::process_classic()
                                 +float(ext_min_spacing_smaller / 2.));
                             if (offset_result.empty() &&
                                 expolygon.area() < (double)(ext_perimeter_width + ext_min_spacing_smaller) * scale_(narrow_loop_length_threshold)) {
-                                // BBS: for narrow external loop, use smaller line width
+                                // for narrow external loop, use smaller line width
                                 ExPolygons temp_result = offset_ex(expolygon, -float(ext_perimeter_smaller_width / 2.));
                                 offsets_with_smaller_width.insert(offsets_with_smaller_width.end(), temp_result.begin(), temp_result.end());
                             }
                             else {
-                                //BBS: for not narrow loop, use normal external perimeter line width
+                                // for not narrow loop, use normal external perimeter line width
                                 ExPolygons temp_result = offset_ex(expolygon, -float(ext_perimeter_width / 2.));
                                 offsets.insert(offsets.end(), temp_result.begin(), temp_result.end());
                             }
@@ -1289,19 +1289,19 @@ void PerimeterGenerator::process_classic()
                     if (m_spiral_vase && (offsets.size() > 1 || offsets_with_smaller_width.size() > 1)) {
                         // Remove all but the largest area polygon.
                         keep_largest_contour_only(offsets);
-                        //BBS
+                        //PRUSA
                         if (offsets.empty())
-                            //BBS: only have small width loop, then keep the largest in spiral vase mode
+                            // only have small width loop, then keep the largest in spiral vase mode
                             keep_largest_contour_only(offsets_with_smaller_width);
                         else
-                            //BBS: have large area, clean the small width loop
+                            // have large area, clean the small width loop
                             offsets_with_smaller_width.clear();
                     }
                 } else {
                     //FIXME Is this offset correct if the line width of the inner perimeters differs
                     // from the line width of the infill?
                     coord_t distance = (i == 1) ? ext_perimeter_spacing2 : perimeter_spacing;
-                    //BBS
+                    //PRUSA
                     //offsets = this->config->thin_walls ?
                         // This path will ensure, that the perimeters do not overfill, as in
                         // prusa3d/Slic3r GH #32, but with the cost of rounding the perimeters
@@ -1316,7 +1316,7 @@ void PerimeterGenerator::process_classic()
                         // leads to overflows, as in prusa3d/Slic3r GH #32
                         //offset_ex(last, - float(distance));
 
-                    //BBS: For internal perimeter, we should "enable" thin wall strategy in which offset2 is used to
+                    // For internal perimeter, we should "enable" thin wall strategy in which offset2 is used to
                     // remove too closed line, so that gap fill can be used for such internal narrow area in following
                     // handling.
                     offsets = offset2_ex(last,
@@ -1357,7 +1357,7 @@ void PerimeterGenerator::process_classic()
                         }
                     }
 
-                    //BBS: save perimeter loop which use smaller width
+                    // save perimeter loop which use smaller width
                     if (i == 0) {
                         for (const ExPolygon& expolygon : offsets_with_smaller_width) {
                             contours[i].emplace_back(PerimeterGeneratorLoop(expolygon.contour, i, true, true));
@@ -1372,7 +1372,7 @@ void PerimeterGenerator::process_classic()
 
                 last = std::move(offsets);
 
-                //BBS: refer to superslicer
+                // refer to superslicer
                 //store surface for top infill if only_one_wall_top
                 if (i == 0 && i!=loop_number && config->only_one_wall_top && !surface.is_bridge() && this->upper_slices != NULL) {
                     this->split_top_surfaces(last, top_fills, last, fill_clip);
@@ -1460,12 +1460,12 @@ void PerimeterGenerator::process_classic()
             // TODO: add test for perimeter order
             bool is_outer_wall_first = this->config->wall_sequence == WallSequence::OuterInner;
             if (is_outer_wall_first ||
-                //BBS: always print outer wall first when there indeed has brim.
+                // always print outer wall first when there indeed has brim.
                 (this->layer_id == 0 &&
                     this->object_config->brim_type == BrimType::btOuterOnly &&
                     this->object_config->brim_width.value > 0))
                 entities.reverse();
-            // Orca: sandwich mode. Apply after 1st layer.
+            // Sandwich mode. Apply after 1st layer.
             else if ((this->config->wall_sequence == WallSequence::InnerOuterInner) && layer_id > 0){
                 entities.reverse(); // reverse all entities - order them from external to internal
                 if(entities.entities.size()>2){ // 3 walls minimum needed to do inner outer inner ordering
@@ -1572,7 +1572,7 @@ void PerimeterGenerator::process_classic()
 
         // fill gaps
         if (! gaps.empty()) { // collapse
-            // ORCA: Use the smaller width as the lower bound to avoid overestimating safe overlap
+            // Use the smaller width as the lower bound to avoid overestimating safe overlap
             double min = 0.2 * std::min(perimeter_width, ext_perimeter_width) * (1 - INSET_OVERLAP_TOLERANCE);
             double max = 2. * perimeter_spacing;
             ExPolygons gaps_ex = diff_ex(
@@ -1581,7 +1581,7 @@ void PerimeterGenerator::process_classic()
                 offset2_ex(gaps, - float(max / 2.), float(max / 2. + ClipperSafetyOffset)));
             ThickPolylines polylines;
             for (ExPolygon& ex : gaps_ex) {
-                //BBS: Use DP simplify to avoid duplicated points and accelerate medial-axis calculation as well.
+                // Use DP simplify to avoid duplicated points and accelerate medial-axis calculation as well.
                 ex.douglas_peucker(surface_simplify_resolution);
                 ex.medial_axis(min, max, &polylines);
             }
@@ -1601,7 +1601,7 @@ void PerimeterGenerator::process_classic()
                 ++ irun;
             }
 #endif
-            // SoftFever: filter out tiny gap fills
+            // filter out tiny gap fills
             polylines.erase(std::remove_if(polylines.begin(), polylines.end(),
                 [&](const ThickPolyline& p) {
                     return p.length() < scale_(config->filter_out_gap_fill.value);
@@ -1671,7 +1671,7 @@ void PerimeterGenerator::process_classic()
 
         apply_extra_perimeters(infill_exp);
 
-        // BBS: get the no-overlap infill expolygons
+        // get the no-overlap infill expolygons
         {
             ExPolygons polyWithoutOverlap;
             if (min_perimeter_infill_spacing / 2 > infill_peri_overlap)
@@ -1691,7 +1691,6 @@ void PerimeterGenerator::process_classic()
     } // for each island
 }
 
-//BBS:
 void PerimeterGenerator::add_infill_contour_for_arachne( ExPolygons        infill_contour,
                                                          int                loops,
                                                          coord_t            ext_perimeter_spacing,
@@ -1724,7 +1723,7 @@ void PerimeterGenerator::add_infill_contour_for_arachne( ExPolygons        infil
     append(*this->fill_no_overlap, offset2_ex(union_ex(inner_pp), float(-min_perimeter_infill_spacing / 2.), float(+min_perimeter_infill_spacing / 2.)));
 }
 
-// Orca: sacrificial bridge layer algorithm ported from SuperSlicer
+// Sacrificial bridge layer algorithm ported from SuperSlicer
 void PerimeterGenerator::process_no_bridge(Surfaces& all_surfaces, coord_t perimeter_spacing, coord_t ext_perimeter_width)
 {
 
@@ -1760,7 +1759,7 @@ void PerimeterGenerator::process_no_bridge(Surfaces& all_surfaces, coord_t perim
                             BridgeDetector detector{ unsupported,
                                                     lower_island.expolygons,
                                                     perimeter_spacing / 4}; // Use a finer BridgeDetector. This affects coverage resolution, not extrusion spacing.
-                            // ORCA: Relative/Align Bridge Angle
+                            // Relative/Align Bridge Angle
                             const double custom_angle_deg = this->config->bridge_angle.value;
                             const bool   relative_angle   = this->config->relative_bridge_angle.value;
                             const double detect_angle_rad = (custom_angle_deg > 0.0 && !relative_angle)
@@ -1854,7 +1853,7 @@ void PerimeterGenerator::process_no_bridge(Surfaces& all_surfaces, coord_t perim
                                 }
                                 //TODO: add other polys as holes inside this one (-margin)
                             } else { // if(this->config->counterbore_hole_bridging.value == chbBridges)
-                                // Orca: Partial counterbore bridging is mask-based. Preserve the supported
+                                // Partial counterbore bridging is mask-based. Preserve the supported
                                 // remainder (`last`) and use simplified BridgeDetector coverage to derive the
                                 // bridgeable counterbore span. The span is grown from supported material,
                                 // shrunk back, stripped from `last`, and expanded back. It is then prevented
@@ -1928,8 +1927,7 @@ void PerimeterGenerator::process_no_bridge(Surfaces& all_surfaces, coord_t perim
     }
 }
 
-// ORCA:
-// Inner Outer Inner wall ordering mode perimeter order optimisation functions
+// // Inner Outer Inner wall ordering mode perimeter order optimisation functions
 /**
  * @brief Finds all perimeters touching a given set of reference lines, given as indexes.
  *
@@ -2084,8 +2082,7 @@ void bringContoursToFront(std::vector<PerimeterGeneratorArachneExtrusion>& order
         return (extrusion.extrusion->is_contour() && extrusion.extrusion->inset_idx==0);
     });
 }
-// ORCA:
-// Inner Outer Inner wall ordering mode perimeter order optimisation functions ended
+// // Inner Outer Inner wall ordering mode perimeter order optimisation functions ended
 
 
 // Thanks, Cura developers, for implementing an algorithm for generating perimeters with variable width (Arachne) that is based on the paper
@@ -2121,7 +2118,7 @@ void PerimeterGenerator::process_arachne()
     Surfaces all_surfaces = this->slices->surfaces;
 
     process_no_bridge(all_surfaces, perimeter_spacing, ext_perimeter_width);
-    // BBS: don't simplify too much which influence arc fitting when export gcode if arc_fitting is enabled
+    // don't simplify too much which influence arc fitting when export gcode if arc_fitting is enabled
     double surface_simplify_resolution = (print_config->enable_arc_fitting && !this->has_fuzzy_skin) ? 0.2 * m_scaled_resolution : m_scaled_resolution;
     // we need to process each island separately because we might have different
     // extra perimeters for each one
@@ -2138,13 +2135,13 @@ void PerimeterGenerator::process_arachne()
         if (is_bottom_layer && this->config->only_one_wall_first_layer)
             loop_number = 0;
 
-        // Orca: set the topmost layer to be one wall according to the config
+        // Set the topmost layer to be one wall according to the config
         const bool is_topmost_layer = (this->upper_slices == nullptr) ? true : false;
         if (is_topmost_layer && loop_number > 0 && config->only_one_wall_top)
             loop_number = 0;
         
         auto apply_precise_outer_wall = config->precise_outer_wall && config->wall_sequence == WallSequence::InnerOuter;
-        // Orca: properly adjust offset for the outer wall if precise_outer_wall is enabled.
+        // Properly adjust offset for the outer wall if precise_outer_wall is enabled.
         ExPolygons last = offset_ex(surface.expolygon.simplify_p(surface_simplify_resolution),
                        apply_precise_outer_wall? -float(ext_perimeter_width - ext_perimeter_spacing )
                                                  : -float(ext_perimeter_width / 2. - ext_perimeter_spacing / 2.));
@@ -2206,10 +2203,10 @@ void PerimeterGenerator::process_arachne()
                 }
 
                 // Filter out areas that are too thin and expand top surface polygons a bit to hide the wall line.
-                // ORCA: skip if the top surface area is smaller than "min_width_top_surface"
+                // skip if the top surface area is smaller than "min_width_top_surface"
                 const float top_surface_min_width = std::max<float>(float(ext_perimeter_spacing) / 4.f + scaled<float>(0.00001), float(scale_(config->min_width_top_surface.get_abs_value(unscale_(perimeter_width)))) / 4.f);
                 // Shrink the polygon to remove the small areas, then expand it back out plus a maragin to hide the wall line a little.
-                // ORCA: Expand the polygon with half the perimeter width in addition to the contracted amount,
+                // Expand the polygon with half the perimeter width in addition to the contracted amount,
                 // not the full perimeter width as PS does, to enable thin lettering to print on the top surface without nozzle collisions
                 // due to thin lines being generated
                 top_expolygons = offset2_ex(top_expolygons, -top_surface_min_width, top_surface_min_width + float(perimeter_width * 0.85));
@@ -2520,7 +2517,7 @@ void PerimeterGenerator::process_arachne()
 
         apply_extra_perimeters(infill_exp);
 
-        // BBS: get the no-overlap infill expolygons
+        // get the no-overlap infill expolygons
         {
             ExPolygons polyWithoutOverlap;
             polyWithoutOverlap = offset2_ex(

@@ -4,7 +4,7 @@
 
 namespace Slic3r {
 
-//BBS: FIXME
+// FIXME
 Slic3r::Polylines Paths64_to_polylines(const Clipper2Lib::Paths64& in)
 {
     Slic3r::Polylines out;
@@ -19,7 +19,7 @@ Slic3r::Polylines Paths64_to_polylines(const Clipper2Lib::Paths64& in)
     return out;
 }
 
-//BBS: FIXME
+// FIXME
 template <typename Container>
 Clipper2Lib::Paths64 Slic3rPoints_to_Paths64(const Container& in)
 {

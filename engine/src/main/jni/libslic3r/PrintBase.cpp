@@ -67,7 +67,7 @@ std::string PrintBase::output_filename(const std::string &format, const std::str
     DynamicConfig cfg;
     if (config_override != nullptr)
     	cfg = *config_override;
-    cfg.set_key_value("version", new ConfigOptionString(std::string(SoftFever_VERSION)));
+    cfg.set_key_value("version", new ConfigOptionString(std::string(SLIC3R_VERSION)));
     PlaceholderParser::update_timestamp(cfg);
     PlaceholderParser::update_user_name(cfg);
     this->update_object_placeholders(cfg, default_ext);
@@ -103,7 +103,7 @@ std::string PrintBase::output_filepath(const std::string &path, const std::strin
     return path;
 }
 
-//BBS: move set_status from hpp to cpp
+// move set_status from hpp to cpp
 void  PrintBase::set_status(int percent, const std::string &message, unsigned int flags, int warning_step) const
 {
 	if (m_status_callback)
@@ -123,11 +123,11 @@ void PrintBase::status_update_warnings(int step, PrintStateBase::WarningLevel  w
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(", Print warning: %1%\n")% message.c_str();
 }
 
-//BBS: add PrintObject id into slicing status
+// add PrintObject id into slicing status
 void PrintBase::status_update_warnings(int step, PrintStateBase::WarningLevel warning_level,
     const std::string& message, PrintObjectBase &object, PrintStateBase::SlicingNotificationType message_id)
 {
-    //BBS: add object it into slicing status
+    // add object it into slicing status
     if (this->m_status_callback) {
         m_status_callback(SlicingStatus(object, step, message, message_id, warning_level));
     }

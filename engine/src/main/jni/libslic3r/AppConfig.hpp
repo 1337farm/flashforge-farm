@@ -41,9 +41,9 @@ using namespace nlohmann;
 #define SETTING_OPENGL_PHONG_SSAO "opengl_phong_ssao"
 
 #if defined(_WIN32) || defined(_WIN64)
-#define BAMBU_NETWORK_AGENT_VERSION_LEGACY "01.10.01.09"
+#define PRUSA_NETWORK_AGENT_VERSION_LEGACY "01.10.01.09"
 #else
-#define BAMBU_NETWORK_AGENT_VERSION_LEGACY "01.10.01.01"
+#define PRUSA_NETWORK_AGENT_VERSION_LEGACY "01.10.01.01"
 #endif
 
 #define SUPPORT_DARK_MODE
@@ -53,19 +53,19 @@ using namespace nlohmann;
 namespace Slic3r {
 
 
-// Connected LAN mode BambuLab printer
-struct BBLocalMachine
+// Connected LAN mode Prusa printer
+struct PrusaLocalMachine
 {
     std::string dev_name;
     std::string dev_ip;
     std::string dev_id; /* serial number */
     std::string printer_type; /* model_id */
 
-    bool operator==(const BBLocalMachine& other) const
+    bool operator==(const PrusaLocalMachine& other) const
     {
         return dev_name == other.dev_name && dev_ip == other.dev_ip && dev_id == other.dev_id && printer_type == other.printer_type;
     }
-    bool operator!=(const BBLocalMachine& other) const { return !operator==(other); }
+    bool operator!=(const PrusaLocalMachine& other) const { return !operator==(other); }
 };
 
 class AppConfig
@@ -77,7 +77,7 @@ public:
 		GCodeViewer
 	};
 
-    //BBS: remove GCodeViewer as seperate APP logic
+    // remove GCodeViewer as seperate APP logic
 	explicit AppConfig() :
 		m_dirty(false),
 		m_orig_version(Semver::invalid()),
@@ -219,7 +219,7 @@ public:
 	void 				set_vendors(VendorMap &&vendors) { m_vendors = std::move(vendors); m_dirty = true; }
 	const VendorMap&    vendors() const { return m_vendors; }
 
-	// Orca printer settings
+	// Printer settings
     typedef std::map<std::string, nlohmann::json> MachineSettingMap;
     bool has_printer_settings(std::string printer) const {
         return m_printer_settings.find(printer) != m_printer_settings.end();
@@ -245,7 +245,7 @@ public:
         m_dirty = true;
     }
 
-	const std::map<std::string, BBLocalMachine>& get_local_machines() const { return m_local_machines; }
+	const std::map<std::string, PrusaLocalMachine>& get_local_machines() const { return m_local_machines; }
 	void erase_local_machine(std::string dev_id)
     {
         auto it = m_local_machines.find(dev_id);
@@ -254,7 +254,7 @@ public:
             m_dirty = true;
         }
     }
-    void update_local_machine(const BBLocalMachine& machine)
+    void update_local_machine(const PrusaLocalMachine& machine)
     {
         auto it = m_local_machines.find(machine.dev_id);
         if (it != m_local_machines.end()) {
@@ -293,7 +293,7 @@ public:
 	std::string 		get_last_output_dir(const std::string& alt, const bool removable = false) const;
 	void                update_last_output_dir(const std::string &dir, const bool removable = false);
 
-	// BBS: backup & restore
+	// backup & restore
 	std::string 		get_last_backup_dir() const;
 	void                update_last_backup_dir(const std::string &dir);
 
@@ -323,7 +323,7 @@ public:
 	// This returns a hardcoded string unless it is overriden by "version_check_url" in the ini file.
 	std::string 		version_check_url() const;
 
-	// Get the Orca profile update url.
+	// Get the profile update url.
 	std::string 		profile_update_url() const;
 
 	// Returns the original Slic3r version found in the ini file before it was overwritten
@@ -385,7 +385,7 @@ public:
     void set_remind_network_update_later(bool remind);
     void clear_remind_network_update_later();
 
-    // Cloud providers (semicolon-delimited, e.g. "orca;bambu")
+    // Cloud providers (semicolon-delimited, e.g. "prusa")
     std::vector<std::string> get_cloud_providers() const;
     void set_cloud_providers(const std::vector<std::string>& providers);
     bool has_cloud_provider(const std::string& provider) const;
@@ -433,7 +433,7 @@ private:
 
 	std::vector<PrinterCaliInfo>								m_printer_cali_infos;
 
-	std::map<std::string, BBLocalMachine>						m_local_machines;
+	std::map<std::string, PrusaLocalMachine>						m_local_machines;
 };
 
 } // namespace Slic3r

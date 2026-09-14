@@ -99,7 +99,7 @@ public class PrintConfigFragment extends ProfileListFragment {
 
     @Override
     protected List<OptionElement> getConfigItems() {
-        return OrcaPrintSettingsBuilder.build(this);
+        return ProfilePrintSettingsBuilder.build(this);
     }
 
     @Override

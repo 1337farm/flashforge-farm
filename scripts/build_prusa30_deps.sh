@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Stage the PrusaSlicer 3.0 native dependencies for the Android NDK build.
 #
-# This is the 3.0 counterpart to scripts/build_all_deps_android.sh (Orca). It
-# stages into engine/prusa30/jniImports/ so the Orca engine/deps under
+# This is the 3.0 counterpart to scripts/build_all_deps_android.sh (legacy). It
+# stages into engine/prusa30/jniImports/ so the PrusaSlicer 3.0 engine/deps under
 # engine/src/main/jniImports are untouched and the shipping app keeps building.
 #
 # Headless-only header libs (cereal/json/spdlog/fmt/sol2/eigen) are downloaded,
@@ -19,7 +19,7 @@ STAGE_ROOT="${STAGE_ROOT:-$(pwd)/engine/prusa30/jniImports}"
 WORK_DIR="${WORK_DIR:-/tmp/build_prusa30_deps}"
 mkdir -p "$STAGE_ROOT" "$WORK_DIR"
 
-# Retrying download with mirror fallback (mirrors the Orca deps script).
+# Retrying download with mirror fallback (mirrors the deps script).
 fetch() {
     local out="$1"; shift
     local url i

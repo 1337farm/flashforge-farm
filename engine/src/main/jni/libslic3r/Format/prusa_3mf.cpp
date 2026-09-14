@@ -12,7 +12,7 @@
 
 #include "../I18N.hpp"
 
-#include "bbs_3mf.hpp"
+#include "prusa_3mf.hpp"
 
 #include <limits>
 #include <stdexcept>
@@ -145,52 +145,52 @@ static bool is_path_within_root(const std::string& file_path, const boost::files
 // 2 : Volumes' matrices and source data added to Metadata/Slic3r_PE_model.config file, meshes transformed back to their coordinate system on loading.
 // WARNING !! -> the version number has been rolled back to 1
 //               the next change should use 3
-const unsigned int VERSION_BBS_3MF = 1;
+const unsigned int VERSION_PRUSA_3MF = 1;
 // Allow loading version 2 file as well.
-const unsigned int VERSION_BBS_3MF_COMPATIBLE = 2;
-const char* BBS_3MF_VERSION1 = "bamboo_slicer:Version3mf"; // definition of the metadata name saved into .model file
-const char* BBS_3MF_VERSION = "BambuStudio:3mfVersion"; //compatible with prusa currently
+const unsigned int VERSION_PRUSA_3MF_COMPATIBLE = 2;
+const char* PRUSA_3MF_VERSION1 = "prusaslicer:Version3mf"; // definition of the metadata name saved into .model file
+const char* PRUSA_3MF_VERSION = "PrusaSlicer:3mfVersion"; //compatible with prusa currently
 // Painting gizmos data version numbers
 // 0 : initial version of fdm, seam, mm
 const unsigned int FDM_SUPPORTS_PAINTING_VERSION = 0;
 const unsigned int SEAM_PAINTING_VERSION         = 0;
 const unsigned int MM_PAINTING_VERSION           = 0;
 
-const std::string BBS_FDM_SUPPORTS_PAINTING_VERSION = "BambuStudio:FdmSupportsPaintingVersion";
-const std::string BBS_SEAM_PAINTING_VERSION         = "BambuStudio:SeamPaintingVersion";
-const std::string BBS_MM_PAINTING_VERSION           = "BambuStudio:MmPaintingVersion";
-const std::string BBL_MODEL_ID_TAG                  = "model_id";
-const std::string BBL_MODEL_NAME_TAG                = "Title";
-const std::string BBL_ORIGIN_TAG                    = "Origin";
-const std::string BBL_DESIGNER_TAG                  = "Designer";
-const std::string BBL_DESIGNER_USER_ID_TAG          = "DesignerUserId";
-const std::string BBL_DESIGNER_COVER_FILE_TAG       = "DesignerCover";
-const std::string BBL_DESCRIPTION_TAG               = "Description";
-const std::string BBL_COPYRIGHT_TAG                 = "CopyRight";
-const std::string BBL_COPYRIGHT_NORMATIVE_TAG       = "Copyright";
-const std::string BBL_LICENSE_TAG                   = "License";
-const std::string BBL_REGION_TAG                    = "Region";
-const std::string BBL_MODIFICATION_TAG              = "ModificationDate";
-const std::string BBL_CREATION_DATE_TAG             = "CreationDate";
-// Orca: BBL current version
-const std::string BBL_APPLICATION_TAG               = "Application";
-// OrcaSlicer version tag
-const std::string ORCASLICER_TAG                    = "OrcaSlicer";
-const std::string BBL_MAKERLAB_TAG                  = "MakerLab";
-const std::string BBL_MAKERLAB_VERSION_TAG          = "MakerLabVersion";
+const std::string PRUSA_FDM_SUPPORTS_PAINTING_VERSION = "PrusaSlicer:FdmSupportsPaintingVersion";
+const std::string PRUSA_SEAM_PAINTING_VERSION         = "PrusaSlicer:SeamPaintingVersion";
+const std::string PRUSA_MM_PAINTING_VERSION           = "PrusaSlicer:MmPaintingVersion";
+const std::string PRUSA_MODEL_ID_TAG                  = "model_id";
+const std::string PRUSA_MODEL_NAME_TAG                = "Title";
+const std::string PRUSA_ORIGIN_TAG                    = "Origin";
+const std::string PRUSA_DESIGNER_TAG                  = "Designer";
+const std::string PRUSA_DESIGNER_USER_ID_TAG          = "DesignerUserId";
+const std::string PRUSA_DESIGNER_COVER_FILE_TAG       = "DesignerCover";
+const std::string PRUSA_DESCRIPTION_TAG               = "Description";
+const std::string PRUSA_COPYRIGHT_TAG                 = "CopyRight";
+const std::string PRUSA_COPYRIGHT_NORMATIVE_TAG       = "Copyright";
+const std::string PRUSA_LICENSE_TAG                   = "License";
+const std::string PRUSA_REGION_TAG                    = "Region";
+const std::string PRUSA_MODIFICATION_TAG              = "ModificationDate";
+const std::string PRUSA_CREATION_DATE_TAG             = "CreationDate";
+// PRUSA current version
+const std::string PRUSA_APPLICATION_TAG               = "Application";
+// 3MF version tag
+const std::string PRUSA_SLIC3R_TAG                    = "PrusaSlicer";
+const std::string PRUSA_PRUSALAB_TAG                  = "PrusaLab";
+const std::string PRUSA_PRUSALAB_VERSION_TAG          = "PrusaLabVersion";
 
 
-const std::string BBL_PROFILE_TITLE_TAG             = "ProfileTitle";
-const std::string BBL_PROFILE_COVER_TAG             = "ProfileCover";
-const std::string BBL_PROFILE_DESCRIPTION_TAG       = "ProfileDescription";
-const std::string BBL_PROFILE_USER_ID_TAG           = "ProfileUserId";
-const std::string BBL_PROFILE_USER_NAME_TAG         = "ProfileUserName";
+const std::string PRUSA_PROFILE_TITLE_TAG             = "ProfileTitle";
+const std::string PRUSA_PROFILE_COVER_TAG             = "ProfileCover";
+const std::string PRUSA_PROFILE_DESCRIPTION_TAG       = "ProfileDescription";
+const std::string PRUSA_PROFILE_USER_ID_TAG           = "ProfileUserId";
+const std::string PRUSA_PROFILE_USER_NAME_TAG         = "ProfileUserName";
 
 const std::string MODEL_FOLDER = "3D/";
 const std::string MODEL_EXTENSION = ".model";
 const std::string MODEL_FILE = "3D/3dmodel.model"; // << this is the only format of the string which works with CURA
 const std::string MODEL_RELS_FILE = "3D/_rels/3dmodel.model.rels";
-//BBS: add metadata_folder
+// add metadata_folder
 const std::string METADATA_DIR = "Metadata/";
 const std::string ACCESOR_DIR = "accesories/";
 const std::string GCODE_EXTENSION = ".gcode";
@@ -199,19 +199,19 @@ const std::string CALIBRATION_INFO_EXTENSION = ".json";
 const std::string CONTENT_TYPES_FILE = "[Content_Types].xml";
 const std::string RELATIONSHIPS_FILE = "_rels/.rels";
 const std::string THUMBNAIL_FILE = "Metadata/plate_1.png";
-const std::string THUMBNAIL_FOR_PRINTER_FILE = "Metadata/bbl_thumbnail.png";
+const std::string THUMBNAIL_FOR_PRINTER_FILE = "Metadata/prusa_thumbnail.png";
 const std::string PRINTER_THUMBNAIL_SMALL_FILE = "/Auxiliaries/.thumbnails/thumbnail_small.png";
 const std::string PRINTER_THUMBNAIL_MIDDLE_FILE = "/Auxiliaries/.thumbnails/thumbnail_middle.png";
 const std::string _3MF_COVER_FILE = "/Auxiliaries/.thumbnails/thumbnail_3mf.png";
 //const std::string PRINT_CONFIG_FILE = "Metadata/Slic3r_PE.config";
 //const std::string MODEL_CONFIG_FILE = "Metadata/Slic3r_PE_model.config";
-const std::string BBS_PRINT_CONFIG_FILE = "Metadata/print_profile.config";
-const std::string BBS_PROJECT_CONFIG_FILE = "Metadata/project_settings.config";
-const std::string BBS_MODEL_CONFIG_FILE = "Metadata/model_settings.config";
-const std::string BBS_MODEL_CONFIG_RELS_FILE = "Metadata/_rels/model_settings.config.rels";
+const std::string PRUSA_PRINT_CONFIG_FILE = "Metadata/print_profile.config";
+const std::string PRUSA_PROJECT_CONFIG_FILE = "Metadata/project_settings.config";
+const std::string PRUSA_MODEL_CONFIG_FILE = "Metadata/model_settings.config";
+const std::string PRUSA_MODEL_CONFIG_RELS_FILE = "Metadata/_rels/model_settings.config.rels";
 const std::string SLICE_INFO_CONFIG_FILE = "Metadata/slice_info.config";
 const std::string FILAMENT_SEQUENCE_FILE = "Metadata/filament_sequence.json";
-const std::string BBS_LAYER_HEIGHTS_PROFILE_FILE = "Metadata/layer_heights_profile.txt";
+const std::string PRUSA_LAYER_HEIGHTS_PROFILE_FILE = "Metadata/layer_heights_profile.txt";
 const std::string LAYER_CONFIG_RANGES_FILE = "Metadata/layer_config_ranges.xml";
 const std::string BRIM_EAR_POINTS_FILE = "Metadata/brim_ear_points.txt";
 /*const std::string SLA_SUPPORT_POINTS_FILE = "Metadata/Slic3r_PE_sla_support_points.txt";
@@ -268,7 +268,7 @@ static constexpr const char* VOLUME_TAG = "volume";
 static constexpr const char* PART_TAG = "part";
 static constexpr const char* PLATE_TAG = "plate";
 static constexpr const char* INSTANCE_TAG = "model_instance";
-//BBS
+//PRUSA
 static constexpr const char* ASSEMBLE_TAG = "assemble";
 static constexpr const char* ASSEMBLE_ITEM_TAG = "assemble_item";
 static constexpr const char* SLICE_HEADER_TAG = "header";
@@ -292,7 +292,7 @@ static constexpr const char* HIT_MESH_ATTR        = "hit_mesh";
 static constexpr const char* HIT_POSITION_ATTR    = "hit_position";
 static constexpr const char* HIT_NORMAL_ATTR      = "hit_normal";
 
-// BBS: encrypt
+// encrypt
 static constexpr const char* RELATIONSHIP_TAG = "Relationship";
 static constexpr const char* PID_ATTR = "pid";
 static constexpr const char* PUUID_ATTR = "p:UUID";
@@ -320,7 +320,7 @@ static constexpr const char* V2_ATTR = "v2";
 static constexpr const char* V3_ATTR = "v3";
 static constexpr const char* OBJECTID_ATTR = "objectid";
 static constexpr const char* TRANSFORM_ATTR = "transform";
-// BBS
+// PRUSA
 static constexpr const char* OFFSET_ATTR = "offset";
 static constexpr const char* PRINTABLE_ATTR = "printable";
 static constexpr const char* AUTO_DROP_ATTR = "auto_drop";
@@ -329,7 +329,7 @@ static constexpr const char* CUSTOM_SUPPORTS_ATTR = "paint_supports";
 static constexpr const char* CUSTOM_FUZZY_SKIN_ATTR  = "paint_fuzzy_skin";
 static constexpr const char* CUSTOM_SEAM_ATTR = "paint_seam";
 static constexpr const char* MMU_SEGMENTATION_ATTR = "paint_color";
-// BBS
+// PRUSA
 static constexpr const char* FACE_PROPERTY_ATTR = "face_property";
 
 static constexpr const char* KEY_ATTR = "key";
@@ -438,14 +438,14 @@ static constexpr const char *USE_SURFACE_ATTR = "use_surface";
 // static constexpr const char *FIX_TRANSFORMATION_ATTR = "transform";
 
 
-const unsigned int BBS_VALID_OBJECT_TYPES_COUNT = 2;
-const char* BBS_VALID_OBJECT_TYPES[] =
+const unsigned int PRUSA_VALID_OBJECT_TYPES_COUNT = 2;
+const char* PRUSA_VALID_OBJECT_TYPES[] =
 {
     "model",
     "other"
 };
 
-const char* BBS_INVALID_OBJECT_TYPES[] =
+const char* PRUSA_INVALID_OBJECT_TYPES[] =
 {
     "solidsupport",
     "support",
@@ -477,7 +477,7 @@ public:
     version_error(const char* what_arg) : Slic3r::FileIOError(what_arg) {}
 };
 
-const char* bbs_get_attribute_value_charptr(const char** attributes, unsigned int attributes_size, const char* attribute_key)
+const char* prusa_get_attribute_value_charptr(const char** attributes, unsigned int attributes_size, const char* attribute_key)
 {
     if ((attributes == nullptr) || (attributes_size == 0) || (attributes_size % 2 != 0) || (attribute_key == nullptr))
         return nullptr;
@@ -490,31 +490,31 @@ const char* bbs_get_attribute_value_charptr(const char** attributes, unsigned in
     return nullptr;
 }
 
-std::string bbs_get_attribute_value_string(const char** attributes, unsigned int attributes_size, const char* attribute_key)
+std::string prusa_get_attribute_value_string(const char** attributes, unsigned int attributes_size, const char* attribute_key)
 {
-    const char* text = bbs_get_attribute_value_charptr(attributes, attributes_size, attribute_key);
+    const char* text = prusa_get_attribute_value_charptr(attributes, attributes_size, attribute_key);
     return (text != nullptr) ? text : "";
 }
 
-float bbs_get_attribute_value_float(const char** attributes, unsigned int attributes_size, const char* attribute_key)
+float prusa_get_attribute_value_float(const char** attributes, unsigned int attributes_size, const char* attribute_key)
 {
     float value = 0.0f;
-    if (const char *text = bbs_get_attribute_value_charptr(attributes, attributes_size, attribute_key); text != nullptr)
+    if (const char *text = prusa_get_attribute_value_charptr(attributes, attributes_size, attribute_key); text != nullptr)
         fast_float::from_chars(text, text + strlen(text), value);
     return value;
 }
 
-int bbs_get_attribute_value_int(const char** attributes, unsigned int attributes_size, const char* attribute_key)
+int prusa_get_attribute_value_int(const char** attributes, unsigned int attributes_size, const char* attribute_key)
 {
     int value = 0;
-    if (const char *text = bbs_get_attribute_value_charptr(attributes, attributes_size, attribute_key); text != nullptr)
+    if (const char *text = prusa_get_attribute_value_charptr(attributes, attributes_size, attribute_key); text != nullptr)
         boost::spirit::qi::parse(text, text + strlen(text), boost::spirit::qi::int_, value);
     return value;
 }
 
-bool bbs_get_attribute_value_bool(const char** attributes, unsigned int attributes_size, const char* attribute_key)
+bool prusa_get_attribute_value_bool(const char** attributes, unsigned int attributes_size, const char* attribute_key)
 {
-    const char* text = bbs_get_attribute_value_charptr(attributes, attributes_size, attribute_key);
+    const char* text = prusa_get_attribute_value_charptr(attributes, attributes_size, attribute_key);
     return (text != nullptr) ? (bool)::atoi(text) : true;
 }
 
@@ -589,7 +589,7 @@ Slic3r::Vec3f get_vec3_from_string(const std::string &pos_str)
     return pos;
 }
 
-Slic3r::Transform3d bbs_get_transform_from_3mf_specs_string(const std::string& mat_str)
+Slic3r::Transform3d prusa_get_transform_from_3mf_specs_string(const std::string& mat_str)
 {
     // check: https://3mf.io/3d-manufacturing-format/ or https://github.com/3MFConsortium/spec_core/blob/master/3MF%20Core%20Specification.md
     // to see how matrices are stored inside 3mf according to specifications
@@ -618,7 +618,7 @@ Slic3r::Transform3d bbs_get_transform_from_3mf_specs_string(const std::string& m
     return ret;
 }
 
-Slic3r::Vec3d bbs_get_offset_from_3mf_specs_string(const std::string& vec_str)
+Slic3r::Vec3d prusa_get_offset_from_3mf_specs_string(const std::string& vec_str)
 {
     Slic3r::Vec3d ofs2ass(0, 0, 0);
 
@@ -641,7 +641,7 @@ Slic3r::Vec3d bbs_get_offset_from_3mf_specs_string(const std::string& vec_str)
     return ofs2ass;
 }
 
-float bbs_get_unit_factor(const std::string& unit)
+float prusa_get_unit_factor(const std::string& unit)
 {
     const char* text = unit.c_str();
 
@@ -660,14 +660,14 @@ float bbs_get_unit_factor(const std::string& unit)
         return 1.0f;
 }
 
-bool bbs_is_valid_object_type(const std::string& type)
+bool prusa_is_valid_object_type(const std::string& type)
 {
     // if the type is empty defaults to "model" (see specification)
     if (type.empty())
         return true;
 
-    for (unsigned int i = 0; i < BBS_VALID_OBJECT_TYPES_COUNT; ++i) {
-        if (::strcmp(type.c_str(), BBS_VALID_OBJECT_TYPES[i]) == 0)
+    for (unsigned int i = 0; i < PRUSA_VALID_OBJECT_TYPES_COUNT; ++i) {
+        if (::strcmp(type.c_str(), PRUSA_VALID_OBJECT_TYPES[i]) == 0)
             return true;
     }
 
@@ -721,7 +721,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 #define _(s) Slic3r::I18N::translate(s)
 
     // Base class with error messages management
-    class _BBS_3MF_Base
+    class _PRUSA_3MF_Base
     {
         mutable boost::mutex mutex;
         mutable std::vector<std::string> m_errors;
@@ -738,9 +738,9 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     };
 
-    class _BBS_3MF_Importer : public _BBS_3MF_Base
+    class _PRUSA_3MF_Importer : public _PRUSA_3MF_Base
     {
-        typedef std::pair<std::string, int> Id; // BBS: encrypt
+        typedef std::pair<std::string, int> Id; // encrypt
 
         struct Component
         {
@@ -770,7 +770,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             std::vector<std::string> custom_seam;
             std::vector<std::string> mmu_segmentation;
             std::vector<std::string> fuzzy_skin;
-            // BBS
+            // PRUSA
             std::vector<std::string> face_properties;
 
             bool empty() { return vertices.empty() || triangles.empty(); }
@@ -803,7 +803,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             ModelObject* object;
             ComponentsList components;
 
-            //BBS: sub object id
+            // sub object id
             //int subobject_id;
             std::string name;
             std::string uuid;
@@ -818,7 +818,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 geometry.reset();
                 object = nullptr;
                 components.clear();
-                //BBS: sub object id
+                // sub object id
                 uuid.clear();
                 name.clear();
             }
@@ -867,7 +867,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         {
             struct VolumeMetadata
             {
-                //BBS: refine the part logic
+                // refine the part logic
                 unsigned int first_triangle_id;
                 unsigned int last_triangle_id;
                 int subobject_id;
@@ -913,7 +913,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         };
 
         // Map from a 1 based 3MF object ID to a 0 based ModelObject index inside m_model->objects.
-        //typedef std::pair<std::string, int> Id; // BBS: encrypt
+        //typedef std::pair<std::string, int> Id; // encrypt
         typedef std::map<Id, CurrentObject> IdToCurrentObjectMap;
         typedef std::map<int, std::string> IndexToPathMap;
         typedef std::map<Id, int> IdToModelObjectMap;
@@ -935,7 +935,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             CurrentObject *current_object{nullptr};
             std::string object_path;
             std::string zip_path;
-            _BBS_3MF_Importer *top_importer{nullptr};
+            _PRUSA_3MF_Importer *top_importer{nullptr};
             XML_Parser object_xml_parser;
             bool obj_parse_error { false };
             std::string obj_parse_error_message;
@@ -946,9 +946,9 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             float object_unit_factor;
             int object_current_color_group{-1};
             std::map<int, std::string> object_group_id_to_color;
-            bool is_bbl_3mf { false };
+            bool is_prusa_3mf { false };
 
-            ObjectImporter(_BBS_3MF_Importer *importer, std::string file_path, std::string obj_path)
+            ObjectImporter(_PRUSA_3MF_Importer *importer, std::string file_path, std::string obj_path)
             {
                 top_importer = importer;
                 object_path = obj_path;
@@ -1079,10 +1079,10 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         bool m_load_restore = false;
         std::string m_backup_path;
         std::string m_origin_file;
-        // Semantic version of Orca Slicer, that generated this 3MF.
-        boost::optional<Semver> m_bambuslicer_generator_version;
-        // Semantic version from the OrcaSlicer metadata tag (if present).
-        boost::optional<Semver> m_orca_slicer_version;
+        // Semantic version of the slicer that generated this 3MF.
+        boost::optional<Semver> m_prusaslicer_generator_version;
+        // Semantic version from the 3MF metadata tag (if present).
+        boost::optional<Semver> m_prusa_slicer_version;
         unsigned int m_fdm_supports_painting_version = 0;
         unsigned int m_seam_painting_version         = 0;
         unsigned int m_mm_painting_version           = 0;
@@ -1092,7 +1092,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         std::string  m_designer_user_id;
         std::string  m_designer_cover;
         ModelInfo    model_info;
-        BBLProject   project_info;
+        PrusaProject   project_info;
         std::string  m_profile_title;
         std::string  m_profile_cover;
         std::string  m_Profile_description;
@@ -1137,8 +1137,8 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
         std::map<int, ModelVolume*> m_shared_meshes;
 
-        //BBS: plater related structures
-        bool m_is_bbl_3mf { false };
+        // plater related structures
+        bool m_is_prusa_3mf { false };
         bool m_parsing_slice_info { false };
         PlateDataMaps m_plater_data;
         PlateData* m_curr_plater;
@@ -1148,13 +1148,13 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         std::map<int, std::string> m_group_id_to_color;
 
     public:
-        _BBS_3MF_Importer();
-        ~_BBS_3MF_Importer();
+        _PRUSA_3MF_Importer();
+        ~_PRUSA_3MF_Importer();
 
-        //BBS: add plate data related logic
+        // add plate data related logic
         // add backup & restore logic
         bool load_model_from_file(const std::string& filename, Model& model, PlateDataPtrs& plate_data_list, std::vector<Preset*>& project_presets, DynamicPrintConfig& config,
-            ConfigSubstitutionContext& config_substitutions, LoadStrategy strategy, bool* is_bbl_3mf, bool* is_orca_3mf, Semver& file_version, Import3mfProgressFn proFn = nullptr, BBLProject *project = nullptr, int plate_id = 0);
+            ConfigSubstitutionContext& config_substitutions, LoadStrategy strategy, bool* is_prusa_3mf, bool* is_legacy_3mf, Semver& file_version, Import3mfProgressFn proFn = nullptr, PrusaProject *project = nullptr, int plate_id = 0);
         bool get_thumbnail(const std::string &filename, std::string &data);
         bool load_gcode_3mf_from_stream(std::istream & data, Model& model, PlateDataPtrs& plate_data_list, DynamicPrintConfig& config, Semver& file_version);
         unsigned int version() const { return m_version; }
@@ -1172,10 +1172,10 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 XML_ErrorString(XML_GetErrorCode(m_xml_parser));
         }
 
-        //BBS: add plate data related logic
+        // add plate data related logic
         // add backup & restore logic
         bool _load_model_from_file(std::string filename, Model& model, PlateDataPtrs& plate_data_list, std::vector<Preset*>& project_presets, DynamicPrintConfig& config, ConfigSubstitutionContext& config_substitutions, Import3mfProgressFn proFn = nullptr,
-            BBLProject* project = nullptr, int plate_id = 0);
+            PrusaProject* project = nullptr, int plate_id = 0);
         bool _is_svg_shape_file(const std::string &filename) const;
         bool _extract_from_archive(mz_zip_archive& archive, std::string const & path, std::function<bool (mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)>, bool restore = false);
         bool _extract_xml_from_archive(mz_zip_archive& archive, std::string const & path, XML_StartElementHandler start_handler, XML_EndElementHandler end_handler);
@@ -1192,9 +1192,9 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         void _extract_filament_sequence_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat);
 
         void _extract_print_config_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, DynamicPrintConfig& config, ConfigSubstitutionContext& subs_context, const std::string& archive_filename);
-        //BBS: add project config file logic
+        // add project config file logic
         void _extract_project_config_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, DynamicPrintConfig& config, ConfigSubstitutionContext& subs_context, Model& model);
-        //BBS: extract project embedded presets
+        // extract project embedded presets
         void _extract_project_embedded_presets_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, std::vector<Preset*>&project_presets, Model& model, Preset::Type type, bool use_json = true);
 
         void _extract_auxiliary_file_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, Model& model);
@@ -1282,7 +1282,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         bool _handle_start_config_warning(const char** attributes, unsigned int num_attributes);
         bool _handle_end_config_warning();
 
-        //BBS: add plater config parse functions
+        // add plater config parse functions
         bool _handle_start_config_plater(const char** attributes, unsigned int num_attributes);
         bool _handle_end_config_plater();
 
@@ -1298,7 +1298,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         bool _handle_start_text_info_item(const char **attributes, unsigned int num_attributes);
         bool _handle_end_text_info_item();
 
-        // BBS: callbacks to parse the .rels file
+        // callbacks to parse the .rels file
         static void XMLCALL _handle_start_relationships_element(void* userData, const char* name, const char** attributes);
         static void XMLCALL _handle_end_relationships_element(void* userData, const char* name);
 
@@ -1321,7 +1321,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         static void XMLCALL _handle_end_config_xml_element(void* userData, const char* name);
     };
 
-    _BBS_3MF_Importer::_BBS_3MF_Importer()
+    _PRUSA_3MF_Importer::_PRUSA_3MF_Importer()
         : m_version(0)
         , m_check_version(false)
         , m_xml_parser(nullptr)
@@ -1334,7 +1334,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
     {
     }
 
-    _BBS_3MF_Importer::~_BBS_3MF_Importer()
+    _PRUSA_3MF_Importer::~_PRUSA_3MF_Importer()
     {
         _destroy_xml_parser();
         clear_errors();
@@ -1360,17 +1360,17 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         m_plater_data.clear();
     }
 
-    //BBS: add plate data related logic
+    // add plate data related logic
         // add backup & restore logic
-    bool _BBS_3MF_Importer::load_model_from_file(const std::string& filename, Model& model, PlateDataPtrs& plate_data_list, std::vector<Preset*>& project_presets, DynamicPrintConfig& config,
-        ConfigSubstitutionContext& config_substitutions, LoadStrategy strategy, bool* is_bbl_3mf, bool* is_orca_3mf, Semver& file_version, Import3mfProgressFn proFn, BBLProject *project, int plate_id)
+    bool _PRUSA_3MF_Importer::load_model_from_file(const std::string& filename, Model& model, PlateDataPtrs& plate_data_list, std::vector<Preset*>& project_presets, DynamicPrintConfig& config,
+        ConfigSubstitutionContext& config_substitutions, LoadStrategy strategy, bool* is_prusa_3mf, bool* is_legacy_3mf, Semver& file_version, Import3mfProgressFn proFn, PrusaProject *project, int plate_id)
     {
         m_version = 0;
         m_fdm_supports_painting_version = 0;
         m_seam_painting_version = 0;
         m_mm_painting_version = 0;
         m_check_version = strategy & LoadStrategy::CheckVersion;
-        //BBS: auxiliary data
+        // auxiliary data
         m_load_model  = strategy & LoadStrategy::LoadModel;
         m_load_aux = strategy & LoadStrategy::LoadAuxiliary;
         m_load_restore = strategy & LoadStrategy::Restore;
@@ -1393,7 +1393,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         //m_sla_support_points.clear();
         m_curr_metadata_name.clear();
         m_curr_characters.clear();
-        //BBS: plater data init
+        // plater data init
         m_plater_data.clear();
         m_curr_instance.object_id = -1;
         m_curr_instance.instance_id = -1;
@@ -1416,20 +1416,20 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             m_backup_path = model.get_backup_path();
         }
         bool result = _load_model_from_file(filename, model, plate_data_list, project_presets, config, config_substitutions, proFn, project, plate_id);
-        if (is_bbl_3mf) {
-            *is_bbl_3mf = m_is_bbl_3mf;
+        if (is_prusa_3mf) {
+            *is_prusa_3mf = m_is_prusa_3mf;
         }
-        // If the OrcaSlicer tag is present, use it as file_version (ignoring the Bambu Application version).
+        // If the 3MF version tag is present, use it as file_version (ignoring the Prusa Application version).
         // Otherwise fall back to the version parsed from the Application tag.
-        if (m_orca_slicer_version) {
-            file_version = *m_orca_slicer_version;
-            if (is_orca_3mf)
-                *is_orca_3mf = true;
+        if (m_prusa_slicer_version) {
+            file_version = *m_prusa_slicer_version;
+            if (is_legacy_3mf)
+                *is_legacy_3mf = true;
         } else {
-            if (m_bambuslicer_generator_version)
-                file_version = *m_bambuslicer_generator_version;
-            if (is_orca_3mf)
-                *is_orca_3mf = false;
+            if (m_prusaslicer_generator_version)
+                file_version = *m_prusaslicer_generator_version;
+            if (is_legacy_3mf)
+                *is_legacy_3mf = false;
         }
         // save for restore
         if (result && m_load_aux && !m_load_restore) {
@@ -1440,7 +1440,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return result;
     }
 
-    bool _BBS_3MF_Importer::get_thumbnail(const std::string &filename, std::string &data)
+    bool _PRUSA_3MF_Importer::get_thumbnail(const std::string &filename, std::string &data)
     {
         mz_zip_archive archive;
         mz_zip_zero_struct(&archive);
@@ -1463,7 +1463,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             return false;
         }
 
-        // BBS: load relationships
+        // load relationships
         if (!_extract_xml_from_archive(archive, RELATIONSHIPS_FILE, _handle_start_relationships_element, _handle_end_relationships_element))
             return false;
         if (m_thumbnail_middle.empty()) m_thumbnail_middle = m_thumbnail_path;
@@ -1489,7 +1489,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return is.gcount();
     }
 
-    bool _BBS_3MF_Importer::load_gcode_3mf_from_stream(std::istream &data, Model &model, PlateDataPtrs &plate_data_list, DynamicPrintConfig &config, Semver &file_version)
+    bool _PRUSA_3MF_Importer::load_gcode_3mf_from_stream(std::istream &data, Model &model, PlateDataPtrs &plate_data_list, DynamicPrintConfig &config, Semver &file_version)
     {
         mz_zip_archive archive;
         mz_zip_zero_struct(&archive);
@@ -1515,7 +1515,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             ~close_lock() { close(); }
         } lock{&archive};
 
-        // BBS: load relationships
+        // load relationships
         if (!_extract_xml_from_archive(archive, RELATIONSHIPS_FILE, _handle_start_relationships_element, _handle_end_relationships_element))
             return false;
         if (m_start_part_path.empty())
@@ -1565,12 +1565,12 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
                 BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format("extract %1%th file %2%, total=%3%\n")%(i+1)%name%num_entries;
 
-                if (boost::algorithm::iequals(name, BBS_PROJECT_CONFIG_FILE)) {
+                if (boost::algorithm::iequals(name, PRUSA_PROJECT_CONFIG_FILE)) {
                     // extract slic3r print config file
                     ConfigSubstitutionContext config_substitutions(ForwardCompatibilitySubstitutionRule::Disable);
                     _extract_project_config_from_archive(archive, stat, config, config_substitutions, model);
                 }
-                else if (boost::algorithm::iequals(name, BBS_MODEL_CONFIG_FILE)) {
+                else if (boost::algorithm::iequals(name, PRUSA_MODEL_CONFIG_FILE)) {
                     // extract slic3r model config file
                     if (!_extract_xml_from_archive(archive, stat, _handle_start_config_xml_element, _handle_end_config_xml_element)) {
                         add_error("Archive does not contain a valid model config");
@@ -1589,7 +1589,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             }
         }
 
-        //BBS: load the plate info into plate_data_list
+        // load the plate info into plate_data_list
         std::map<int, PlateData*>::iterator it = m_plater_data.begin();
         plate_data_list.clear();
         plate_data_list.reserve(m_plater_data.size());
@@ -1652,7 +1652,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    void _BBS_3MF_Importer::_destroy_xml_parser()
+    void _PRUSA_3MF_Importer::_destroy_xml_parser()
     {
         if (m_xml_parser != nullptr) {
             XML_ParserFree(m_xml_parser);
@@ -1660,7 +1660,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }
 
-    void _BBS_3MF_Importer::_stop_xml_parser(const std::string &msg)
+    void _PRUSA_3MF_Importer::_stop_xml_parser(const std::string &msg)
     {
         assert(! m_parse_error);
         assert(m_parse_error_message.empty());
@@ -1670,8 +1670,8 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         XML_StopParser(m_xml_parser, false);
     }
 
-    //BBS: add plate data related logic
-    bool _BBS_3MF_Importer::_load_model_from_file(
+    // add plate data related logic
+    bool _PRUSA_3MF_Importer::_load_model_from_file(
         std::string filename,
         Model& model,
         PlateDataPtrs& plate_data_list,
@@ -1679,11 +1679,11 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         DynamicPrintConfig& config,
         ConfigSubstitutionContext& config_substitutions,
         Import3mfProgressFn proFn,
-        BBLProject *project,
+        PrusaProject *project,
         int plate_id)
     {
         bool cb_cancel = false;
-        //BBS progress point
+        //PRUSA progress point
         // prepare restore
         if (m_load_restore) {
             BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format("import 3mf IMPORT_STAGE_RESTORE\n");
@@ -1694,7 +1694,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             }
         }
 
-        //BBS progress point
+        //PRUSA progress point
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format("import 3mf IMPORT_STAGE_OPEN, m_load_restore=%1%\n")%m_load_restore;
         if (proFn) {
             proFn(IMPORT_STAGE_OPEN, 0, 1, cb_cancel);
@@ -1730,19 +1730,19 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
         m_name = boost::filesystem::path(filename).stem().string();
 
-        //BBS progress point
+        //PRUSA progress point
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format("import 3mf IMPORT_STAGE_READ_FILES\n");
         if (proFn) {
             proFn(IMPORT_STAGE_READ_FILES, 0, 3, cb_cancel);
             if (cb_cancel)
                 return false;
         }
-        // BBS: load relationships
+        // load relationships
         if (!_extract_xml_from_archive(archive, RELATIONSHIPS_FILE, _handle_start_relationships_element, _handle_end_relationships_element))
             return false;
         if (m_start_part_path.empty())
             return false;
-        // BBS: load sub models (Production Extension)
+        // load sub models (Production Extension)
         std::string sub_rels = m_start_part_path;
         sub_rels.insert(boost::find_last(sub_rels, "/").end() - sub_rels.begin(), "_rels/");
         sub_rels.append(".rels");
@@ -1814,7 +1814,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             }
             m_object_importers.clear();
 #endif
-            // BBS: load root model
+            // load root model
             if (proFn) {
                 proFn(IMPORT_STAGE_READ_FILES, 2, 3, cb_cancel);
                 if (cb_cancel)
@@ -1855,16 +1855,16 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             project->project_country_code = m_contry_code;
         }
 
-        // Orca: skip version check
+        // Skip version check
         bool dont_load_config = !m_load_config;
-        // if (m_bambuslicer_generator_version) {
-        //     Semver app_version = *(Semver::parse(SoftFever_VERSION));
-        //     Semver file_version = *m_bambuslicer_generator_version;
+        // if (m_prusaslicer_generator_version) {
+        //     Semver app_version = *(Semver::parse(SLIC3R_VERSION));
+        //     Semver file_version = *m_prusaslicer_generator_version;
         //     if (file_version.maj() != app_version.maj())
         //         dont_load_config = true;
         // }
         // else {
-        //     m_bambuslicer_generator_version = Semver::parse("0.0.0.0");
+        //     m_prusaslicer_generator_version = Semver::parse("0.0.0.0");
         //     dont_load_config = true;
         // }
 
@@ -1872,7 +1872,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         for (mz_uint i = 0; i < num_entries; ++i) {
             if (mz_zip_reader_file_stat(&archive, i, &stat)) {
 
-                //BBS progress point
+                //PRUSA progress point
                 if (proFn) {
                     proFn(IMPORT_STAGE_EXTRACT, i, num_entries, cb_cancel);
                     if (cb_cancel)
@@ -1892,7 +1892,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                     continue;
                 }
 
-                if (boost::algorithm::iequals(name, BBS_LAYER_HEIGHTS_PROFILE_FILE)) {
+                if (boost::algorithm::iequals(name, PRUSA_LAYER_HEIGHTS_PROFILE_FILE)) {
                     // extract slic3r layer heights profile file
                     _extract_layer_heights_profile_config_from_archive(archive, stat);
                 }
@@ -1905,7 +1905,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                     // extract slic3r config file
                     _extract_brim_ear_points_from_archive(archive, stat);
                 }
-                //BBS: disable SLA related files currently
+                // disable SLA related files currently
                 /*else if (boost::algorithm::iequals(name, SLA_SUPPORT_POINTS_FILE)) {
                     // extract sla support points file
                     _extract_sla_support_points_from_archive(archive, stat);
@@ -1914,12 +1914,12 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                     // extract sla support points file
                     _extract_sla_drain_holes_from_archive(archive, stat);
                 }*/
-                //BBS: project setting file
-                //if (!dont_load_config && boost::algorithm::iequals(name, BBS_PRINT_CONFIG_FILE)) {
+                // project setting file
+                //if (!dont_load_config && boost::algorithm::iequals(name, PRUSA_PRINT_CONFIG_FILE)) {
                     // extract slic3r print config file
                 //    _extract_print_config_from_archive(archive, stat, config, config_substitutions, filename);
                 //} else
-                if (!dont_load_config && boost::algorithm::iequals(name, BBS_PROJECT_CONFIG_FILE)) {
+                if (!dont_load_config && boost::algorithm::iequals(name, PRUSA_PROJECT_CONFIG_FILE)) {
                     // extract slic3r print config file
                     _extract_project_config_from_archive(archive, stat, config, config_substitutions, model);
                 }
@@ -1927,7 +1927,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                     // extract object cut info
                     _extract_cut_information_from_archive(archive, stat, config_substitutions);
                 }
-                //BBS: project embedded presets
+                // project embedded presets
                 else if (!dont_load_config && boost::algorithm::istarts_with(name, PROJECT_EMBEDDED_PRINT_PRESETS_FILE)) {
                     // extract slic3r layer config ranges file
                     _extract_project_embedded_presets_from_archive(archive, stat, project_presets, model, Preset::TYPE_PRINT, false);
@@ -1948,10 +1948,10 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                     // extract slic3r layer config ranges file
                     _extract_custom_gcode_per_print_z_from_archive(archive, stat);
                 }
-                else if (boost::algorithm::iequals(name, BBS_MODEL_CONFIG_FILE)) {
+                else if (boost::algorithm::iequals(name, PRUSA_MODEL_CONFIG_FILE)) {
                     // extract slic3r model config file
                     if (!_extract_xml_from_archive(archive, stat, _handle_start_config_xml_element, _handle_end_config_xml_element)) {
-                        if (m_is_bbl_3mf) {
+                        if (m_is_prusa_3mf) {
                             add_error("Archive does not contain a valid model config");
                             return false;
                         }
@@ -1979,11 +1979,11 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                     _extract_file_from_archive(archive, stat);
                 }
                 else if (!dont_load_config && boost::algorithm::istarts_with(name, METADATA_DIR) && boost::algorithm::iends_with(name, THUMBNAIL_EXTENSION)) {
-                    //BBS parsing pattern thumbnail and plate thumbnails
+                    //PRUSA parsing pattern thumbnail and plate thumbnails
                     _extract_file_from_archive(archive, stat);
                 }
                 else if (!dont_load_config && boost::algorithm::istarts_with(name, METADATA_DIR) && boost::algorithm::iends_with(name, CALIBRATION_INFO_EXTENSION)) {
-                    //BBS parsing pattern config files
+                    //PRUSA parsing pattern config files
                     _extract_file_from_archive(archive, stat);
                 }
                 else {
@@ -1994,8 +1994,8 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
         lock.close();
 
-        if (!m_is_bbl_3mf) {
-            // if the 3mf was not produced by OrcaSlicer and there is more than one instance,
+        if (!m_is_prusa_3mf) {
+            // If the 3mf was not produced by a slicer family and there is more than one instance,
             // split the object in as many objects as instances
             BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format(", found 3mf from other vendor, split as instance");
             for (const IdToModelObjectMap::value_type& object : m_objects) {
@@ -2123,7 +2123,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 for (const Metadata& metadata : obj_metadata->second.metadata) {
                     if (metadata.key == "name")
                         model_object->name = metadata.value;
-                    //BBS: add module name
+                    // add module name
                     else if (metadata.key == "module")
                         model_object->module_name = metadata.value;
                     else
@@ -2253,7 +2253,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 //        // fixes the min z of the model if negative
 //        model.adjust_min_z();
 
-        //BBS progress point
+        //PRUSA progress point
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format("import 3mf IMPORT_STAGE_LOADING_PLATES, m_plater_data size %1%, m_backup_path %2%\n")%m_plater_data.size() %m_backup_path;
         if (proFn) {
             proFn(IMPORT_STAGE_LOADING_PLATES, 0, 1, cb_cancel);
@@ -2261,7 +2261,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 return false;
         }
 
-        //BBS: load the plate info into plate_data_list
+        // load the plate info into plate_data_list
         std::map<int, PlateData*>::iterator it = m_plater_data.begin();
         plate_data_list.clear();
         plate_data_list.reserve(m_plater_data.size());
@@ -2362,7 +2362,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 m_model->delete_object(delete_ids[index]);
         }
 
-        //BBS progress point
+        //PRUSA progress point
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format("import 3mf IMPORT_STAGE_FINISH\n");
         if (proFn) {
             proFn(IMPORT_STAGE_FINISH, 0, 1, cb_cancel);
@@ -2373,11 +2373,11 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_is_svg_shape_file(const std::string &name) const { 
+    bool _PRUSA_3MF_Importer::_is_svg_shape_file(const std::string &name) const { 
         return boost::starts_with(name, MODEL_FOLDER) && boost::ends_with(name, ".svg");
     }
 
-    bool _BBS_3MF_Importer::_extract_from_archive(mz_zip_archive& archive, std::string const & path, std::function<bool (mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)> extract, bool restore)
+    bool _PRUSA_3MF_Importer::_extract_from_archive(mz_zip_archive& archive, std::string const & path, std::function<bool (mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)> extract, bool restore)
     {
         mz_uint num_entries = mz_zip_reader_get_num_files(&archive);
         mz_zip_archive_file_stat stat;
@@ -2438,14 +2438,14 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_extract_xml_from_archive(mz_zip_archive& archive, const std::string & path, XML_StartElementHandler start_handler, XML_EndElementHandler end_handler)
+    bool _PRUSA_3MF_Importer::_extract_xml_from_archive(mz_zip_archive& archive, const std::string & path, XML_StartElementHandler start_handler, XML_EndElementHandler end_handler)
     {
         return _extract_from_archive(archive, path, [this, start_handler, end_handler](mz_zip_archive& archive, const mz_zip_archive_file_stat& stat) {
             return _extract_xml_from_archive(archive, stat, start_handler, end_handler);
         });
     }
 
-    bool _BBS_3MF_Importer::_extract_xml_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, XML_StartElementHandler start_handler, XML_EndElementHandler end_handler)
+    bool _PRUSA_3MF_Importer::_extract_xml_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, XML_StartElementHandler start_handler, XML_EndElementHandler end_handler)
     {
         if (stat.m_uncomp_size == 0) {
             add_error("Found invalid size");
@@ -2462,7 +2462,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
         XML_SetUserData(m_xml_parser, (void*)this);
         XML_SetElementHandler(m_xml_parser, start_handler, end_handler);
-        XML_SetCharacterDataHandler(m_xml_parser, _BBS_3MF_Importer::_handle_xml_characters);
+        XML_SetCharacterDataHandler(m_xml_parser, _PRUSA_3MF_Importer::_handle_xml_characters);
         XML_SetEntityDeclHandler(m_xml_parser, nullptr);
         XML_SetExternalEntityRefHandler(m_xml_parser, nullptr);
 
@@ -2488,7 +2488,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_extract_model_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
+    bool _PRUSA_3MF_Importer::_extract_model_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
     {
         if (stat.m_uncomp_size == 0) {
             add_error("Found invalid size");
@@ -2504,18 +2504,18 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
 
         XML_SetUserData(m_xml_parser, (void*)this);
-        XML_SetElementHandler(m_xml_parser, _BBS_3MF_Importer::_handle_start_model_xml_element, _BBS_3MF_Importer::_handle_end_model_xml_element);
-        XML_SetCharacterDataHandler(m_xml_parser, _BBS_3MF_Importer::_handle_xml_characters);
+        XML_SetElementHandler(m_xml_parser, _PRUSA_3MF_Importer::_handle_start_model_xml_element, _PRUSA_3MF_Importer::_handle_end_model_xml_element);
+        XML_SetCharacterDataHandler(m_xml_parser, _PRUSA_3MF_Importer::_handle_xml_characters);
         XML_SetEntityDeclHandler(m_xml_parser, nullptr);
         XML_SetExternalEntityRefHandler(m_xml_parser, nullptr);
 
         struct CallbackData
         {
             XML_Parser& parser;
-            _BBS_3MF_Importer& importer;
+            _PRUSA_3MF_Importer& importer;
             const mz_zip_archive_file_stat& stat;
 
-            CallbackData(XML_Parser& parser, _BBS_3MF_Importer& importer, const mz_zip_archive_file_stat& stat) : parser(parser), importer(importer), stat(stat) {}
+            CallbackData(XML_Parser& parser, _PRUSA_3MF_Importer& importer, const mz_zip_archive_file_stat& stat) : parser(parser), importer(importer), stat(stat) {}
         };
 
         CallbackData data(m_xml_parser, *this, stat);
@@ -2555,7 +2555,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    void _BBS_3MF_Importer::_extract_cut_information_from_archive(mz_zip_archive &archive, const mz_zip_archive_file_stat &stat, ConfigSubstitutionContext &config_substitutions)
+    void _PRUSA_3MF_Importer::_extract_cut_information_from_archive(mz_zip_archive &archive, const mz_zip_archive_file_stat &stat, ConfigSubstitutionContext &config_substitutions)
     {
         if (stat.m_uncomp_size > 0) {
             std::string buffer((size_t)stat.m_uncomp_size, 0);
@@ -2614,7 +2614,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }
 
-    void _BBS_3MF_Importer::_extract_print_config_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, DynamicPrintConfig& config, ConfigSubstitutionContext& config_substitutions, const std::string& archive_filename)
+    void _PRUSA_3MF_Importer::_extract_print_config_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, DynamicPrintConfig& config, ConfigSubstitutionContext& config_substitutions, const std::string& archive_filename)
     {
         if (stat.m_uncomp_size > 0) {
             std::string buffer((size_t)stat.m_uncomp_size, 0);
@@ -2627,8 +2627,8 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }
 
-    //BBS: extract project config from json files
-    void _BBS_3MF_Importer::_extract_project_config_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, DynamicPrintConfig& config, ConfigSubstitutionContext& config_substitutions, Model& model)
+    // extract project config from json files
+    void _PRUSA_3MF_Importer::_extract_project_config_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, DynamicPrintConfig& config, ConfigSubstitutionContext& config_substitutions, Model& model)
     {
         if (stat.m_uncomp_size > 0) {
             const std::string& temp_path = model.get_backup_path();
@@ -2652,8 +2652,8 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }
 
-    //BBS: extract project embedded presets
-    void _BBS_3MF_Importer::_extract_project_embedded_presets_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, std::vector<Preset*>&project_presets, Model& model, Preset::Type type, bool use_json)
+    // extract project embedded presets
+    void _PRUSA_3MF_Importer::_extract_project_embedded_presets_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, std::vector<Preset*>&project_presets, Model& model, Preset::Type type, bool use_json)
     {
         if (stat.m_uncomp_size > 0) {
             /*std::string src_file = decode_path(stat.m_filename);
@@ -2725,13 +2725,13 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             preset->is_external = true;
             preset->is_dirty = false;
 
-            std::string version_str = key_values[BBL_JSON_KEY_VERSION];
+            std::string version_str = key_values[PRUSA_JSON_KEY_VERSION];
             boost::optional<Semver> version = Semver::parse(version_str);
             if (version) {
                 preset->version = *version;
             }
             else
-                preset->version = this->m_bambuslicer_generator_version?*this->m_bambuslicer_generator_version: Semver();
+                preset->version = this->m_prusaslicer_generator_version?*this->m_prusaslicer_generator_version: Semver();
             /*for (int i = 0; i < config_substitutions.size(); i++)
             {
                 //ConfigSubstitution config_substitution;
@@ -2750,7 +2750,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }
 
-    void _BBS_3MF_Importer::_extract_auxiliary_file_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, Model& model)
+    void _PRUSA_3MF_Importer::_extract_auxiliary_file_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, Model& model)
     {
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(", stat.m_uncomp_size is %1%")%stat.m_uncomp_size;
         if (stat.m_uncomp_size > 0) {
@@ -2795,7 +2795,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }
 
-    void _BBS_3MF_Importer::_extract_file_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
+    void _PRUSA_3MF_Importer::_extract_file_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
     {
         if (stat.m_uncomp_size > 0) {
             std::string src_file = decode_path(stat.m_filename);
@@ -2806,7 +2806,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 return;
             }
 
-            // BBS: use backup path
+            // use backup path
             //aux directory from model
             boost::filesystem::path dest_path = boost::filesystem::path(m_backup_path + "/" + src_file);
             std::string dest_zip_file = encode_path(dest_path.string().c_str());
@@ -2820,7 +2820,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return;
     }
 
-    void _BBS_3MF_Importer::_extract_layer_heights_profile_config_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
+    void _PRUSA_3MF_Importer::_extract_layer_heights_profile_config_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
     {
         if (stat.m_uncomp_size > 0) {
             std::string buffer((size_t)stat.m_uncomp_size, 0);
@@ -2882,7 +2882,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }
     
-    void _BBS_3MF_Importer::_extract_layer_config_ranges_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, ConfigSubstitutionContext& config_substitutions)
+    void _PRUSA_3MF_Importer::_extract_layer_config_ranges_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, ConfigSubstitutionContext& config_substitutions)
     {
         if (stat.m_uncomp_size > 0) {
             std::string buffer((size_t)stat.m_uncomp_size, 0);
@@ -2940,7 +2940,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }
 
-    void _BBS_3MF_Importer::_extract_brim_ear_points_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
+    void _PRUSA_3MF_Importer::_extract_brim_ear_points_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
     {
         if (stat.m_uncomp_size > 0) {
             std::string buffer((size_t)stat.m_uncomp_size, 0);
@@ -2956,7 +2956,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             std::vector<std::string> objects;
             boost::split(objects, buffer, boost::is_any_of("\n"), boost::token_compress_off);
 
-            // Info on format versioning - see bbs_3mf.hpp
+            // Info on format versioning - see prusa_3mf.hpp
             int version = 0;
             std::string key("brim_points_format_version=");
             if (!objects.empty() && objects[0].find(key) != std::string::npos) {
@@ -3011,7 +3011,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }
     /*
-    void _BBS_3MF_Importer::_extract_sla_support_points_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
+    void _PRUSA_3MF_Importer::_extract_sla_support_points_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
     {
         if (stat.m_uncomp_size > 0) {
             std::string buffer((size_t)stat.m_uncomp_size, 0);
@@ -3093,7 +3093,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }
 
-    void _BBS_3MF_Importer::_extract_sla_drain_holes_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
+    void _PRUSA_3MF_Importer::_extract_sla_drain_holes_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
     {
         if (stat.m_uncomp_size > 0) {
             std::string buffer(size_t(stat.m_uncomp_size), 0);
@@ -3178,7 +3178,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }*/
 
-    void _BBS_3MF_Importer::_extract_embossed_svg_shape_file(const std::string &filename, mz_zip_archive &archive, const mz_zip_archive_file_stat &stat){
+    void _PRUSA_3MF_Importer::_extract_embossed_svg_shape_file(const std::string &filename, mz_zip_archive &archive, const mz_zip_archive_file_stat &stat){
         assert(m_path_to_emboss_shape_files.find(filename) == m_path_to_emboss_shape_files.end());
         auto file = std::make_unique<std::string>(stat.m_uncomp_size, '\0');
         mz_bool res  = mz_zip_reader_extract_to_mem(&archive, stat.m_file_index, (void *) file->data(), stat.m_uncomp_size, 0);
@@ -3204,9 +3204,9 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }
 
-    void _BBS_3MF_Importer::_extract_custom_gcode_per_print_z_from_archive(::mz_zip_archive &archive, const mz_zip_archive_file_stat &stat)
+    void _PRUSA_3MF_Importer::_extract_custom_gcode_per_print_z_from_archive(::mz_zip_archive &archive, const mz_zip_archive_file_stat &stat)
     {
-        //BBS: add plate tree related logic
+        // add plate tree related logic
         if (stat.m_uncomp_size > 0) {
             std::string buffer((size_t)stat.m_uncomp_size, 0);
             mz_bool res = mz_zip_reader_extract_file_to_mem(&archive, stat.m_filename, (void*)buffer.data(), (size_t)stat.m_uncomp_size, 0);
@@ -3290,7 +3290,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }
 
-    void _BBS_3MF_Importer::_extract_filament_sequence_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
+    void _PRUSA_3MF_Importer::_extract_filament_sequence_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
     {
         if (stat.m_uncomp_size == 0) {
             add_error("Error while reading filament sequence data to buffer");
@@ -3346,7 +3346,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }
 
-    void _BBS_3MF_Importer::_handle_start_model_xml_element(const char* name, const char** attributes)
+    void _PRUSA_3MF_Importer::_handle_start_model_xml_element(const char* name, const char** attributes)
     {
         if (m_xml_parser == nullptr)
             return;
@@ -3389,7 +3389,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             _stop_xml_parser();
     }
 
-    void _BBS_3MF_Importer::_handle_end_model_xml_element(const char* name)
+    void _PRUSA_3MF_Importer::_handle_end_model_xml_element(const char* name)
     {
         if (m_xml_parser == nullptr)
             return;
@@ -3431,12 +3431,12 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             _stop_xml_parser();
     }
 
-    void _BBS_3MF_Importer::_handle_xml_characters(const XML_Char* s, int len)
+    void _PRUSA_3MF_Importer::_handle_xml_characters(const XML_Char* s, int len)
     {
         m_curr_characters.append(s, len);
     }
 
-    void _BBS_3MF_Importer::_handle_start_config_xml_element(const char* name, const char** attributes)
+    void _PRUSA_3MF_Importer::_handle_start_config_xml_element(const char* name, const char** attributes)
     {
         if (m_xml_parser == nullptr)
             return;
@@ -3479,7 +3479,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             _stop_xml_parser();
     }
 
-    void _BBS_3MF_Importer::_handle_end_config_xml_element(const char* name)
+    void _PRUSA_3MF_Importer::_handle_end_config_xml_element(const char* name)
     {
         if (m_xml_parser == nullptr)
             return;
@@ -3513,16 +3513,16 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             _stop_xml_parser();
     }
 
-    bool _BBS_3MF_Importer::_handle_start_model(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_model(const char** attributes, unsigned int num_attributes)
     {
-        m_unit_factor = bbs_get_unit_factor(bbs_get_attribute_value_string(attributes, num_attributes, UNIT_ATTR));
+        m_unit_factor = prusa_get_unit_factor(prusa_get_attribute_value_string(attributes, num_attributes, UNIT_ATTR));
 
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_model()
+    bool _PRUSA_3MF_Importer::_handle_end_model()
     {
-        // BBS: Production Extension
+        // Production Extension
         if (!m_sub_model_path.empty())
             return true;
 
@@ -3542,8 +3542,8 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             m_index_paths.insert({ object.first.second, object.first.first});
         }
 
-        if (!m_is_bbl_3mf) {
-            // if the 3mf was not produced by OrcaSlicer and there is only one object,
+        if (!m_is_prusa_3mf) {
+            // If the 3mf was not produced by a slicer family and there is only one object,
             // set the object name to match the filename
             if (m_model->objects.size() == 1)
                 m_model->objects.front()->name = m_name;
@@ -3559,19 +3559,19 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_resources(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_resources(const char** attributes, unsigned int num_attributes)
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_resources()
+    bool _PRUSA_3MF_Importer::_handle_end_resources()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_object(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_object(const char** attributes, unsigned int num_attributes)
     {
         // reset current object data
         if (m_curr_object) {
@@ -3579,9 +3579,9 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             m_curr_object = nullptr;
         }
 
-        std::string object_type = bbs_get_attribute_value_string(attributes, num_attributes, TYPE_ATTR);
+        std::string object_type = prusa_get_attribute_value_string(attributes, num_attributes, TYPE_ATTR);
 
-        if (bbs_is_valid_object_type(object_type)) {
+        if (prusa_is_valid_object_type(object_type)) {
             if (!m_curr_object) {
                 m_curr_object = new CurrentObject();
                 // create new object (it may be removed later if no instances are generated from it)
@@ -3593,20 +3593,20 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 }*/
             }
 
-            m_curr_object->id = bbs_get_attribute_value_int(attributes, num_attributes, ID_ATTR);
-            m_curr_object->name = bbs_get_attribute_value_string(attributes, num_attributes, NAME_ATTR);
+            m_curr_object->id = prusa_get_attribute_value_int(attributes, num_attributes, ID_ATTR);
+            m_curr_object->name = prusa_get_attribute_value_string(attributes, num_attributes, NAME_ATTR);
 
-            m_curr_object->uuid = bbs_get_attribute_value_string(attributes, num_attributes, PUUID_ATTR);
+            m_curr_object->uuid = prusa_get_attribute_value_string(attributes, num_attributes, PUUID_ATTR);
             if (m_curr_object->uuid.empty()) {
-                m_curr_object->uuid = bbs_get_attribute_value_string(attributes, num_attributes, PUUID_LOWER_ATTR);
+                m_curr_object->uuid = prusa_get_attribute_value_string(attributes, num_attributes, PUUID_LOWER_ATTR);
             }
-            m_curr_object->pid = bbs_get_attribute_value_int(attributes, num_attributes, PID_ATTR);
+            m_curr_object->pid = prusa_get_attribute_value_int(attributes, num_attributes, PID_ATTR);
         }
 
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_object()
+    bool _PRUSA_3MF_Importer::_handle_end_object()
     {
         if (!m_load_model) {
             delete m_curr_object;
@@ -3618,7 +3618,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             return false;
         }
         else {
-            if (m_is_bbl_3mf && boost::ends_with(m_curr_object->uuid, OBJECT_UUID_SUFFIX) && m_load_restore) {
+            if (m_is_prusa_3mf && boost::ends_with(m_curr_object->uuid, OBJECT_UUID_SUFFIX) && m_load_restore) {
                 // Adjust backup object/volume id
                 std::istringstream iss(m_curr_object->uuid);
                 int backup_id;
@@ -3715,32 +3715,32 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_color_group(const char **attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_color_group(const char **attributes, unsigned int num_attributes)
     {
-        m_current_color_group = bbs_get_attribute_value_int(attributes, num_attributes, ID_ATTR);
+        m_current_color_group = prusa_get_attribute_value_int(attributes, num_attributes, ID_ATTR);
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_color_group()
+    bool _PRUSA_3MF_Importer::_handle_end_color_group()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_color(const char **attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_color(const char **attributes, unsigned int num_attributes)
     {
-        std::string color = bbs_get_attribute_value_string(attributes, num_attributes, COLOR_ATTR);
+        std::string color = prusa_get_attribute_value_string(attributes, num_attributes, COLOR_ATTR);
         m_group_id_to_color[m_current_color_group] = color;
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_color()
+    bool _PRUSA_3MF_Importer::_handle_end_color()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_mesh(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_mesh(const char** attributes, unsigned int num_attributes)
     {
         // reset current geometry
         if (m_curr_object)
@@ -3748,13 +3748,13 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_mesh()
+    bool _PRUSA_3MF_Importer::_handle_end_mesh()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_vertices(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_vertices(const char** attributes, unsigned int num_attributes)
     {
         // reset current vertices
         if (m_curr_object)
@@ -3762,31 +3762,31 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_vertices()
+    bool _PRUSA_3MF_Importer::_handle_end_vertices()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_vertex(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_vertex(const char** attributes, unsigned int num_attributes)
     {
         // appends the vertex coordinates
         // missing values are set equal to ZERO
         if (m_curr_object)
             m_curr_object->geometry.vertices.emplace_back(
-                m_unit_factor * bbs_get_attribute_value_float(attributes, num_attributes, X_ATTR),
-                m_unit_factor * bbs_get_attribute_value_float(attributes, num_attributes, Y_ATTR),
-                m_unit_factor * bbs_get_attribute_value_float(attributes, num_attributes, Z_ATTR));
+                m_unit_factor * prusa_get_attribute_value_float(attributes, num_attributes, X_ATTR),
+                m_unit_factor * prusa_get_attribute_value_float(attributes, num_attributes, Y_ATTR),
+                m_unit_factor * prusa_get_attribute_value_float(attributes, num_attributes, Z_ATTR));
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_vertex()
+    bool _PRUSA_3MF_Importer::_handle_end_vertex()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_triangles(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_triangles(const char** attributes, unsigned int num_attributes)
     {
         // reset current triangles
         if (m_curr_object)
@@ -3794,13 +3794,13 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_triangles()
+    bool _PRUSA_3MF_Importer::_handle_end_triangles()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_triangle(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_triangle(const char** attributes, unsigned int num_attributes)
     {
         // we are ignoring the following attributes:
         // p1
@@ -3813,27 +3813,27 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         // missing values are set equal to ZERO
         if (m_curr_object) {
             m_curr_object->geometry.triangles.emplace_back(
-                bbs_get_attribute_value_int(attributes, num_attributes, V1_ATTR),
-                bbs_get_attribute_value_int(attributes, num_attributes, V2_ATTR),
-                bbs_get_attribute_value_int(attributes, num_attributes, V3_ATTR));
+                prusa_get_attribute_value_int(attributes, num_attributes, V1_ATTR),
+                prusa_get_attribute_value_int(attributes, num_attributes, V2_ATTR),
+                prusa_get_attribute_value_int(attributes, num_attributes, V3_ATTR));
 
-            m_curr_object->geometry.custom_supports.push_back(bbs_get_attribute_value_string(attributes, num_attributes, CUSTOM_SUPPORTS_ATTR));
-            m_curr_object->geometry.custom_seam.push_back(bbs_get_attribute_value_string(attributes, num_attributes, CUSTOM_SEAM_ATTR));
-            m_curr_object->geometry.mmu_segmentation.push_back(bbs_get_attribute_value_string(attributes, num_attributes, MMU_SEGMENTATION_ATTR));
-            m_curr_object->geometry.fuzzy_skin.push_back(bbs_get_attribute_value_string(attributes, num_attributes, CUSTOM_FUZZY_SKIN_ATTR));
-            // BBS
-            m_curr_object->geometry.face_properties.push_back(bbs_get_attribute_value_string(attributes, num_attributes, FACE_PROPERTY_ATTR));
+            m_curr_object->geometry.custom_supports.push_back(prusa_get_attribute_value_string(attributes, num_attributes, CUSTOM_SUPPORTS_ATTR));
+            m_curr_object->geometry.custom_seam.push_back(prusa_get_attribute_value_string(attributes, num_attributes, CUSTOM_SEAM_ATTR));
+            m_curr_object->geometry.mmu_segmentation.push_back(prusa_get_attribute_value_string(attributes, num_attributes, MMU_SEGMENTATION_ATTR));
+            m_curr_object->geometry.fuzzy_skin.push_back(prusa_get_attribute_value_string(attributes, num_attributes, CUSTOM_FUZZY_SKIN_ATTR));
+            // PRUSA
+            m_curr_object->geometry.face_properties.push_back(prusa_get_attribute_value_string(attributes, num_attributes, FACE_PROPERTY_ATTR));
         }
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_triangle()
+    bool _PRUSA_3MF_Importer::_handle_end_triangle()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_components(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_components(const char** attributes, unsigned int num_attributes)
     {
         // reset current components
         if (m_curr_object)
@@ -3841,17 +3841,17 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_components()
+    bool _PRUSA_3MF_Importer::_handle_end_components()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_component(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_component(const char** attributes, unsigned int num_attributes)
     {
-        std::string path      = xml_unescape(bbs_get_attribute_value_string(attributes, num_attributes, PPATH_ATTR));
-        int         object_id = bbs_get_attribute_value_int(attributes, num_attributes, OBJECTID_ATTR);
-        Transform3d transform = bbs_get_transform_from_3mf_specs_string(bbs_get_attribute_value_string(attributes, num_attributes, TRANSFORM_ATTR));
+        std::string path      = xml_unescape(prusa_get_attribute_value_string(attributes, num_attributes, PPATH_ATTR));
+        int         object_id = prusa_get_attribute_value_int(attributes, num_attributes, OBJECTID_ATTR);
+        Transform3d transform = prusa_get_transform_from_3mf_specs_string(prusa_get_attribute_value_string(attributes, num_attributes, TRANSFORM_ATTR));
 
         /*Id id = std::make_pair(m_sub_model_path, object_id);
         IdToModelObjectMap::iterator object_item = m_objects.find(id);
@@ -3871,25 +3871,25 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_component()
+    bool _PRUSA_3MF_Importer::_handle_end_component()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_build(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_build(const char** attributes, unsigned int num_attributes)
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_build()
+    bool _PRUSA_3MF_Importer::_handle_end_build()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_item(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_item(const char** attributes, unsigned int num_attributes)
     {
         // we are ignoring the following attributes
         // thumbnail
@@ -3898,26 +3898,26 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         // pindex
         // see specifications
 
-        int object_id = bbs_get_attribute_value_int(attributes, num_attributes, OBJECTID_ATTR);
-        std::string path = bbs_get_attribute_value_string(attributes, num_attributes, PPATH_ATTR);
-        Transform3d transform = bbs_get_transform_from_3mf_specs_string(bbs_get_attribute_value_string(attributes, num_attributes, TRANSFORM_ATTR));
-        int printable = bbs_get_attribute_value_bool(attributes, num_attributes, PRINTABLE_ATTR);
-        int auto_drop = bbs_get_attribute_value_bool(attributes, num_attributes, AUTO_DROP_ATTR);
+        int object_id = prusa_get_attribute_value_int(attributes, num_attributes, OBJECTID_ATTR);
+        std::string path = prusa_get_attribute_value_string(attributes, num_attributes, PPATH_ATTR);
+        Transform3d transform = prusa_get_transform_from_3mf_specs_string(prusa_get_attribute_value_string(attributes, num_attributes, TRANSFORM_ATTR));
+        int printable = prusa_get_attribute_value_bool(attributes, num_attributes, PRINTABLE_ATTR);
+        int auto_drop = prusa_get_attribute_value_bool(attributes, num_attributes, AUTO_DROP_ATTR);
 
         return !m_load_model || _create_object_instance(path, object_id, transform, printable, auto_drop, 1);
     }
 
-    bool _BBS_3MF_Importer::_handle_end_item()
+    bool _PRUSA_3MF_Importer::_handle_end_item()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_metadata(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_metadata(const char** attributes, unsigned int num_attributes)
     {
         m_curr_characters.clear();
 
-        std::string name = bbs_get_attribute_value_string(attributes, num_attributes, NAME_ATTR);
+        std::string name = prusa_get_attribute_value_string(attributes, num_attributes, NAME_ATTR);
         if (!name.empty()) {
             m_curr_metadata_name = name;
         }
@@ -3931,97 +3931,93 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             throw version_error(error_msg);
     }
 
-    bool _BBS_3MF_Importer::_handle_end_metadata()
+    bool _PRUSA_3MF_Importer::_handle_end_metadata()
     {
-        if ((m_curr_metadata_name == BBS_3MF_VERSION)||(m_curr_metadata_name == BBS_3MF_VERSION1)) {
-            //m_is_bbl_3mf = true;
+        if ((m_curr_metadata_name == PRUSA_3MF_VERSION)||(m_curr_metadata_name == PRUSA_3MF_VERSION1)) {
+            //m_is_prusa_3mf = true;
             m_version = (unsigned int)atoi(m_curr_characters.c_str());
-            /*if (m_check_version && (m_version > VERSION_BBS_3MF_COMPATIBLE)) {
+            /*if (m_check_version && (m_version > VERSION_PRUSA_3MF_COMPATIBLE)) {
                 // std::string msg = _(L("The selected 3mf file has been saved with a newer version of " + std::string(SLIC3R_APP_NAME) + " and is not compatible."));
                 // throw version_error(msg.c_str());
                 const std::string msg = (boost::format(_(L("The selected 3mf file has been saved with a newer version of %1% and is not compatible."))) % std::string(SLIC3R_APP_NAME)).str();
                 throw version_error(msg);
             }*/
-        } else if (m_curr_metadata_name == BBL_APPLICATION_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_APPLICATION_TAG) {
             // Generator application of the 3MF.
-            // SLIC3R_APP_KEY - SoftFever_VERSION
-            if (boost::starts_with(m_curr_characters, "BambuStudio-")) {
-                m_is_bbl_3mf = true;
-                m_bambuslicer_generator_version = Semver::parse(m_curr_characters.substr(12));
+            // SLIC3R_APP_KEY - SLIC3R_VERSION
+            if (boost::starts_with(m_curr_characters, "PrusaSlicer-")) {
+                m_is_prusa_3mf = true;
+                m_prusaslicer_generator_version = Semver::parse(m_curr_characters.substr(12));
             }
-            else if (boost::starts_with(m_curr_characters, "OrcaSlicer-")) {
-                m_is_bbl_3mf = true;
-                m_bambuslicer_generator_version = Semver::parse(m_curr_characters.substr(11));
-            }
-        } else if (m_curr_metadata_name == ORCASLICER_TAG) {
-            // OrcaSlicer version tag (written from OrcaSlicer 2.3.2 onwards)
-            m_orca_slicer_version = Semver::parse(m_curr_characters);
-            if (m_orca_slicer_version) {
-                m_is_bbl_3mf = true;
+        } else if (m_curr_metadata_name == PRUSA_SLIC3R_TAG) {
+            // 3MF version tag (written from version 2.3.2 onwards)
+            m_prusa_slicer_version = Semver::parse(m_curr_characters);
+            if (m_prusa_slicer_version) {
+                m_is_prusa_3mf = true;
             }
         //TODO: currently use version 0, no need to load&&save this string
-        /*} else if (m_curr_metadata_name == BBS_FDM_SUPPORTS_PAINTING_VERSION) {
+        /*} else if (m_curr_metadata_name == PRUSA_FDM_SUPPORTS_PAINTING_VERSION) {
             m_fdm_supports_painting_version = (unsigned int) atoi(m_curr_characters.c_str());
             check_painting_version(m_fdm_supports_painting_version, FDM_SUPPORTS_PAINTING_VERSION,
-                _(L("The selected 3MF contains FDM supports painted object using a newer version of OrcaSlicer and is not compatible.")));
-        } else if (m_curr_metadata_name == BBS_SEAM_PAINTING_VERSION) {
+                _(L("The selected 3MF contains FDM supports painted object using a newer version of PrusaSlicer and is not compatible.")));
+        } else if (m_curr_metadata_name == PRUSA_SEAM_PAINTING_VERSION) {
             m_seam_painting_version = (unsigned int) atoi(m_curr_characters.c_str());
             check_painting_version(m_seam_painting_version, SEAM_PAINTING_VERSION,
-                _(L("The selected 3MF contains seam painted object using a newer version of OrcaSlicer and is not compatible.")));
-        } else if (m_curr_metadata_name == BBS_MM_PAINTING_VERSION) {
+                _(L("The selected 3MF contains seam painted object using a newer version of PrusaSlicer and is not compatible.")));
+        } else if (m_curr_metadata_name == PRUSA_MM_PAINTING_VERSION) {
             m_mm_painting_version = (unsigned int) atoi(m_curr_characters.c_str());
             check_painting_version(m_mm_painting_version, MM_PAINTING_VERSION,
-                _(L("The selected 3MF contains multi-material painted object using a newer version of OrcaSlicer and is not compatible.")));*/
-        } else if (m_curr_metadata_name == BBL_MODEL_ID_TAG) {
+                _(L("The selected 3MF contains multi-material painted object using a newer version of PrusaSlicer and is not compatible.")));*/
+        } else if (m_curr_metadata_name == PRUSA_MODEL_ID_TAG) {
             m_model_id = xml_unescape(m_curr_characters);
-        } else if (m_curr_metadata_name == BBL_MODEL_NAME_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_MODEL_NAME_TAG) {
             BOOST_LOG_TRIVIAL(trace) << "design_info, load_3mf found model name = " << m_curr_characters;
             model_info.model_name = xml_unescape(m_curr_characters);
-        } else if (m_curr_metadata_name == BBL_ORIGIN_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_ORIGIN_TAG) {
             BOOST_LOG_TRIVIAL(trace) << "design_info, load_3mf found model name = " << m_curr_characters;
             model_info.origin = xml_unescape(m_curr_characters);
-        } else if (m_curr_metadata_name == BBL_DESIGNER_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_DESIGNER_TAG) {
             BOOST_LOG_TRIVIAL(trace) << "design_info, load_3mf found designer = " << m_curr_characters;
             m_designer = xml_unescape(m_curr_characters);
-        } else if (m_curr_metadata_name == BBL_DESIGNER_USER_ID_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_DESIGNER_USER_ID_TAG) {
             BOOST_LOG_TRIVIAL(trace) << "design_info, load_3mf found designer_user_id = " << m_curr_characters;
             m_designer_user_id = xml_unescape(m_curr_characters);
-        } else if (m_curr_metadata_name == BBL_DESIGNER_COVER_FILE_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_DESIGNER_COVER_FILE_TAG) {
             BOOST_LOG_TRIVIAL(trace) << "design_info, load_3mf found designer_cover = " << m_curr_characters;
             model_info.cover_file = xml_unescape(m_curr_characters);
-        } else if (m_curr_metadata_name == BBL_DESCRIPTION_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_DESCRIPTION_TAG) {
             BOOST_LOG_TRIVIAL(trace) << "design_info, load_3mf found description = " << m_curr_characters;
             model_info.description = xml_unescape(m_curr_characters);
-        } else if (m_curr_metadata_name == BBL_LICENSE_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_LICENSE_TAG) {
             BOOST_LOG_TRIVIAL(trace) << "design_info, load_3mf found license = " << m_curr_characters;
             model_info.license = xml_unescape(m_curr_characters);
-        } else if (m_curr_metadata_name == BBL_COPYRIGHT_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_COPYRIGHT_TAG) {
             BOOST_LOG_TRIVIAL(trace) << "design_info, load_3mf found CopyRight = " << m_curr_characters;
             model_info.copyright = xml_unescape(m_curr_characters);
-        } else if (m_curr_metadata_name == BBL_COPYRIGHT_NORMATIVE_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_COPYRIGHT_NORMATIVE_TAG) {
             BOOST_LOG_TRIVIAL(trace) << "design_info, load_3mf found Copyright = " << m_curr_characters;
             model_info.copyright = xml_unescape(m_curr_characters);
-        } else if (m_curr_metadata_name == BBL_REGION_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_REGION_TAG) {
             BOOST_LOG_TRIVIAL(trace) << "design_info, load_3mf found region = " << m_curr_characters;
             m_contry_code = xml_unescape(m_curr_characters);
-        } else if (m_curr_metadata_name == BBL_PROFILE_TITLE_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_PROFILE_TITLE_TAG) {
             BOOST_LOG_TRIVIAL(trace) << "design_info, load_3mf found profile_title = " << m_curr_characters;
             m_profile_title = xml_unescape(m_curr_characters);
-        } else if (m_curr_metadata_name == BBL_PROFILE_COVER_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_PROFILE_COVER_TAG) {
             BOOST_LOG_TRIVIAL(trace) << "design_info, load_3mf found profile_cover = " << m_curr_characters;
             m_profile_cover = xml_unescape(m_curr_characters);
-        } else if (m_curr_metadata_name == BBL_PROFILE_DESCRIPTION_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_PROFILE_DESCRIPTION_TAG) {
             BOOST_LOG_TRIVIAL(trace) << "design_info, load_3mf found profile_description = " << m_curr_characters;
             m_Profile_description = xml_unescape(m_curr_characters);
-        } else if (m_curr_metadata_name == BBL_PROFILE_USER_ID_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_PROFILE_USER_ID_TAG) {
             BOOST_LOG_TRIVIAL(trace) << "design_info, load_3mf found profile_user_id = " << m_curr_characters;
             m_profile_user_id = xml_unescape(m_curr_characters);
-        }else if (m_curr_metadata_name == BBL_PROFILE_USER_NAME_TAG) {
+        }else if (m_curr_metadata_name == PRUSA_PROFILE_USER_NAME_TAG) {
             BOOST_LOG_TRIVIAL(trace) << "design_info, load_3mf found profile_user_name = " << m_curr_characters;
             m_profile_user_name = xml_unescape(m_curr_characters);
-        } else if (m_curr_metadata_name == BBL_CREATION_DATE_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_CREATION_DATE_TAG) {
             ;
-        } else if (m_curr_metadata_name == BBL_MODIFICATION_TAG) {
+        } else if (m_curr_metadata_name == PRUSA_MODIFICATION_TAG) {
             ;
         } else {
             ;
@@ -4069,7 +4065,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         static EmbossShape read_old(const char **attributes, unsigned int num_attributes);
     };
 
-    bool _BBS_3MF_Importer::_handle_start_text_configuration(const char **attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_text_configuration(const char **attributes, unsigned int num_attributes)
     {
         IdToMetadataMap::iterator object = m_objects_metadata.find(m_curr_config.object_id);
         if (object == m_objects_metadata.end()) {
@@ -4098,7 +4094,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
     static void                       to_xml(std::stringstream &stream, const EmbossShape &es, const ModelVolume &volume, mz_zip_archive &archive,bool export_full_path);
     static std::optional<EmbossShape> read_emboss_shape(const char **attributes, unsigned int num_attributes);
 
-    bool _BBS_3MF_Importer::_handle_start_shape_configuration(const char **attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_shape_configuration(const char **attributes, unsigned int num_attributes)
     {
         IdToMetadataMap::iterator object = m_objects_metadata.find(m_curr_config.object_id);
         if (object == m_objects_metadata.end()) {
@@ -4132,7 +4128,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_create_object_instance(std::string const & path, int object_id, const Transform3d& transform, const bool printable, const bool auto_drop, unsigned int recur_counter)
+    bool _PRUSA_3MF_Importer::_create_object_instance(std::string const & path, int object_id, const Transform3d& transform, const bool printable, const bool auto_drop, unsigned int recur_counter)
     {
         static const unsigned int MAX_RECURSIONS = 10;
 
@@ -4173,7 +4169,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
             m_instances.emplace_back(instance, transform);
 
-            if (m_is_bbl_3mf && boost::ends_with(current_object.uuid, OBJECT_UUID_SUFFIX)) {
+            if (m_is_prusa_3mf && boost::ends_with(current_object.uuid, OBJECT_UUID_SUFFIX)) {
                 std::istringstream iss(current_object.uuid);
                 int backup_id;
                 if (iss >> std::hex >> backup_id) {
@@ -4237,7 +4233,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    void _BBS_3MF_Importer::_apply_transform(ModelInstance& instance, const Transform3d& transform)
+    void _PRUSA_3MF_Importer::_apply_transform(ModelInstance& instance, const Transform3d& transform)
     {
         Slic3r::Geometry::Transformation t(transform);
         // invalid scale value, return
@@ -4247,23 +4243,23 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         instance.set_transformation(t);
     }
 
-    bool _BBS_3MF_Importer::_handle_start_config(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_config(const char** attributes, unsigned int num_attributes)
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_config()
+    bool _PRUSA_3MF_Importer::_handle_end_config()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_config_object(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_config_object(const char** attributes, unsigned int num_attributes)
     {
         if (m_parsing_slice_info)
             return true;
-        int object_id = bbs_get_attribute_value_int(attributes, num_attributes, ID_ATTR);
+        int object_id = prusa_get_attribute_value_int(attributes, num_attributes, ID_ATTR);
         IdToMetadataMap::iterator object_item = m_objects_metadata.find(object_id);
         if (object_item != m_objects_metadata.end()) {
             add_error("Duplicated object id: " + std::to_string(object_id) + " in model_settings.config");
@@ -4271,20 +4267,20 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
 
         // Added because of github #3435, currently not used by PrusaSlicer
-        // int instances_count_id = bbs_get_attribute_value_int(attributes, num_attributes, INSTANCESCOUNT_ATTR);
+        // int instances_count_id = prusa_get_attribute_value_int(attributes, num_attributes, INSTANCESCOUNT_ATTR);
 
         m_objects_metadata.insert({ object_id, ObjectMetadata() });
         m_curr_config.object_id = object_id;
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_config_object()
+    bool _PRUSA_3MF_Importer::_handle_end_config_object()
     {
         m_curr_config.object_id = -1;
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_config_volume(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_config_volume(const char** attributes, unsigned int num_attributes)
     {
         IdToMetadataMap::iterator object = m_objects_metadata.find(m_curr_config.object_id);
         if (object == m_objects_metadata.end()) {
@@ -4294,14 +4290,14 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
         m_curr_config.volume_id = (int)object->second.volumes.size();
 
-        unsigned int first_triangle_id = (unsigned int)bbs_get_attribute_value_int(attributes, num_attributes, FIRST_TRIANGLE_ID_ATTR);
-        unsigned int last_triangle_id = (unsigned int)bbs_get_attribute_value_int(attributes, num_attributes, LAST_TRIANGLE_ID_ATTR);
+        unsigned int first_triangle_id = (unsigned int)prusa_get_attribute_value_int(attributes, num_attributes, FIRST_TRIANGLE_ID_ATTR);
+        unsigned int last_triangle_id = (unsigned int)prusa_get_attribute_value_int(attributes, num_attributes, LAST_TRIANGLE_ID_ATTR);
 
-        //BBS: refine the part type logic
-        std::string subtype_str = bbs_get_attribute_value_string(attributes, num_attributes, SUBTYPE_ATTR);
+        // refine the part type logic
+        std::string subtype_str = prusa_get_attribute_value_string(attributes, num_attributes, SUBTYPE_ATTR);
         ModelVolumeType type = ModelVolume::type_from_string(subtype_str);
 
-        int subbject_id = bbs_get_attribute_value_int(attributes, num_attributes, ID_ATTR);
+        int subbject_id = prusa_get_attribute_value_int(attributes, num_attributes, ID_ATTR);
 
         if (last_triangle_id > 0)
             object->second.volumes.emplace_back(first_triangle_id, last_triangle_id, type);
@@ -4310,7 +4306,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_config_volume_mesh(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_config_volume_mesh(const char** attributes, unsigned int num_attributes)
     {
         IdToMetadataMap::iterator object = m_objects_metadata.find(m_curr_config.object_id);
         if (object == m_objects_metadata.end()) {
@@ -4324,34 +4320,34 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
         ObjectMetadata::VolumeMetadata& volume = object->second.volumes[m_curr_config.volume_id];
 
-        int edges_fixed         = bbs_get_attribute_value_int(attributes, num_attributes, MESH_STAT_EDGES_FIXED       );
-        int degenerate_facets   = bbs_get_attribute_value_int(attributes, num_attributes, MESH_STAT_DEGENERATED_FACETS);
-        int facets_removed      = bbs_get_attribute_value_int(attributes, num_attributes, MESH_STAT_FACETS_REMOVED    );
-        int facets_reversed     = bbs_get_attribute_value_int(attributes, num_attributes, MESH_STAT_FACETS_RESERVED   );
-        int backwards_edges     = bbs_get_attribute_value_int(attributes, num_attributes, MESH_STAT_BACKWARDS_EDGES   );
+        int edges_fixed         = prusa_get_attribute_value_int(attributes, num_attributes, MESH_STAT_EDGES_FIXED       );
+        int degenerate_facets   = prusa_get_attribute_value_int(attributes, num_attributes, MESH_STAT_DEGENERATED_FACETS);
+        int facets_removed      = prusa_get_attribute_value_int(attributes, num_attributes, MESH_STAT_FACETS_REMOVED    );
+        int facets_reversed     = prusa_get_attribute_value_int(attributes, num_attributes, MESH_STAT_FACETS_RESERVED   );
+        int backwards_edges     = prusa_get_attribute_value_int(attributes, num_attributes, MESH_STAT_BACKWARDS_EDGES   );
 
         volume.mesh_stats = { edges_fixed, degenerate_facets, facets_removed, facets_reversed, backwards_edges };
 
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_config_volume()
+    bool _PRUSA_3MF_Importer::_handle_end_config_volume()
     {
         m_curr_config.volume_id = -1;
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_config_volume_mesh()
+    bool _PRUSA_3MF_Importer::_handle_end_config_volume_mesh()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_config_metadata(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_config_metadata(const char** attributes, unsigned int num_attributes)
     {
-        //std::string type = bbs_get_attribute_value_string(attributes, num_attributes, TYPE_ATTR);
-        std::string key = bbs_get_attribute_value_string(attributes, num_attributes, KEY_ATTR);
-        std::string value = bbs_get_attribute_value_string(attributes, num_attributes, VALUE_ATTR);
+        //std::string type = prusa_get_attribute_value_string(attributes, num_attributes, TYPE_ATTR);
+        std::string key = prusa_get_attribute_value_string(attributes, num_attributes, KEY_ATTR);
+        std::string value = prusa_get_attribute_value_string(attributes, num_attributes, VALUE_ATTR);
         if (key.empty())
             return true;
 
@@ -4578,26 +4574,26 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_config_metadata()
+    bool _PRUSA_3MF_Importer::_handle_end_config_metadata()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_config_filament(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_config_filament(const char** attributes, unsigned int num_attributes)
     {
         if (m_curr_plater) {
-            std::string id = bbs_get_attribute_value_string(attributes, num_attributes, FILAMENT_ID_TAG);
-            std::string type = bbs_get_attribute_value_string(attributes, num_attributes, FILAMENT_TYPE_TAG);
-            std::string color = bbs_get_attribute_value_string(attributes, num_attributes, FILAMENT_COLOR_TAG);
-            std::string used_m = bbs_get_attribute_value_string(attributes, num_attributes, FILAMENT_USED_M_TAG);
-            std::string used_g = bbs_get_attribute_value_string(attributes, num_attributes, FILAMENT_USED_G_TAG);
-            std::string filament_id = bbs_get_attribute_value_string(attributes, num_attributes, FILAMENT_TRAY_INFO_ID_TAG);
-            std::string used_for_object = bbs_get_attribute_value_string(attributes, num_attributes, FILAMENT_USED_FOR_OBJECT);
-            std::string used_for_support = bbs_get_attribute_value_string(attributes, num_attributes, FILAMENT_USED_FOR_SUPPORT);
-            std::string group_id = bbs_get_attribute_value_string(attributes, num_attributes, FILAMENT_NOZZLE_GROUP_ID_TAG);
-            std::string nozzle_diameter = bbs_get_attribute_value_string(attributes, num_attributes, FILAMENT_NOZZLE_DIAMETER_TAG);
-            std::string volume_type = bbs_get_attribute_value_string(attributes, num_attributes, FILAMENT_NOZZLE_VOLUME_TYPE_TAG);
+            std::string id = prusa_get_attribute_value_string(attributes, num_attributes, FILAMENT_ID_TAG);
+            std::string type = prusa_get_attribute_value_string(attributes, num_attributes, FILAMENT_TYPE_TAG);
+            std::string color = prusa_get_attribute_value_string(attributes, num_attributes, FILAMENT_COLOR_TAG);
+            std::string used_m = prusa_get_attribute_value_string(attributes, num_attributes, FILAMENT_USED_M_TAG);
+            std::string used_g = prusa_get_attribute_value_string(attributes, num_attributes, FILAMENT_USED_G_TAG);
+            std::string filament_id = prusa_get_attribute_value_string(attributes, num_attributes, FILAMENT_TRAY_INFO_ID_TAG);
+            std::string used_for_object = prusa_get_attribute_value_string(attributes, num_attributes, FILAMENT_USED_FOR_OBJECT);
+            std::string used_for_support = prusa_get_attribute_value_string(attributes, num_attributes, FILAMENT_USED_FOR_SUPPORT);
+            std::string group_id = prusa_get_attribute_value_string(attributes, num_attributes, FILAMENT_NOZZLE_GROUP_ID_TAG);
+            std::string nozzle_diameter = prusa_get_attribute_value_string(attributes, num_attributes, FILAMENT_NOZZLE_DIAMETER_TAG);
+            std::string volume_type = prusa_get_attribute_value_string(attributes, num_attributes, FILAMENT_NOZZLE_VOLUME_TYPE_TAG);
             FilamentInfo filament_info;
             filament_info.id = atoi(id.c_str()) - 1;
             filament_info.type = type;
@@ -4615,17 +4611,17 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_config_filament()
+    bool _PRUSA_3MF_Importer::_handle_end_config_filament()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_config_warning(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_config_warning(const char** attributes, unsigned int num_attributes)
     {
         if (m_curr_plater) {
-            std::string msg     = bbs_get_attribute_value_string(attributes, num_attributes, WARNING_MSG_TAG);
-            std::string lvl_str = bbs_get_attribute_value_string(attributes, num_attributes, "level");
+            std::string msg     = prusa_get_attribute_value_string(attributes, num_attributes, WARNING_MSG_TAG);
+            std::string lvl_str = prusa_get_attribute_value_string(attributes, num_attributes, "level");
             GCodeProcessorResult::SliceWarning sw;
             sw.msg = msg;
             try {
@@ -4639,13 +4635,13 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_config_warning()
+    bool _PRUSA_3MF_Importer::_handle_end_config_warning()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_config_plater(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_config_plater(const char** attributes, unsigned int num_attributes)
     {
         if (!m_parsing_slice_info) {
             m_curr_plater = new PlateData();
@@ -4654,7 +4650,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_config_plater()
+    bool _PRUSA_3MF_Importer::_handle_end_config_plater()
     {
         if (!m_curr_plater)
         {
@@ -4666,7 +4662,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_config_plater_instance(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_config_plater_instance(const char** attributes, unsigned int num_attributes)
     {
         if (!m_curr_plater)
         {
@@ -4678,7 +4674,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_config_plater_instance()
+    bool _PRUSA_3MF_Importer::_handle_end_config_plater_instance()
     {
         if (!m_curr_plater)
         {
@@ -4700,23 +4696,23 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_assemble(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_assemble(const char** attributes, unsigned int num_attributes)
     {
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_assemble()
+    bool _PRUSA_3MF_Importer::_handle_end_assemble()
     {
         //do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_assemble_item(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_assemble_item(const char** attributes, unsigned int num_attributes)
     {
         if (!m_load_model) return true;
 
-        int object_id = bbs_get_attribute_value_int(attributes, num_attributes, OBJECT_ID_ATTR);
-        int instance_id = bbs_get_attribute_value_int(attributes, num_attributes, INSTANCEID_ATTR);
+        int object_id = prusa_get_attribute_value_int(attributes, num_attributes, OBJECT_ID_ATTR);
+        int instance_id = prusa_get_attribute_value_int(attributes, num_attributes, INSTANCEID_ATTR);
 
         IndexToPathMap::iterator index_iter = m_index_paths.find(object_id);
         if (index_iter == m_index_paths.end()) {
@@ -4731,8 +4727,8 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
         object_id = object_item->second;
 
-        Transform3d transform = bbs_get_transform_from_3mf_specs_string(bbs_get_attribute_value_string(attributes, num_attributes, TRANSFORM_ATTR));
-        Vec3d ofs2ass = bbs_get_offset_from_3mf_specs_string(bbs_get_attribute_value_string(attributes, num_attributes, OFFSET_ATTR));
+        Transform3d transform = prusa_get_transform_from_3mf_specs_string(prusa_get_attribute_value_string(attributes, num_attributes, TRANSFORM_ATTR));
+        Vec3d ofs2ass = prusa_get_offset_from_3mf_specs_string(prusa_get_attribute_value_string(attributes, num_attributes, OFFSET_ATTR));
         if (object_id < m_model->objects.size()) {
             if (instance_id < m_model->objects[object_id]->instances.size()) {
                 m_model->objects[object_id]->instances[instance_id]->set_assemble_from_transform(transform);
@@ -4742,12 +4738,12 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_assemble_item()
+    bool _PRUSA_3MF_Importer::_handle_end_assemble_item()
     {
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_start_text_info_item(const char **attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_text_info_item(const char **attributes, unsigned int num_attributes)
     {
         IdToMetadataMap::iterator object = m_objects_metadata.find(m_curr_config.object_id);
         if (object == m_objects_metadata.end()) {
@@ -4766,32 +4762,32 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             return true;
         }
 
-        // TODO: Orca: support legacy text info
+        // TODO: Support legacy text info
         /*
         TextInfo text_info;
-        text_info.m_text      = xml_unescape(bbs_get_attribute_value_string(attributes, num_attributes, TEXT_ATTR));
-        text_info.m_font_name = bbs_get_attribute_value_string(attributes, num_attributes, FONT_NAME_ATTR);
+        text_info.m_text      = xml_unescape(prusa_get_attribute_value_string(attributes, num_attributes, TEXT_ATTR));
+        text_info.m_font_name = prusa_get_attribute_value_string(attributes, num_attributes, FONT_NAME_ATTR);
 
-        text_info.m_curr_font_idx = bbs_get_attribute_value_int(attributes, num_attributes, FONT_INDEX_ATTR);
+        text_info.m_curr_font_idx = prusa_get_attribute_value_int(attributes, num_attributes, FONT_INDEX_ATTR);
 
-        text_info.m_font_size = bbs_get_attribute_value_float(attributes, num_attributes, FONT_SIZE_ATTR);
-        text_info.m_thickness = bbs_get_attribute_value_float(attributes, num_attributes, THICKNESS_ATTR);
-        text_info.m_embeded_depth = bbs_get_attribute_value_float(attributes, num_attributes, EMBEDED_DEPTH_ATTR);
-        text_info.m_rotate_angle  = bbs_get_attribute_value_float(attributes, num_attributes, ROTATE_ANGLE_ATTR);
-        text_info.m_text_gap      = bbs_get_attribute_value_float(attributes, num_attributes, TEXT_GAP_ATTR);
+        text_info.m_font_size = prusa_get_attribute_value_float(attributes, num_attributes, FONT_SIZE_ATTR);
+        text_info.m_thickness = prusa_get_attribute_value_float(attributes, num_attributes, THICKNESS_ATTR);
+        text_info.m_embeded_depth = prusa_get_attribute_value_float(attributes, num_attributes, EMBEDED_DEPTH_ATTR);
+        text_info.m_rotate_angle  = prusa_get_attribute_value_float(attributes, num_attributes, ROTATE_ANGLE_ATTR);
+        text_info.m_text_gap      = prusa_get_attribute_value_float(attributes, num_attributes, TEXT_GAP_ATTR);
 
-        text_info.m_bold      = bbs_get_attribute_value_int(attributes, num_attributes, BOLD_ATTR);
-        text_info.m_italic    = bbs_get_attribute_value_int(attributes, num_attributes, ITALIC_ATTR);
-        text_info.m_is_surface_text = bbs_get_attribute_value_int(attributes, num_attributes, SURFACE_TEXT_ATTR);
-        text_info.m_keep_horizontal = bbs_get_attribute_value_int(attributes, num_attributes, KEEP_HORIZONTAL_ATTR);
+        text_info.m_bold      = prusa_get_attribute_value_int(attributes, num_attributes, BOLD_ATTR);
+        text_info.m_italic    = prusa_get_attribute_value_int(attributes, num_attributes, ITALIC_ATTR);
+        text_info.m_is_surface_text = prusa_get_attribute_value_int(attributes, num_attributes, SURFACE_TEXT_ATTR);
+        text_info.m_keep_horizontal = prusa_get_attribute_value_int(attributes, num_attributes, KEEP_HORIZONTAL_ATTR);
 
-        text_info.m_rr.mesh_id = bbs_get_attribute_value_int(attributes, num_attributes, HIT_MESH_ATTR);
+        text_info.m_rr.mesh_id = prusa_get_attribute_value_int(attributes, num_attributes, HIT_MESH_ATTR);
 
-        std::string hit_pos = bbs_get_attribute_value_string(attributes, num_attributes, HIT_POSITION_ATTR);
+        std::string hit_pos = prusa_get_attribute_value_string(attributes, num_attributes, HIT_POSITION_ATTR);
         if (!hit_pos.empty())
             text_info.m_rr.hit = get_vec3_from_string(hit_pos);
 
-        std::string hit_normal = bbs_get_attribute_value_string(attributes, num_attributes, HIT_NORMAL_ATTR);
+        std::string hit_normal = prusa_get_attribute_value_string(attributes, num_attributes, HIT_NORMAL_ATTR);
         if (!hit_normal.empty())
             text_info.m_rr.normal = get_vec3_from_string(hit_normal);
 
@@ -4799,26 +4795,26 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_handle_end_text_info_item()
+    bool _PRUSA_3MF_Importer::_handle_end_text_info_item()
     {
         return true;
     }
 
-    void XMLCALL _BBS_3MF_Importer::_handle_start_relationships_element(void* userData, const char* name, const char** attributes)
+    void XMLCALL _PRUSA_3MF_Importer::_handle_start_relationships_element(void* userData, const char* name, const char** attributes)
     {
-        _BBS_3MF_Importer* importer = (_BBS_3MF_Importer*)userData;
+        _PRUSA_3MF_Importer* importer = (_PRUSA_3MF_Importer*)userData;
         if (importer != nullptr)
             importer->_handle_start_relationships_element(name, attributes);
     }
 
-    void XMLCALL _BBS_3MF_Importer::_handle_end_relationships_element(void* userData, const char* name)
+    void XMLCALL _PRUSA_3MF_Importer::_handle_end_relationships_element(void* userData, const char* name)
     {
-        _BBS_3MF_Importer* importer = (_BBS_3MF_Importer*)userData;
+        _PRUSA_3MF_Importer* importer = (_PRUSA_3MF_Importer*)userData;
         if (importer != nullptr)
             importer->_handle_end_relationships_element(name);
     }
 
-    void _BBS_3MF_Importer::_handle_start_relationships_element(const char* name, const char** attributes)
+    void _PRUSA_3MF_Importer::_handle_start_relationships_element(const char* name, const char** attributes)
     {
         if (m_xml_parser == nullptr)
             return;
@@ -4834,7 +4830,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             _stop_xml_parser();
     }
 
-    void _BBS_3MF_Importer::_handle_end_relationships_element(const char* name)
+    void _PRUSA_3MF_Importer::_handle_end_relationships_element(const char* name)
     {
         if (m_xml_parser == nullptr)
             return;
@@ -4845,25 +4841,25 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             _stop_xml_parser();
     }
 
-    bool _BBS_3MF_Importer::_handle_start_relationship(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::_handle_start_relationship(const char** attributes, unsigned int num_attributes)
     {
-        std::string path = bbs_get_attribute_value_string(attributes, num_attributes, TARGET_ATTR);
-        std::string type = bbs_get_attribute_value_string(attributes, num_attributes, RELS_TYPE_ATTR);
+        std::string path = prusa_get_attribute_value_string(attributes, num_attributes, TARGET_ATTR);
+        std::string type = prusa_get_attribute_value_string(attributes, num_attributes, RELS_TYPE_ATTR);
         if (boost::starts_with(type, "http://schemas.microsoft.com/3dmanufacturing/") && boost::ends_with(type, "3dmodel")) {
             if (m_start_part_path.empty()) m_start_part_path = path;
             else m_sub_model_paths.push_back(path);
         } else if (boost::starts_with(type, "http://schemas.openxmlformats.org/") && boost::ends_with(type, "thumbnail")) {
             if (boost::algorithm::ends_with(path, ".png"))
                 m_thumbnail_path = path;
-        } else if (boost::starts_with(type, "http://schemas.bambulab.com/") && boost::ends_with(type, "cover-thumbnail-middle")) {
+        } else if (boost::starts_with(type, "http://schemas.prusa3d.com/") && boost::ends_with(type, "cover-thumbnail-middle")) {
             m_thumbnail_middle = path;
-        } else if (boost::starts_with(type, "http://schemas.bambulab.com/") && boost::ends_with(type, "cover-thumbnail-small")) {
+        } else if (boost::starts_with(type, "http://schemas.prusa3d.com/") && boost::ends_with(type, "cover-thumbnail-small")) {
             m_thumbnail_small = path;
         }
         return true;
     }
 
-    void _BBS_3MF_Importer::_generate_current_object_list(std::vector<Component> &sub_objects, Id object_id, IdToCurrentObjectMap &current_objects)
+    void _PRUSA_3MF_Importer::_generate_current_object_list(std::vector<Component> &sub_objects, Id object_id, IdToCurrentObjectMap &current_objects)
     {
         std::list<std::pair<Component, Transform3d>> id_list;
         id_list.push_back(std::make_pair(Component(object_id, Transform3d::Identity()), Transform3d::Identity()));
@@ -4890,7 +4886,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }
 
-    bool _BBS_3MF_Importer::_generate_volumes_new(ModelObject& object, const std::vector<Component> &sub_objects, const ObjectMetadata::VolumeMetadataList& volumes, ConfigSubstitutionContext& config_substitutions)
+    bool _PRUSA_3MF_Importer::_generate_volumes_new(ModelObject& object, const std::vector<Component> &sub_objects, const ObjectMetadata::VolumeMetadataList& volumes, ConfigSubstitutionContext& config_substitutions)
     {
         if (!object.volumes.empty()) {
             add_error("object already built with parts");
@@ -4996,7 +4992,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
                 its.vertices.assign(sub_object->geometry.vertices.begin(), sub_object->geometry.vertices.end());
 
-                // BBS
+                // PRUSA
                 for (const std::string& prop_str : sub_object->geometry.face_properties) {
                     FaceProperty face_prop;
                     face_prop.from_string(prop_str);
@@ -5005,9 +5001,9 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
                 TriangleMesh triangle_mesh(std::move(its), volume_data->mesh_stats);
 
-                // BBS: no need to multiply the instance matrix into the volume
-                //if (!m_is_bbl_3mf) {
-                //    // if the 3mf was not produced by BambuStudio and there is only one instance,
+                // no need to multiply the instance matrix into the volume
+                //if (!m_is_prusa_3mf) {
+                //    // if the 3mf was not produced by PrusaSlicer and there is only one instance,
                 //    // bake the transformation into the geometry to allow the reload from disk command
                 //    // to work properly
                 //    if (object.instances.size() == 1) {
@@ -5127,7 +5123,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
     /*
-    bool _BBS_3MF_Importer::_generate_volumes(ModelObject& object, const Geometry& geometry, const ObjectMetadata::VolumeMetadataList& volumes, ConfigSubstitutionContext& config_substitutions)
+    bool _PRUSA_3MF_Importer::_generate_volumes(ModelObject& object, const Geometry& geometry, const ObjectMetadata::VolumeMetadataList& volumes, ConfigSubstitutionContext& config_substitutions)
     {
         if (!object.volumes.empty()) {
             add_error("Found invalid volumes count");
@@ -5178,7 +5174,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 }
                 its.vertices.assign(geometry.vertices.begin() + min_id, geometry.vertices.begin() + max_id + 1);
 
-                // BBS
+                // PRUSA
                 for (const std::string prop_str : geometry.face_properties) {
                     FaceProperty face_prop;
                     face_prop.from_string(prop_str);
@@ -5193,8 +5189,8 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
             TriangleMesh triangle_mesh(std::move(its), volume_data.mesh_stats);
 
-            if (!m_is_bbl_3mf) {
-                // if the 3mf was not produced by OrcaSlicer and there is only one instance,
+            if (!m_is_prusa_3mf) {
+                // If the 3mf was not produced by a slicer family and there is only one instance,
                 // bake the transformation into the geometry to allow the reload from disk command
                 // to work properly
                 if (object.instances.size() == 1) {
@@ -5275,69 +5271,69 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
     */
-    void XMLCALL _BBS_3MF_Importer::_handle_start_model_xml_element(void* userData, const char* name, const char** attributes)
+    void XMLCALL _PRUSA_3MF_Importer::_handle_start_model_xml_element(void* userData, const char* name, const char** attributes)
     {
-        _BBS_3MF_Importer* importer = (_BBS_3MF_Importer*)userData;
+        _PRUSA_3MF_Importer* importer = (_PRUSA_3MF_Importer*)userData;
         if (importer != nullptr)
             importer->_handle_start_model_xml_element(name, attributes);
     }
 
-    void XMLCALL _BBS_3MF_Importer::_handle_end_model_xml_element(void* userData, const char* name)
+    void XMLCALL _PRUSA_3MF_Importer::_handle_end_model_xml_element(void* userData, const char* name)
     {
-        _BBS_3MF_Importer* importer = (_BBS_3MF_Importer*)userData;
+        _PRUSA_3MF_Importer* importer = (_PRUSA_3MF_Importer*)userData;
         if (importer != nullptr)
             importer->_handle_end_model_xml_element(name);
     }
 
-    void XMLCALL _BBS_3MF_Importer::_handle_xml_characters(void* userData, const XML_Char* s, int len)
+    void XMLCALL _PRUSA_3MF_Importer::_handle_xml_characters(void* userData, const XML_Char* s, int len)
     {
-        _BBS_3MF_Importer* importer = (_BBS_3MF_Importer*)userData;
+        _PRUSA_3MF_Importer* importer = (_PRUSA_3MF_Importer*)userData;
         if (importer != nullptr)
             importer->_handle_xml_characters(s, len);
     }
 
-    void XMLCALL _BBS_3MF_Importer::_handle_start_config_xml_element(void* userData, const char* name, const char** attributes)
+    void XMLCALL _PRUSA_3MF_Importer::_handle_start_config_xml_element(void* userData, const char* name, const char** attributes)
     {
-        _BBS_3MF_Importer* importer = (_BBS_3MF_Importer*)userData;
+        _PRUSA_3MF_Importer* importer = (_PRUSA_3MF_Importer*)userData;
         if (importer != nullptr)
             importer->_handle_start_config_xml_element(name, attributes);
     }
 
-    void XMLCALL _BBS_3MF_Importer::_handle_end_config_xml_element(void* userData, const char* name)
+    void XMLCALL _PRUSA_3MF_Importer::_handle_end_config_xml_element(void* userData, const char* name)
     {
-        _BBS_3MF_Importer* importer = (_BBS_3MF_Importer*)userData;
+        _PRUSA_3MF_Importer* importer = (_PRUSA_3MF_Importer*)userData;
         if (importer != nullptr)
             importer->_handle_end_config_xml_element(name);
     }
 
 
     /* functions of ObjectImporter */
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_start_model(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_model(const char** attributes, unsigned int num_attributes)
     {
-        object_unit_factor = bbs_get_unit_factor(bbs_get_attribute_value_string(attributes, num_attributes, UNIT_ATTR));
+        object_unit_factor = prusa_get_unit_factor(prusa_get_attribute_value_string(attributes, num_attributes, UNIT_ATTR));
 
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_end_model()
-    {
-        // do nothing
-        return true;
-    }
-
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_start_resources(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_model()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_end_resources()
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_resources(const char** attributes, unsigned int num_attributes)
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_start_object(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_resources()
+    {
+        // do nothing
+        return true;
+    }
+
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_object(const char** attributes, unsigned int num_attributes)
     {
         // reset current object data
         if (current_object) {
@@ -5345,34 +5341,34 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             current_object = nullptr;
         }
 
-        std::string object_type = bbs_get_attribute_value_string(attributes, num_attributes, TYPE_ATTR);
+        std::string object_type = prusa_get_attribute_value_string(attributes, num_attributes, TYPE_ATTR);
 
-        if (bbs_is_valid_object_type(object_type)) {
+        if (prusa_is_valid_object_type(object_type)) {
             if (!current_object) {
                 current_object = new CurrentObject();
             }
 
-            current_object->id = bbs_get_attribute_value_int(attributes, num_attributes, ID_ATTR);
-            current_object->name = bbs_get_attribute_value_string(attributes, num_attributes, NAME_ATTR);
+            current_object->id = prusa_get_attribute_value_int(attributes, num_attributes, ID_ATTR);
+            current_object->name = prusa_get_attribute_value_string(attributes, num_attributes, NAME_ATTR);
 
-            current_object->uuid = bbs_get_attribute_value_string(attributes, num_attributes, PUUID_ATTR);
+            current_object->uuid = prusa_get_attribute_value_string(attributes, num_attributes, PUUID_ATTR);
             if (current_object->uuid.empty()) {
-                current_object->uuid = bbs_get_attribute_value_string(attributes, num_attributes, PUUID_LOWER_ATTR);
+                current_object->uuid = prusa_get_attribute_value_string(attributes, num_attributes, PUUID_LOWER_ATTR);
             }
-            current_object->pid = bbs_get_attribute_value_int(attributes, num_attributes, PID_ATTR);
+            current_object->pid = prusa_get_attribute_value_int(attributes, num_attributes, PID_ATTR);
         }
 
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_end_object()
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_object()
     {
         if (!current_object || (current_object->id == -1)) {
             top_importer->add_error("Found invalid object for "+ object_path);
             return false;
         }
         else {
-            if (is_bbl_3mf && boost::ends_with(current_object->uuid, OBJECT_UUID_SUFFIX) && top_importer->m_load_restore) {
+            if (is_prusa_3mf && boost::ends_with(current_object->uuid, OBJECT_UUID_SUFFIX) && top_importer->m_load_restore) {
                 std::istringstream iss(current_object->uuid);
                 int backup_id;
                 bool need_replace = false;
@@ -5428,32 +5424,32 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_start_color_group(const char **attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_color_group(const char **attributes, unsigned int num_attributes)
     {
-        object_current_color_group = bbs_get_attribute_value_int(attributes, num_attributes, ID_ATTR);
+        object_current_color_group = prusa_get_attribute_value_int(attributes, num_attributes, ID_ATTR);
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_end_color_group()
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_color_group()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_start_color(const char **attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_color(const char **attributes, unsigned int num_attributes)
     {
-        std::string color = bbs_get_attribute_value_string(attributes, num_attributes, COLOR_ATTR);
+        std::string color = prusa_get_attribute_value_string(attributes, num_attributes, COLOR_ATTR);
         object_group_id_to_color[object_current_color_group] = color;
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_end_color()
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_color()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_start_mesh(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_mesh(const char** attributes, unsigned int num_attributes)
     {
         // reset current geometry
         if (current_object)
@@ -5461,13 +5457,13 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_end_mesh()
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_mesh()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_start_vertices(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_vertices(const char** attributes, unsigned int num_attributes)
     {
         // reset current vertices
         if (current_object)
@@ -5475,31 +5471,31 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_end_vertices()
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_vertices()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_start_vertex(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_vertex(const char** attributes, unsigned int num_attributes)
     {
         // appends the vertex coordinates
         // missing values are set equal to ZERO
         if (current_object)
             current_object->geometry.vertices.emplace_back(
-                object_unit_factor * bbs_get_attribute_value_float(attributes, num_attributes, X_ATTR),
-                object_unit_factor * bbs_get_attribute_value_float(attributes, num_attributes, Y_ATTR),
-                object_unit_factor * bbs_get_attribute_value_float(attributes, num_attributes, Z_ATTR));
+                object_unit_factor * prusa_get_attribute_value_float(attributes, num_attributes, X_ATTR),
+                object_unit_factor * prusa_get_attribute_value_float(attributes, num_attributes, Y_ATTR),
+                object_unit_factor * prusa_get_attribute_value_float(attributes, num_attributes, Z_ATTR));
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_end_vertex()
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_vertex()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_start_triangles(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_triangles(const char** attributes, unsigned int num_attributes)
     {
         // reset current triangles
         if (current_object)
@@ -5507,13 +5503,13 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_end_triangles()
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_triangles()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_start_triangle(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_triangle(const char** attributes, unsigned int num_attributes)
     {
         // we are ignoring the following attributes:
         // p1
@@ -5526,27 +5522,27 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         // missing values are set equal to ZERO
         if (current_object) {
             current_object->geometry.triangles.emplace_back(
-                bbs_get_attribute_value_int(attributes, num_attributes, V1_ATTR),
-                bbs_get_attribute_value_int(attributes, num_attributes, V2_ATTR),
-                bbs_get_attribute_value_int(attributes, num_attributes, V3_ATTR));
+                prusa_get_attribute_value_int(attributes, num_attributes, V1_ATTR),
+                prusa_get_attribute_value_int(attributes, num_attributes, V2_ATTR),
+                prusa_get_attribute_value_int(attributes, num_attributes, V3_ATTR));
 
-            current_object->geometry.custom_supports.push_back(bbs_get_attribute_value_string(attributes, num_attributes, CUSTOM_SUPPORTS_ATTR));
-            current_object->geometry.custom_seam.push_back(bbs_get_attribute_value_string(attributes, num_attributes, CUSTOM_SEAM_ATTR));
-            current_object->geometry.mmu_segmentation.push_back(bbs_get_attribute_value_string(attributes, num_attributes, MMU_SEGMENTATION_ATTR));
-            current_object->geometry.fuzzy_skin.push_back(bbs_get_attribute_value_string(attributes, num_attributes, CUSTOM_FUZZY_SKIN_ATTR));
-            // BBS
-            current_object->geometry.face_properties.push_back(bbs_get_attribute_value_string(attributes, num_attributes, FACE_PROPERTY_ATTR));
+            current_object->geometry.custom_supports.push_back(prusa_get_attribute_value_string(attributes, num_attributes, CUSTOM_SUPPORTS_ATTR));
+            current_object->geometry.custom_seam.push_back(prusa_get_attribute_value_string(attributes, num_attributes, CUSTOM_SEAM_ATTR));
+            current_object->geometry.mmu_segmentation.push_back(prusa_get_attribute_value_string(attributes, num_attributes, MMU_SEGMENTATION_ATTR));
+            current_object->geometry.fuzzy_skin.push_back(prusa_get_attribute_value_string(attributes, num_attributes, CUSTOM_FUZZY_SKIN_ATTR));
+            // PRUSA
+            current_object->geometry.face_properties.push_back(prusa_get_attribute_value_string(attributes, num_attributes, FACE_PROPERTY_ATTR));
         }
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_end_triangle()
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_triangle()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_start_components(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_components(const char** attributes, unsigned int num_attributes)
     {
         // reset current components
         if (current_object)
@@ -5554,16 +5550,16 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_end_components()
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_components()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_start_component(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_component(const char** attributes, unsigned int num_attributes)
     {
-        int object_id = bbs_get_attribute_value_int(attributes, num_attributes, OBJECTID_ATTR);
-        Transform3d transform = bbs_get_transform_from_3mf_specs_string(bbs_get_attribute_value_string(attributes, num_attributes, TRANSFORM_ATTR));
+        int object_id = prusa_get_attribute_value_int(attributes, num_attributes, OBJECTID_ATTR);
+        Transform3d transform = prusa_get_transform_from_3mf_specs_string(prusa_get_attribute_value_string(attributes, num_attributes, TRANSFORM_ATTR));
 
         /*Id id = std::make_pair(m_sub_model_path, object_id);
         IdToModelObjectMap::iterator object_item = m_objects.find(id);
@@ -5583,17 +5579,17 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_end_component()
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_component()
     {
         // do nothing
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_start_metadata(const char** attributes, unsigned int num_attributes)
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_metadata(const char** attributes, unsigned int num_attributes)
     {
         obj_curr_metadata_name.clear();
 
-        std::string name = bbs_get_attribute_value_string(attributes, num_attributes, NAME_ATTR);
+        std::string name = prusa_get_attribute_value_string(attributes, num_attributes, NAME_ATTR);
         if (!name.empty()) {
             obj_curr_metadata_name = name;
         }
@@ -5601,14 +5597,14 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_handle_object_end_metadata()
+    bool _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_metadata()
     {
-        if ((obj_curr_metadata_name == BBS_3MF_VERSION)||(obj_curr_metadata_name == BBS_3MF_VERSION1)) {
-            is_bbl_3mf = true;
+        if ((obj_curr_metadata_name == PRUSA_3MF_VERSION)||(obj_curr_metadata_name == PRUSA_3MF_VERSION1)) {
+            is_prusa_3mf = true;
         }
         return true;
     }
-    void _BBS_3MF_Importer::ObjectImporter::_handle_object_start_model_xml_element(const char* name, const char** attributes)
+    void _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_model_xml_element(const char* name, const char** attributes)
     {
         if (object_xml_parser == nullptr)
             return;
@@ -5647,7 +5643,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             _stop_object_xml_parser();
     }
 
-    void _BBS_3MF_Importer::ObjectImporter::_handle_object_end_model_xml_element(const char* name)
+    void _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_model_xml_element(const char* name)
     {
         if (object_xml_parser == nullptr)
             return;
@@ -5685,33 +5681,33 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             _stop_object_xml_parser();
     }
 
-    void _BBS_3MF_Importer::ObjectImporter::_handle_object_xml_characters(const XML_Char* s, int len)
+    void _PRUSA_3MF_Importer::ObjectImporter::_handle_object_xml_characters(const XML_Char* s, int len)
     {
         obj_curr_characters.append(s, len);
     }
 
-    void XMLCALL _BBS_3MF_Importer::ObjectImporter::_handle_object_start_model_xml_element(void* userData, const char* name, const char** attributes)
+    void XMLCALL _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_model_xml_element(void* userData, const char* name, const char** attributes)
     {
         ObjectImporter* importer = (ObjectImporter*)userData;
         if (importer != nullptr)
             importer->_handle_object_start_model_xml_element(name, attributes);
     }
 
-    void XMLCALL _BBS_3MF_Importer::ObjectImporter::_handle_object_end_model_xml_element(void* userData, const char* name)
+    void XMLCALL _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_model_xml_element(void* userData, const char* name)
     {
         ObjectImporter* importer = (ObjectImporter*)userData;
         if (importer != nullptr)
             importer->_handle_object_end_model_xml_element(name);
     }
 
-    void XMLCALL _BBS_3MF_Importer::ObjectImporter::_handle_object_xml_characters(void* userData, const XML_Char* s, int len)
+    void XMLCALL _PRUSA_3MF_Importer::ObjectImporter::_handle_object_xml_characters(void* userData, const XML_Char* s, int len)
     {
         ObjectImporter* importer = (ObjectImporter*)userData;
         if (importer != nullptr)
             importer->_handle_object_xml_characters(s, len);
     }
 
-    bool _BBS_3MF_Importer::ObjectImporter::_extract_object_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
+    bool _PRUSA_3MF_Importer::ObjectImporter::_extract_object_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
     {
         if (stat.m_uncomp_size == 0) {
             top_importer->add_error("Found invalid size for "+object_path);
@@ -5725,18 +5721,18 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
 
         XML_SetUserData(object_xml_parser, (void*)this);
-        XML_SetElementHandler(object_xml_parser, _BBS_3MF_Importer::ObjectImporter::_handle_object_start_model_xml_element, _BBS_3MF_Importer::ObjectImporter::_handle_object_end_model_xml_element);
-        XML_SetCharacterDataHandler(object_xml_parser, _BBS_3MF_Importer::ObjectImporter::_handle_object_xml_characters);
+        XML_SetElementHandler(object_xml_parser, _PRUSA_3MF_Importer::ObjectImporter::_handle_object_start_model_xml_element, _PRUSA_3MF_Importer::ObjectImporter::_handle_object_end_model_xml_element);
+        XML_SetCharacterDataHandler(object_xml_parser, _PRUSA_3MF_Importer::ObjectImporter::_handle_object_xml_characters);
         XML_SetEntityDeclHandler(object_xml_parser, nullptr);
         XML_SetExternalEntityRefHandler(object_xml_parser, nullptr);
 
         struct CallbackData
         {
             XML_Parser& parser;
-            _BBS_3MF_Importer::ObjectImporter& importer;
+            _PRUSA_3MF_Importer::ObjectImporter& importer;
             const mz_zip_archive_file_stat& stat;
 
-            CallbackData(XML_Parser& parser, _BBS_3MF_Importer::ObjectImporter& importer, const mz_zip_archive_file_stat& stat) : parser(parser), importer(importer), stat(stat) {}
+            CallbackData(XML_Parser& parser, _PRUSA_3MF_Importer::ObjectImporter& importer, const mz_zip_archive_file_stat& stat) : parser(parser), importer(importer), stat(stat) {}
         };
 
         CallbackData data(object_xml_parser, *this, stat);
@@ -5779,7 +5775,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
     }
 
 
-    class _BBS_3MF_Exporter : public _BBS_3MF_Base
+    class _PRUSA_3MF_Exporter : public _PRUSA_3MF_Base
     {
         struct BuildItem
         {
@@ -5799,7 +5795,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             }
         };
 
-        //BBS: change volume to seperate objects
+        // change volume to seperate objects
         /*struct Offsets
         {
             unsigned int first_vertex_id;
@@ -5846,7 +5842,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         std::map<void const *, std::pair<ObjectData*, ModelVolume const *>> m_shared_meshes;
         std::map<ModelVolume const *, std::pair<std::string, int>> m_volume_paths;
     public:
-        //BBS: add plate data related logic
+        // add plate data related logic
 
         // add backup logic
         //bool save_model_to_file(const std::string& filename, Model& model, PlateDataPtrs& plate_data_list, std::vector<Preset*>& project_presets, const DynamicPrintConfig* config, bool fullpath_sources, const std::vector<ThumbnailData*>& thumbnail_data, bool zip64, bool skip_static, Export3mfProgressFn proFn = nullptr, bool silence = false);
@@ -5857,7 +5853,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         static void add_transformation(std::stringstream &stream, const Transform3d &tr);
 
     private:
-        //BBS: add plate data related logic
+        // add plate data related logic
         bool _save_model_to_file(const std::string& filename,
             Model& model, PlateDataPtrs& plate_data_list,
             std::vector<Preset*>& project_presets,
@@ -5869,7 +5865,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             Export3mfProgressFn proFn,
             const std::vector<ThumbnailData*>& calibration_data,
             const std::vector<PlateBBoxData*>& id_bboxes,
-            BBLProject* project = nullptr,
+            PrusaProject* project = nullptr,
             int export_plate_idx = -1);
 
         bool _add_file_to_archive(mz_zip_archive& archive, const std::string & path_in_zip, const std::string & file_path);
@@ -5885,10 +5881,10 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                                                 std::vector<std::string> const &types   = {},
                                                 PackingTemporaryData            data    = PackingTemporaryData(),
                                                 int export_plate_idx = -1) const;
-        bool _add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, ObjectToObjectDataMap& objects_data, Export3mfProgressFn proFn = nullptr, BBLProject* project = nullptr) const;
+        bool _add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, ObjectToObjectDataMap& objects_data, Export3mfProgressFn proFn = nullptr, PrusaProject* project = nullptr) const;
         bool _add_object_to_model_stream(mz_zip_writer_staged_context &context, ObjectData const &object_data) const;
         void _add_object_components_to_stream(std::stringstream &stream, ObjectData const &object_data) const;
-        //BBS: change volume to seperate objects
+        // change volume to seperate objects
         bool _add_mesh_to_object_stream(std::function<bool(std::string &, bool)> const &flush, ObjectData const &object_data) const;
         bool _add_build_to_model_stream(std::stringstream& stream, const BuildItemsList& build_items) const;
         bool _add_layer_height_profile_file_to_archive(mz_zip_archive& archive, Model& model);
@@ -5897,9 +5893,9 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         bool _add_sla_support_points_file_to_archive(mz_zip_archive& archive, Model& model);
         bool _add_sla_drain_holes_file_to_archive(mz_zip_archive& archive, Model& model);
         bool _add_print_config_file_to_archive(mz_zip_archive& archive, const DynamicPrintConfig &config);
-        //BBS: add project config file logic for json format
+        // add project config file logic for json format
         bool _add_project_config_file_to_archive(mz_zip_archive& archive, const DynamicPrintConfig &config, Model& model);
-        //BBS: add project embedded preset files
+        // add project embedded preset files
         bool _add_project_embedded_presets_to_archive(mz_zip_archive& archive, Model& model, std::vector<Preset*> project_presets);
         bool _add_model_config_file_to_archive(mz_zip_archive& archive, const Model& model, PlateDataPtrs& plate_data_list, const ObjectToObjectDataMap &objects_data, const DynamicPrintConfig& config, int export_plate_idx = -1, bool save_gcode = true, bool use_loaded_id = false);
         bool _add_cut_information_file_to_archive(mz_zip_archive &archive, Model &model);
@@ -5924,7 +5920,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     };
 
-    bool _BBS_3MF_Exporter::save_model_to_file(StoreParams& store_params)
+    bool _PRUSA_3MF_Exporter::save_model_to_file(StoreParams& store_params)
     {
         clear_errors();
         m_fullpath_sources = store_params.strategy & SaveStrategy::FullPathSources;
@@ -5969,7 +5965,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
     }
 
     // backup mesh-only
-    bool _BBS_3MF_Exporter::save_object_mesh(const std::string& temp_path, ModelObject const & object, int obj_id)
+    bool _PRUSA_3MF_Exporter::save_object_mesh(const std::string& temp_path, ModelObject const & object, int obj_id)
     {
         m_production_ext = true;
         m_from_backup_save = true;
@@ -6022,8 +6018,8 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    //BBS: add plate data related logic
-    bool _BBS_3MF_Exporter::_save_model_to_file(const std::string& filename,
+    // add plate data related logic
+    bool _PRUSA_3MF_Exporter::_save_model_to_file(const std::string& filename,
         Model& model,
         PlateDataPtrs& plate_data_list,
         std::vector<Preset*>& project_presets,
@@ -6035,7 +6031,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         Export3mfProgressFn proFn,
         const std::vector<ThumbnailData*>& calibration_data,
         const std::vector<PlateBBoxData*>& id_bboxes,
-        BBLProject* project,
+        PrusaProject* project,
         int export_plate_idx)
     {
         PackingTemporaryData temp_data;
@@ -6045,7 +6041,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
         bool cb_cancel = false;
 
-        //BBS progress point
+        //PRUSA progress point
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" <<__LINE__ <<
                 boost::format(",before open zip writer, m_skip_static %1%, m_save_gcode %2%, m_use_loaded_id %3%")%m_skip_static %m_save_gcode %m_use_loaded_id;
         if (proFn) {
@@ -6073,7 +6069,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             }
         } lock{ archive, &filename};
 
-        //BBS progress point
+        //PRUSA progress point
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" <<__LINE__ << boost::format(", before add _add_content_types_file_to_archive\n");
         if (proFn) {
             proFn(EXPORT_STAGE_CONTENT_TYPES, 0, 1, cb_cancel);
@@ -6082,16 +6078,16 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
 
         // Adds content types file ("[Content_Types].xml";).
-        // The content of this file is the same for each OrcaSlicer 3mf.
+        // The content of this file is the same for each 3MF file.
         if (!_add_content_types_file_to_archive(archive)) {
             return false;
         }
 
-        //BBS progress point
+        //PRUSA progress point
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format(",before add thumbnails, count %1%") % thumbnail_data.size();
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" <<__LINE__ << boost::format(",top&&pick thumbnails, count %1%")%top_thumbnail_data.size();
 
-        //BBS: add thumbnail for each plate
+        // add thumbnail for each plate
         if (!m_skip_static) {
             std::vector<bool> thumbnail_status(plate_data_list.size(), false);
             std::vector<bool> no_light_thumbnail_status(plate_data_list.size(), false);
@@ -6228,7 +6224,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
 
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" <<__LINE__ << boost::format(",before add calibration thumbnails, count %1%\n")%calibration_data.size();
-        //BBS add calibration thumbnail for each plate
+        //PRUSA add calibration thumbnail for each plate
         if (!m_skip_static && calibration_data.size() > 0) {
             // Adds the file Metadata/calibration_p[X].png.
             for (unsigned int index = 0; index < calibration_data.size(); index++)
@@ -6254,7 +6250,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             // Adds the file Metadata/calibration_p[X].png.
             for (unsigned int index = 0; index < id_bboxes.size(); index++)
             {
-                // BBS: save bounding box to json
+                // save bounding box to json
                 if (id_bboxes[index]->is_valid()) {
                     if (!_add_bbox_file_to_archive(archive, *id_bboxes[index], index)) {
                         close_zip_writer(&archive);
@@ -6264,7 +6260,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             }
         }
 
-        //BBS progress point
+        //PRUSA progress point
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" <<__LINE__ << boost::format(", before add models\n");
         if (proFn) {
             proFn(EXPORT_STAGE_ADD_MODELS, 0, 1, cb_cancel);
@@ -6287,7 +6283,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 return false;
             }
 
-            // BBS progress point
+            // PRUSA progress point
             /*BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" <<__LINE__ << boost::format("export 3mf EXPORT_STAGE_ADD_LAYER_RANGE\n");
             if (proFn) {
                 proFn(EXPORT_STAGE_ADD_LAYER_RANGE, 0, 1, cb_cancel);
@@ -6308,7 +6304,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 return false;
             }
 
-            // BBS progress point
+            // PRUSA progress point
             /*BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" <<__LINE__ << boost::format("export 3mf EXPORT_STAGE_ADD_SUPPORT\n");
             if (proFn) {
                 proFn(EXPORT_STAGE_ADD_SUPPORT, 0, 1, cb_cancel);
@@ -6327,7 +6323,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 return false;
             }*/
 
-            // BBS progress point
+            // PRUSA progress point
             BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format(", before add custom gcodes\n");
             if (proFn) {
                 proFn(EXPORT_STAGE_ADD_CUSTOM_GCODE, 0, 1, cb_cancel);
@@ -6338,7 +6334,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             // All custom gcode per height of whole Model are stored here
             if (!_add_custom_gcode_per_print_z_file_to_archive(archive, model, config)) { return false; }
 
-            // BBS progress point
+            // PRUSA progress point
             BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format(", before add project_settings\n");
             if (proFn) {
                 proFn(EXPORT_STAGE_ADD_PRINT_CONFIG, 0, 1, cb_cancel);
@@ -6348,21 +6344,21 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             // Adds slic3r print config file ("Metadata/Slic3r_PE.config").
             // This file contains the content of FullPrintConfig / SLAFullPrintConfig.
             if (config != nullptr) {
-                // BBS: change to json format
+                // change to json format
                 // if (!_add_print_config_file_to_archive(archive, *config)) {
                 if (!_add_project_config_file_to_archive(archive, *config, model)) { return false; }
             }
 
-            // BBS progress point
+            // PRUSA progress point
             BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format(", before add project embedded settings\n");
             if (proFn) {
                 proFn(EXPORT_STAGE_ADD_CONFIG_FILE, 0, 1, cb_cancel);
                 if (cb_cancel) return false;
             }
 
-            // BBS: add project config
+            // add project config
             if (project_presets.size() > 0) {
-                // BBS: add project embedded preset files
+                // add project embedded preset files
                 _add_project_embedded_presets_to_archive(archive, model, project_presets);
 
                 BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format(", finished add project embedded settings, size %1%\n")%project_presets.size();
@@ -6428,7 +6424,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             return false;
         }
 
-        //BBS progress point
+        //PRUSA progress point
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" <<__LINE__ << boost::format(", before add sliced info to 3mf\n");
         if (proFn) {
             proFn(EXPORT_STAGE_ADD_SLICE_INFO, 0, 1, cb_cancel);
@@ -6448,7 +6444,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             return false;
         }
 
-        //BBS progress point
+        //PRUSA progress point
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" <<__LINE__ << boost::format(", before add auxiliary dir to 3mf\n");
         if (proFn) {
             proFn(EXPORT_STAGE_ADD_AUXILIARIES, 0, 1, cb_cancel);
@@ -6461,7 +6457,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             return false;
         }
 
-        //BBS progress point
+        //PRUSA progress point
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" <<__LINE__ << boost::format(", before add relation file to 3mf\n");
         if (proFn) {
             proFn(EXPORT_STAGE_ADD_RELATIONS, 0, 1, cb_cancel);
@@ -6470,7 +6466,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
 
         // Adds relationships file ("_rels/.rels").
-        // The content of this file is the same for each OrcaSlicer 3mf.
+        // The content of this file is the same for each 3MF file.
         // The relationshis file contains a reference to the geometry file "3D/3dmodel.model", the name was chosen to be compatible with CURA.
         if (!_add_relationships_file_to_archive(archive, {}, {}, {}, temp_data, export_plate_idx)) {
             BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << ":" <<__LINE__ << boost::format(", _add_relationships_file_to_archive failed\n");
@@ -6483,7 +6479,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             return false;
         }
 
-        //BBS progress point
+        //PRUSA progress point
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" <<__LINE__ << boost::format(", finished exporting 3mf\n");
         if (proFn) {
             proFn(EXPORT_STAGE_FINISH, 0, 1, cb_cancel);
@@ -6496,7 +6492,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Exporter::_add_file_to_archive(mz_zip_archive& archive, const std::string& path_in_zip, const std::string& src_file_path)
+    bool _PRUSA_3MF_Exporter::_add_file_to_archive(mz_zip_archive& archive, const std::string& path_in_zip, const std::string& src_file_path)
     {
         static std::string const nocomp_exts[] = {".png", ".jpg", ".mp4", ".jpeg", ".zip", ".3mf"};
         auto end = nocomp_exts + sizeof(nocomp_exts) / sizeof(nocomp_exts[0]);
@@ -6518,7 +6514,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return result;
     }
 
-    bool _BBS_3MF_Exporter::_add_content_types_file_to_archive(mz_zip_archive& archive)
+    bool _PRUSA_3MF_Exporter::_add_content_types_file_to_archive(mz_zip_archive& archive)
     {
         std::stringstream stream;
         stream << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
@@ -6540,7 +6536,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Exporter::_add_thumbnail_file_to_archive(mz_zip_archive& archive, const ThumbnailData& thumbnail_data, const char* local_path, int index, bool generate_small_thumbnail)
+    bool _PRUSA_3MF_Exporter::_add_thumbnail_file_to_archive(mz_zip_archive& archive, const ThumbnailData& thumbnail_data, const char* local_path, int index, bool generate_small_thumbnail)
     {
         bool res = false;
 
@@ -6606,7 +6602,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return res;
     }
 
-    bool _BBS_3MF_Exporter::_add_calibration_file_to_archive(mz_zip_archive& archive, const ThumbnailData& thumbnail_data, int index)
+    bool _PRUSA_3MF_Exporter::_add_calibration_file_to_archive(mz_zip_archive& archive, const ThumbnailData& thumbnail_data, int index)
     {
         bool res = false;
 
@@ -6626,7 +6622,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return res;
     }
 
-    bool _BBS_3MF_Exporter::_add_bbox_file_to_archive(mz_zip_archive& archive, const PlateBBoxData& id_bboxes, int index)
+    bool _PRUSA_3MF_Exporter::_add_bbox_file_to_archive(mz_zip_archive& archive, const PlateBBoxData& id_bboxes, int index)
     {
         bool res = false;
         nlohmann::json j;
@@ -6643,7 +6639,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Exporter::_add_relationships_file_to_archive(
+    bool _PRUSA_3MF_Exporter::_add_relationships_file_to_archive(
         mz_zip_archive &archive, std::string const &from, std::vector<std::string> const &targets, std::vector<std::string> const &types, PackingTemporaryData data, int export_plate_idx) const
     {
         std::stringstream stream;
@@ -6664,18 +6660,18 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
                 if (data._3mf_printer_thumbnail_middle.empty()) {
                     stream << " <Relationship Target=\"/Metadata/plate_1.png"
-                           << "\" Id=\"rel-4\" Type=\"http://schemas.bambulab.com/package/2021/cover-thumbnail-middle\"/>\n";
+                           << "\" Id=\"rel-4\" Type=\"http://schemas.prusa3d.com/package/2021/cover-thumbnail-middle\"/>\n";
                 } else {
                     stream << " <Relationship Target=\"/" << xml_escape(data._3mf_printer_thumbnail_middle)
-                           << "\" Id=\"rel-4\" Type=\"http://schemas.bambulab.com/package/2021/cover-thumbnail-middle\"/>\n";
+                           << "\" Id=\"rel-4\" Type=\"http://schemas.prusa3d.com/package/2021/cover-thumbnail-middle\"/>\n";
                 }
 
                 if (data._3mf_printer_thumbnail_small.empty()) {
                     stream << "<Relationship Target=\"/Metadata/plate_1_small.png"
-                           << "\" Id=\"rel-5\" Type=\"http://schemas.bambulab.com/package/2021/cover-thumbnail-small\"/>\n";
+                           << "\" Id=\"rel-5\" Type=\"http://schemas.prusa3d.com/package/2021/cover-thumbnail-small\"/>\n";
                 } else {
                     stream << " <Relationship Target=\"/" << xml_escape(data._3mf_printer_thumbnail_small)
-                           << "\" Id=\"rel-5\" Type=\"http://schemas.bambulab.com/package/2021/cover-thumbnail-small\"/>\n";
+                           << "\" Id=\"rel-5\" Type=\"http://schemas.prusa3d.com/package/2021/cover-thumbnail-small\"/>\n";
                 }
             }
             else {
@@ -6686,11 +6682,11 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
                 thumbnail_file_str = (boost::format("Metadata/plate_%1%.png") % (export_plate_idx + 1)).str();
                 stream << " <Relationship Target=\"/" << xml_escape(thumbnail_file_str)
-                   << "\" Id=\"rel-4\" Type=\"http://schemas.bambulab.com/package/2021/cover-thumbnail-middle\"/>\n";
+                   << "\" Id=\"rel-4\" Type=\"http://schemas.prusa3d.com/package/2021/cover-thumbnail-middle\"/>\n";
 
                 thumbnail_file_str = (boost::format("Metadata/plate_%1%_small.png") % (export_plate_idx + 1)).str();
                 stream << " <Relationship Target=\"/" << xml_escape(thumbnail_file_str)
-                   << "\" Id=\"rel-5\" Type=\"http://schemas.bambulab.com/package/2021/cover-thumbnail-small\"/>\n";
+                   << "\" Id=\"rel-5\" Type=\"http://schemas.prusa3d.com/package/2021/cover-thumbnail-small\"/>\n";
             }
         }
         else if (targets.empty()) {
@@ -6729,11 +6725,11 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
     }
 
     /*
-    * BBS: Production Extension (SplitModel)
+    * PRUSA: Production Extension (SplitModel)
     *   save sub model if objects_data is not empty
     *   not collect build items in sub model
     */
-    bool _BBS_3MF_Exporter::_add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, ObjectToObjectDataMap& objects_data, Export3mfProgressFn proFn, BBLProject* project) const
+    bool _PRUSA_3MF_Exporter::_add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, ObjectToObjectDataMap& objects_data, Export3mfProgressFn proFn, PrusaProject* project) const
     {
         bool sub_model = !objects_data.empty();
         bool write_object = sub_model || !m_split_model;
@@ -6770,7 +6766,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             std::stringstream stream;
             reset_stream(stream);
             stream << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-            stream << "<" << MODEL_TAG << " unit=\"millimeter\" xml:lang=\"en-US\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\" xmlns:BambuStudio=\"http://schemas.bambulab.com/package/2021\"";
+            stream << "<" << MODEL_TAG << " unit=\"millimeter\" xml:lang=\"en-US\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\" xmlns:PrusaSlicer=\"http://schemas.prusa3d.com/package/2021\"";
             if (m_production_ext)
                 stream << " xmlns:p=\"http://schemas.microsoft.com/3dmanufacturing/production/2015/06\" requiredextensions=\"p\"";
             stream << ">\n";
@@ -6815,35 +6811,35 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                     metadata_item_map = model.model_info.get()->metadata_items;
                 }
 
-                metadata_item_map[BBL_MODEL_NAME_TAG]           = xml_escape(name);
-                metadata_item_map[BBL_ORIGIN_TAG]               = xml_escape(origin);
-                metadata_item_map[BBL_DESIGNER_TAG]             = xml_escape(user_name);
-                metadata_item_map[BBL_DESIGNER_USER_ID_TAG]     = ""; // Orca: PRIVACY: do not store BBL user id in 3mf
-                metadata_item_map[BBL_DESIGNER_COVER_FILE_TAG]  = xml_escape(design_cover);
-                metadata_item_map[BBL_DESCRIPTION_TAG]          = xml_escape(description);
-                metadata_item_map[BBL_COPYRIGHT_NORMATIVE_TAG]  = xml_escape(copyright);
-                metadata_item_map[BBL_LICENSE_TAG]              = xml_escape(license);
+                metadata_item_map[PRUSA_MODEL_NAME_TAG]           = xml_escape(name);
+                metadata_item_map[PRUSA_ORIGIN_TAG]               = xml_escape(origin);
+                metadata_item_map[PRUSA_DESIGNER_TAG]             = xml_escape(user_name);
+                metadata_item_map[PRUSA_DESIGNER_USER_ID_TAG]     = ""; // PRIVACY: do not store PRUSA user id in 3mf
+                metadata_item_map[PRUSA_DESIGNER_COVER_FILE_TAG]  = xml_escape(design_cover);
+                metadata_item_map[PRUSA_DESCRIPTION_TAG]          = xml_escape(description);
+                metadata_item_map[PRUSA_COPYRIGHT_NORMATIVE_TAG]  = xml_escape(copyright);
+                metadata_item_map[PRUSA_LICENSE_TAG]              = xml_escape(license);
 
                 /* save model info */
                 if (!model_id.empty()) {
-                    metadata_item_map[BBL_MODEL_ID_TAG] = model_id;
-                    metadata_item_map[BBL_REGION_TAG]   = region_code;
+                    metadata_item_map[PRUSA_MODEL_ID_TAG] = model_id;
+                    metadata_item_map[PRUSA_REGION_TAG]   = region_code;
                 }
 
-                // Orca: PRIVACY: do not store creation & modification date in 3mf
-                metadata_item_map[BBL_CREATION_DATE_TAG] = "";
-                metadata_item_map[BBL_MODIFICATION_TAG]  = "";
-                // Orca: Write the BambuStudio compatibility version string using SLIC3R_VERSION
-                metadata_item_map[BBL_APPLICATION_TAG] = (boost::format("%1%-%2%") % "BambuStudio" % SLIC3R_VERSION).str();
+                // PRIVACY: do not store creation & modification date in 3mf
+                metadata_item_map[PRUSA_CREATION_DATE_TAG] = "";
+                metadata_item_map[PRUSA_MODIFICATION_TAG]  = "";
+                // Write the PrusaSlicer compatibility version string using SLIC3R_VERSION
+                metadata_item_map[PRUSA_APPLICATION_TAG] = (boost::format("%1%-%2%") % "PrusaSlicer" % SLIC3R_VERSION).str();
             }
-            metadata_item_map[BBS_3MF_VERSION] = std::to_string(VERSION_BBS_3MF);
+            metadata_item_map[PRUSA_3MF_VERSION] = std::to_string(VERSION_PRUSA_3MF);
 
             if (!model.mk_name.empty()) {
-                metadata_item_map[BBL_MAKERLAB_TAG] = xml_escape(model.mk_name);
+                metadata_item_map[PRUSA_PRUSALAB_TAG] = xml_escape(model.mk_name);
                 BOOST_LOG_TRIVIAL(info) << "saved mk_name " << model.mk_name;
             }
             if (!model.mk_version.empty()) {
-                metadata_item_map[BBL_MAKERLAB_VERSION_TAG] = xml_escape(model.mk_version);
+                metadata_item_map[PRUSA_PRUSALAB_VERSION_TAG] = xml_escape(model.mk_version);
                 BOOST_LOG_TRIVIAL(info) << "saved mk_version " << model.mk_version;
             }
             if (!model.md_name.empty()) {
@@ -6856,12 +6852,12 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
             // store metadata info
             for (auto item : metadata_item_map) {
-                BOOST_LOG_TRIVIAL(info) << "bbs_3mf: save key= " << item.first << ", value = " << item.second;
+                BOOST_LOG_TRIVIAL(info) << "prusa_3mf: save key= " << item.first << ", value = " << item.second;
                 stream << " <" << METADATA_TAG << " name=\"" << item.first << "\">"
                        << xml_escape(item.second) << "</" << METADATA_TAG << ">\n";
-                if (item.first == BBL_APPLICATION_TAG) {
-                    stream << " <" << METADATA_TAG << " name=\"" << ORCASLICER_TAG << "\">"
-                           << xml_escape(SoftFever_VERSION) << "</" << METADATA_TAG << ">\n";
+                if (item.first == PRUSA_APPLICATION_TAG) {
+                    stream << " <" << METADATA_TAG << " name=\"" << PRUSA_SLIC3R_TAG << "\">"
+                           << xml_escape(SLIC3R_VERSION) << "</" << METADATA_TAG << ">\n";
                 }
             }
 
@@ -6931,13 +6927,13 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                                     && (shared_volume->fuzzy_skin_facets.equals(volume->fuzzy_skin_facets)))
                                 {
                                     auto data = iter->second.first;
-                                    const_cast<_BBS_3MF_Exporter *>(this)->m_volume_paths.insert({volume, {data->sub_path, data->volumes_objectID.find(iter->second.second)->second}});
+                                    const_cast<_PRUSA_3MF_Exporter *>(this)->m_volume_paths.insert({volume, {data->sub_path, data->volumes_objectID.find(iter->second.second)->second}});
                                     volumes_objectID.insert({volume, 0});
                                     object_data.share_mesh = true;
                                     continue;
                                 }
                             }
-                            const_cast<_BBS_3MF_Exporter *>(this)->m_shared_meshes.insert({volume->mesh_ptr().get(), {&object_data, volume}});
+                            const_cast<_PRUSA_3MF_Exporter *>(this)->m_shared_meshes.insert({volume->mesh_ptr().get(), {&object_data, volume}});
                         }
                         if (m_from_backup_save)
                             volume_id = (volume_count << 16 | backup_id);
@@ -7046,7 +7042,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Exporter::_add_object_to_model_stream(mz_zip_writer_staged_context &context, ObjectData const &object_data) const
+    bool _PRUSA_3MF_Exporter::_add_object_to_model_stream(mz_zip_writer_staged_context &context, ObjectData const &object_data) const
     {
         // backup: make _add_mesh_to_object_stream() reusable
         auto flush = [this, &context](std::string & buf, bool force = false) {
@@ -7072,7 +7068,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    void _BBS_3MF_Exporter::_add_object_components_to_stream(std::stringstream &stream, ObjectData const &object_data) const
+    void _PRUSA_3MF_Exporter::_add_object_components_to_stream(std::stringstream &stream, ObjectData const &object_data) const
     {
         auto &       object = *object_data.object;
 
@@ -7137,8 +7133,8 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
     using coordinate_type_scientific = boost::spirit::karma::real_generator<float, coordinate_policy_scientific<float>>;
 #endif // EXPORT_3MF_USE_SPIRIT_KARMA_FP
 
-    //BBS: change volume to seperate objects
-    bool _BBS_3MF_Exporter::_add_mesh_to_object_stream(std::function<bool(std::string &, bool)> const &flush, ObjectData const &object_data) const
+    // change volume to seperate objects
+    bool _PRUSA_3MF_Exporter::_add_mesh_to_object_stream(std::function<bool(std::string &, bool)> const &flush, ObjectData const &object_data) const
     {
         std::string output_buffer;
 
@@ -7216,10 +7212,10 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 return false;
             }
 
-            // Orca#7574: always use "model" type to follow the 3MF Core Specification:
+            // Always use "model" type to follow the 3MF Core Specification:
             // https://github.com/3MFConsortium/spec_core/blob/20c079eef39e45ed223b8443dc9f34cbe32dc2c2/3MF%20Core%20Specification.md#3431-item-element
             // > Note: items MUST NOT reference objects of type "other", either directly or recursively.
-            // This won't break anything because when loading the file Orca (and Bambu) simply does not care about the actual object type at all (as long as it's one of "model" & "other");
+            // This won't break anything because when loading the file, the slicer simply does not care about the actual object type at all (as long as it's one of "model" & "other");
             // But PrusaSlicer requires the type to be "model".
             std::string type = "model";
 
@@ -7279,7 +7275,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         //    if (volume == nullptr)
         //        continue;
 
-            //BBS: as we stored matrix seperately, not multiplied into vertex
+            // as we stored matrix seperately, not multiplied into vertex
             //we don't need to consider this left hand case specially
             //bool is_left_handed = volume->is_left_handed();
             bool is_left_handed = false;
@@ -7344,7 +7340,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                     output_buffer += "\"";
                 }
 
-                // BBS
+                // PRUSA
                 if (i < its.properties.size()) {
                     std::string prop_str = its.properties[i].to_string();
                     if (!prop_str.empty()) {
@@ -7375,7 +7371,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return flush(output_buffer, true);
     }
 
-    void _BBS_3MF_Exporter::add_transformation(std::stringstream &stream, const Transform3d &tr)
+    void _PRUSA_3MF_Exporter::add_transformation(std::stringstream &stream, const Transform3d &tr)
     {
         for (unsigned c = 0; c < 4; ++c) {
             for (unsigned r = 0; r < 3; ++r) {
@@ -7385,7 +7381,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
     }
 
-    bool _BBS_3MF_Exporter::_add_build_to_model_stream(std::stringstream& stream, const BuildItemsList& build_items) const
+    bool _PRUSA_3MF_Exporter::_add_build_to_model_stream(std::stringstream& stream, const BuildItemsList& build_items) const
     {
         // This happens for empty projects
         if (build_items.size() == 0) {
@@ -7415,7 +7411,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Exporter::_add_cut_information_file_to_archive(mz_zip_archive &archive, Model &model)
+    bool _PRUSA_3MF_Exporter::_add_cut_information_file_to_archive(mz_zip_archive &archive, Model &model)
     {
         std::string out = "";
         pt::ptree tree;
@@ -7478,7 +7474,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Exporter::_add_layer_height_profile_file_to_archive(mz_zip_archive& archive, Model& model)
+    bool _PRUSA_3MF_Exporter::_add_layer_height_profile_file_to_archive(mz_zip_archive& archive, Model& model)
     {
         assert(is_decimal_separator_point());
         std::string out = "";
@@ -7503,7 +7499,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         }
 
         if (!out.empty()) {
-            if (!mz_zip_writer_add_mem(&archive, BBS_LAYER_HEIGHTS_PROFILE_FILE.c_str(), (const void*)out.data(), out.length(), MZ_DEFAULT_COMPRESSION)) {
+            if (!mz_zip_writer_add_mem(&archive, PRUSA_LAYER_HEIGHTS_PROFILE_FILE.c_str(), (const void*)out.data(), out.length(), MZ_DEFAULT_COMPRESSION)) {
                 add_error("Unable to add layer heights profile file to archive");
                 BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << ":" << __LINE__ << boost::format("Unable to add layer heights profile file to archive\n");
                 return false;
@@ -7513,7 +7509,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Exporter::_add_layer_config_ranges_file_to_archive(mz_zip_archive& archive, Model& model)
+    bool _PRUSA_3MF_Exporter::_add_layer_config_ranges_file_to_archive(mz_zip_archive& archive, Model& model)
     {
         std::string out = "";
         pt::ptree tree;
@@ -7572,7 +7568,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Exporter::_add_brim_ear_points_file_to_archive(mz_zip_archive& archive, Model& model)
+    bool _PRUSA_3MF_Exporter::_add_brim_ear_points_file_to_archive(mz_zip_archive& archive, Model& model)
     {
         std::string out = "";
         char buffer[1024];
@@ -7607,7 +7603,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
     }
 
     /*
-    bool _BBS_3MF_Exporter::_add_sla_support_points_file_to_archive(mz_zip_archive& archive, Model& model)
+    bool _PRUSA_3MF_Exporter::_add_sla_support_points_file_to_archive(mz_zip_archive& archive, Model& model)
     {
         assert(is_decimal_separator_point());
         std::string out = "";
@@ -7643,7 +7639,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Exporter::_add_sla_drain_holes_file_to_archive(mz_zip_archive& archive, Model& model)
+    bool _PRUSA_3MF_Exporter::_add_sla_drain_holes_file_to_archive(mz_zip_archive& archive, Model& model)
     {
         assert(is_decimal_separator_point());
         const char *const fmt = "object_id=%d|";
@@ -7695,7 +7691,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }*/
 
-    bool _BBS_3MF_Exporter::_add_print_config_file_to_archive(mz_zip_archive& archive, const DynamicPrintConfig &config)
+    bool _PRUSA_3MF_Exporter::_add_print_config_file_to_archive(mz_zip_archive& archive, const DynamicPrintConfig &config)
     {
         assert(is_decimal_separator_point());
         char buffer[1024];
@@ -7707,7 +7703,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 out += "; " + key + " = " + config.opt_serialize(key) + "\n";
 
         if (!out.empty()) {
-            if (!mz_zip_writer_add_mem(&archive, BBS_PRINT_CONFIG_FILE.c_str(), (const void*)out.data(), out.length(), MZ_DEFAULT_COMPRESSION)) {
+            if (!mz_zip_writer_add_mem(&archive, PRUSA_PRINT_CONFIG_FILE.c_str(), (const void*)out.data(), out.length(), MZ_DEFAULT_COMPRESSION)) {
                 add_error("Unable to add print config file to archive");
                 BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << ":" << __LINE__ << boost::format("Unable to add print config file to archive\n");
                 return false;
@@ -7717,17 +7713,17 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    //BBS: add project config file logic for new json format
-    bool _BBS_3MF_Exporter::_add_project_config_file_to_archive(mz_zip_archive& archive, const DynamicPrintConfig &config, Model& model)
+    // add project config file logic for new json format
+    bool _PRUSA_3MF_Exporter::_add_project_config_file_to_archive(mz_zip_archive& archive, const DynamicPrintConfig &config, Model& model)
     {
         const std::string& temp_path = model.get_backup_path();
         std::string temp_file = temp_path + std::string("/") + "_temp_1.config";
         config.save_to_json(temp_file, std::string("project_settings"), std::string("project"), std::string(SLIC3R_VERSION));
-        return _add_file_to_archive(archive, BBS_PROJECT_CONFIG_FILE, temp_file);
+        return _add_file_to_archive(archive, PRUSA_PROJECT_CONFIG_FILE, temp_file);
     }
 
-    //BBS: add project embedded preset files
-    bool _BBS_3MF_Exporter::_add_project_embedded_presets_to_archive(mz_zip_archive& archive, Model& model, std::vector<Preset*> project_presets)
+    // add project embedded preset files
+    bool _PRUSA_3MF_Exporter::_add_project_embedded_presets_to_archive(mz_zip_archive& archive, Model& model, std::vector<Preset*> project_presets)
     {
         char buffer[1024];
         snprintf(buffer, 1024, "; %s\n\n", header_slic3r_generated().c_str());
@@ -7780,7 +7776,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return file_path;
     }
 
-    bool _BBS_3MF_Exporter::_add_model_config_file_to_archive(mz_zip_archive& archive, const Model& model, PlateDataPtrs& plate_data_list, const ObjectToObjectDataMap &objects_data, const DynamicPrintConfig& config, int export_plate_idx, bool save_gcode, bool use_loaded_id)
+    bool _PRUSA_3MF_Exporter::_add_model_config_file_to_archive(mz_zip_archive& archive, const Model& model, PlateDataPtrs& plate_data_list, const ObjectToObjectDataMap &objects_data, const DynamicPrintConfig& config, int export_plate_idx, bool save_gcode, bool use_loaded_id)
     {
         std::stringstream stream;
         // Store mesh transformation in full precision, as the volumes are stored transformed and they need to be transformed back
@@ -7802,7 +7798,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 if (!obj->name.empty())
                     stream << "    <" << METADATA_TAG << " " << KEY_ATTR << "=\"name\" " << VALUE_ATTR << "=\"" << xml_escape(obj->name) << "\"/>\n";
 
-                //BBS: store object's module name
+                // store object's module name
                 if (!obj->module_name.empty())
                     stream << "    <" << METADATA_TAG << " " << KEY_ATTR << "=\"module\" " << VALUE_ATTR << "=\"" << xml_escape(obj->module_name) << "\"/>\n";
 
@@ -7904,7 +7900,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             }
         }
 
-        //BBS: store plate related logic
+        // store plate related logic
         std::vector<std::string> gcode_paths;
         for (unsigned int i = 0; i < (unsigned int)plate_data_list.size(); ++i)
         {
@@ -8057,10 +8053,10 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
         // write model rels
         if (save_gcode)
-            _add_relationships_file_to_archive(archive, BBS_MODEL_CONFIG_RELS_FILE, gcode_paths, {"http://schemas.bambulab.com/package/2021/gcode"}, Slic3r::PackingTemporaryData(), export_plate_idx);
+            _add_relationships_file_to_archive(archive, PRUSA_MODEL_CONFIG_RELS_FILE, gcode_paths, {"http://schemas.prusa3d.com/package/2021/gcode"}, Slic3r::PackingTemporaryData(), export_plate_idx);
 
         if (!m_skip_model) {
-        //BBS: store assemble related info
+        // store assemble related info
         stream << "  <" << ASSEMBLE_TAG << ">\n";
         for (const ObjectToObjectDataMap::value_type& obj_metadata : objects_data) {
             auto object_data = obj_metadata.second;
@@ -8095,7 +8091,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         stream << "</" << CONFIG_TAG << ">\n";
 
         std::string out = stream.str();
-        if (!mz_zip_writer_add_mem(&archive, BBS_MODEL_CONFIG_FILE.c_str(), (const void*)out.data(), out.length(), MZ_DEFAULT_COMPRESSION)) {
+        if (!mz_zip_writer_add_mem(&archive, PRUSA_MODEL_CONFIG_FILE.c_str(), (const void*)out.data(), out.length(), MZ_DEFAULT_COMPRESSION)) {
             BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << ":" << __LINE__ << boost::format("Unable to add model config file to archive\n");
             add_error("Unable to add model config file to archive");
             return false;
@@ -8104,7 +8100,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Exporter::_add_filament_sequence_file_to_archive(mz_zip_archive& archive, const PlateDataPtrs& plate_data_list)
+    bool _PRUSA_3MF_Exporter::_add_filament_sequence_file_to_archive(mz_zip_archive& archive, const PlateDataPtrs& plate_data_list)
     {
         nlohmann::json sequence_json;
 
@@ -8137,7 +8133,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Exporter::_add_slice_info_config_file_to_archive(mz_zip_archive& archive, const Model& model, PlateDataPtrs& plate_data_list, const ObjectToObjectDataMap &objects_data, const DynamicPrintConfig& config)
+    bool _PRUSA_3MF_Exporter::_add_slice_info_config_file_to_archive(mz_zip_archive& archive, const Model& model, PlateDataPtrs& plate_data_list, const ObjectToObjectDataMap &objects_data, const DynamicPrintConfig& config)
     {
         std::stringstream stream;
         // Store mesh transformation in full precision, as the volumes are stored transformed and they need to be transformed back
@@ -8149,9 +8145,9 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
         // save slice header for debug
         stream << "  <" << SLICE_HEADER_TAG << ">\n";
-        stream << "    <" << SLICE_HEADER_ITEM_TAG << " " << KEY_ATTR << "=\"" << "X-BBL-Client-Type"    << "\" " << VALUE_ATTR << "=\"" << "slicer" << "\"/>\n";
-        stream << "    <" << SLICE_HEADER_ITEM_TAG << " " << KEY_ATTR << "=\"" << "X-BBL-Client-Version" << "\" " << VALUE_ATTR << "=\"" << convert_to_full_version(SLIC3R_VERSION) << "\"/>\n";
-        stream << "    <" << SLICE_HEADER_ITEM_TAG << " " << KEY_ATTR << "=\"" << "OrcaSlicer-Version" << "\" " << VALUE_ATTR << "=\"" << SoftFever_VERSION << "\"/>\n";
+        stream << "    <" << SLICE_HEADER_ITEM_TAG << " " << KEY_ATTR << "=\"" << "X-PRUSA-Client-Type"    << "\" " << VALUE_ATTR << "=\"" << "slicer" << "\"/>\n";
+        stream << "    <" << SLICE_HEADER_ITEM_TAG << " " << KEY_ATTR << "=\"" << "X-PRUSA-Client-Version" << "\" " << VALUE_ATTR << "=\"" << convert_to_full_version(SLIC3R_VERSION) << "\"/>\n";
+        stream << "    <" << SLICE_HEADER_ITEM_TAG << " " << KEY_ATTR << "=\"" << "PrusaSlicer-Version" << "\" " << VALUE_ATTR << "=\"" << SLIC3R_VERSION << "\"/>\n";
         stream << "  </" << SLICE_HEADER_TAG << ">\n";
 
         for (unsigned int i = 0; i < (unsigned int)plate_data_list.size(); ++i)
@@ -8347,7 +8343,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
         return true;
     }
-bool _BBS_3MF_Exporter::_add_gcode_file_to_archive(mz_zip_archive& archive, const Model& model, PlateDataPtrs& plate_data_list, Export3mfProgressFn proFn)
+bool _PRUSA_3MF_Exporter::_add_gcode_file_to_archive(mz_zip_archive& archive, const Model& model, PlateDataPtrs& plate_data_list, Export3mfProgressFn proFn)
 {
     bool result = true;
     bool cb_cancel = false;
@@ -8411,9 +8407,9 @@ bool _BBS_3MF_Exporter::_add_gcode_file_to_archive(mz_zip_archive& archive, cons
     return result;
 }
 
-bool _BBS_3MF_Exporter::_add_custom_gcode_per_print_z_file_to_archive(mz_zip_archive& archive, Model& model, const DynamicPrintConfig* config)
+bool _PRUSA_3MF_Exporter::_add_custom_gcode_per_print_z_file_to_archive(mz_zip_archive& archive, Model& model, const DynamicPrintConfig* config)
 {
-    //BBS: add plate tree related logic
+    // add plate tree related logic
     std::string out = "";
     bool has_custom_gcode = false;
     pt::ptree tree;
@@ -8433,7 +8429,7 @@ bool _BBS_3MF_Exporter::_add_custom_gcode_per_print_z_file_to_archive(mz_zip_arc
                 code_tree.put("<xmlattr>.color", code.color);
                 code_tree.put("<xmlattr>.extra", code.extra);
 
-                //BBS
+                //PRUSA
                 std::string gcode = //code.type == CustomGCode::ColorChange ? config->opt_string("color_change_gcode")    :
                     code.type == CustomGCode::PausePrint ? config->opt_string("machine_pause_gcode") :
                     code.type == CustomGCode::Template ? config->opt_string("template_custom_gcode") :
@@ -8468,7 +8464,7 @@ bool _BBS_3MF_Exporter::_add_custom_gcode_per_print_z_file_to_archive(mz_zip_arc
     return true;
 }
 
-bool _BBS_3MF_Exporter::_add_auxiliary_dir_to_archive(mz_zip_archive &archive, const std::string &aux_dir, PackingTemporaryData &data)
+bool _PRUSA_3MF_Exporter::_add_auxiliary_dir_to_archive(mz_zip_archive &archive, const std::string &aux_dir, PackingTemporaryData &data)
 {
     bool result = true;
 
@@ -8540,11 +8536,11 @@ static void handle_legacy_project_loaded(unsigned int version_project_file, Dyna
 }
 
 // backup backgroud thread to dispatch tasks and coperate with ui thread
-class _BBS_Backup_Manager
+class _PRUSA_Backup_Manager
 {
 public:
-    static _BBS_Backup_Manager& get() {
-        static _BBS_Backup_Manager m;
+    static _PRUSA_Backup_Manager& get() {
+        static _PRUSA_Backup_Manager m;
         return m;
     }
 
@@ -8712,14 +8708,14 @@ private:
         boost::posix_time::ptime start;
     };
 private:
-    _BBS_Backup_Manager() {
+    _PRUSA_Backup_Manager() {
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << " inital and interval = " << m_interval;
         m_next_backup = boost::get_system_time() + boost::posix_time::seconds(m_interval);
         boost::unique_lock lock(m_mutex);
         m_thread = std::move(boost::thread(boost::ref(*this)));
     }
 
-    ~_BBS_Backup_Manager() {
+    ~_PRUSA_Backup_Manager() {
         push_task({Exit});
         m_thread.join();
     }
@@ -8794,7 +8790,7 @@ private:
             case AddObject: {
                 {
                     CNumericLocalesSetter locales_setter;
-                    _BBS_3MF_Exporter     e;
+                    _PRUSA_3MF_Exporter     e;
                     e.save_object_mesh(t.path, *t.object, (int) t.id);
                     // response to delete cloned object
                 }
@@ -8900,26 +8896,26 @@ private:
 };
 
 
-//BBS: add plate data list related logic
-bool load_bbs_3mf(const char* path, DynamicPrintConfig* config, ConfigSubstitutionContext* config_substitutions, Model* model, PlateDataPtrs* plate_data_list, std::vector<Preset*>* project_presets,
-                    bool* is_bbl_3mf, bool* is_orca_3mf, Semver* file_version, Import3mfProgressFn proFn, LoadStrategy strategy, BBLProject *project, int plate_id)
+// add plate data list related logic
+bool load_prusa_3mf(const char* path, DynamicPrintConfig* config, ConfigSubstitutionContext* config_substitutions, Model* model, PlateDataPtrs* plate_data_list, std::vector<Preset*>* project_presets,
+                    bool* is_prusa_3mf, bool* is_legacy_3mf, Semver* file_version, Import3mfProgressFn proFn, LoadStrategy strategy, PrusaProject *project, int plate_id)
 {
     if (path == nullptr || config == nullptr || model == nullptr)
         return false;
 
     // All import should use "C" locales for number formatting.
     CNumericLocalesSetter locales_setter;
-    _BBS_3MF_Importer importer;
-    bool res = importer.load_model_from_file(path, *model, *plate_data_list, *project_presets, *config, *config_substitutions, strategy, is_bbl_3mf, is_orca_3mf, *file_version, proFn, project, plate_id);
+    _PRUSA_3MF_Importer importer;
+    bool res = importer.load_model_from_file(path, *model, *plate_data_list, *project_presets, *config, *config_substitutions, strategy, is_prusa_3mf, is_legacy_3mf, *file_version, proFn, project, plate_id);
     importer.log_errors();
-    //BBS: remove legacy project logic currently
+    // remove legacy project logic currently
     //handle_legacy_project_loaded(importer.version(), *config);
     return res;
 }
 
-std::string bbs_3mf_get_thumbnail(const char *path)
+std::string prusa_3mf_get_thumbnail(const char *path)
 {
-    _BBS_3MF_Importer importer;
+    _PRUSA_3MF_Importer importer;
     std::string data;
     bool res = importer.get_thumbnail(path, data);
     if (!res) importer.log_errors();
@@ -8929,13 +8925,13 @@ std::string bbs_3mf_get_thumbnail(const char *path)
 bool load_gcode_3mf_from_stream(std::istream &data, DynamicPrintConfig *config, Model *model, PlateDataPtrs *plate_data_list, Semver *file_version)
 {
     CNumericLocalesSetter locales_setter;
-    _BBS_3MF_Importer     importer;
+    _PRUSA_3MF_Importer     importer;
     bool res = importer.load_gcode_3mf_from_stream(data, *model, *plate_data_list, *config, *file_version);
     importer.log_errors();
     return res;
 }
 
-bool store_bbs_3mf(StoreParams& store_params)
+bool store_prusa_3mf(StoreParams& store_params)
 {
     // All export should use "C" locales for number formatting.
     CNumericLocalesSetter locales_setter;
@@ -8943,7 +8939,7 @@ bool store_bbs_3mf(StoreParams& store_params)
     if (store_params.path == nullptr || store_params.model == nullptr)
         return false;
 
-    _BBS_3MF_Exporter exporter;
+    _PRUSA_3MF_Exporter exporter;
     bool res = exporter.save_model_to_file(store_params);
     if (!res)
         exporter.log_errors();
@@ -8951,7 +8947,7 @@ bool store_bbs_3mf(StoreParams& store_params)
     return res;
 }
 
-//BBS: release plate data list
+// release plate data list
 void release_PlateData_list(PlateDataPtrs& plate_data_list)
 {
     //clear
@@ -8972,38 +8968,38 @@ void save_object_mesh(ModelObject& object)
         return;
     if (object.volumes.empty() || object.instances.empty())
         return;
-    _BBS_Backup_Manager::get().add_object_mesh(object);
+    _PRUSA_Backup_Manager::get().add_object_mesh(object);
 }
 
 void delete_object_mesh(ModelObject& object)
 {
     // not really remove
-    // _BBS_Backup_Manager::get().remove_object_mesh(object);
+    // _PRUSA_Backup_Manager::get().remove_object_mesh(object);
 }
 
 void backup_soon()
 {
-    _BBS_Backup_Manager::get().backup_soon();
+    _PRUSA_Backup_Manager::get().backup_soon();
 }
 
 void remove_backup(Model& model, bool removeAll)
 {
-    _BBS_Backup_Manager::get().remove_backup(model, removeAll);
+    _PRUSA_Backup_Manager::get().remove_backup(model, removeAll);
 }
 
 void set_backup_interval(long interval)
 {
-    _BBS_Backup_Manager::get().set_interval(interval);
+    _PRUSA_Backup_Manager::get().set_interval(interval);
 }
 
 void set_backup_callback(std::function<void(int)> callback)
 {
-    _BBS_Backup_Manager::get().set_post_callback(callback);
+    _PRUSA_Backup_Manager::get().set_post_callback(callback);
 }
 
 void run_backup_ui_tasks()
 {
-    _BBS_Backup_Manager::get().run_ui_tasks();
+    _PRUSA_Backup_Manager::get().run_ui_tasks();
 }
 
 bool has_restore_data(std::string & path, std::string& origin)
@@ -9041,27 +9037,27 @@ bool has_restore_data(std::string & path, std::string& origin)
 
 void put_other_changes()
 {
-    _BBS_Backup_Manager::get().put_other_changes();
+    _PRUSA_Backup_Manager::get().put_other_changes();
 }
 
 void clear_other_changes(bool backup)
 {
-    _BBS_Backup_Manager::get().clear_other_changes(backup);
+    _PRUSA_Backup_Manager::get().clear_other_changes(backup);
 }
 
 bool has_other_changes(bool backup)
 {
-    return _BBS_Backup_Manager::get().has_other_changes(backup);
+    return _PRUSA_Backup_Manager::get().has_other_changes(backup);
 }
 
 SaveObjectGaurd::SaveObjectGaurd(ModelObject& object)
 {
-    _BBS_Backup_Manager::get().push_object_gaurd(object);
+    _PRUSA_Backup_Manager::get().push_object_gaurd(object);
 }
 
 SaveObjectGaurd::~SaveObjectGaurd()
 {
-    _BBS_Backup_Manager::get().pop_object_gaurd();
+    _PRUSA_Backup_Manager::get().pop_object_gaurd();
 }
 
 namespace{
@@ -9166,7 +9162,7 @@ void TextConfigurationSerialization::to_xml(std::stringstream &stream, const Tex
 namespace {
 
 FontProp::HorizontalAlign read_horizontal_align(const char **attributes, unsigned int num_attributes, const TextConfigurationSerialization::HorizontalAlignToName& horizontal_align_to_name){
-    std::string horizontal_align_str = bbs_get_attribute_value_string(attributes, num_attributes, HORIZONTAL_ALIGN_ATTR);
+    std::string horizontal_align_str = prusa_get_attribute_value_string(attributes, num_attributes, HORIZONTAL_ALIGN_ATTR);
 
     // Back compatibility
     // PS 2.6.0 do not have align
@@ -9186,7 +9182,7 @@ FontProp::HorizontalAlign read_horizontal_align(const char **attributes, unsigne
 
 
 FontProp::VerticalAlign read_vertical_align(const char **attributes, unsigned int num_attributes, const TextConfigurationSerialization::VerticalAlignToName& vertical_align_to_name){
-    std::string vertical_align_str = bbs_get_attribute_value_string(attributes, num_attributes, VERTICAL_ALIGN_ATTR);
+    std::string vertical_align_str = prusa_get_attribute_value_string(attributes, num_attributes, VERTICAL_ALIGN_ATTR);
 
     // Back compatibility
     // PS 2.6.0 do not have align
@@ -9209,43 +9205,43 @@ FontProp::VerticalAlign read_vertical_align(const char **attributes, unsigned in
 std::optional<TextConfiguration> TextConfigurationSerialization::read(const char **attributes, unsigned int num_attributes)
 {
     FontProp fp;
-    int char_gap = bbs_get_attribute_value_int(attributes, num_attributes, CHAR_GAP_ATTR);
+    int char_gap = prusa_get_attribute_value_int(attributes, num_attributes, CHAR_GAP_ATTR);
     if (char_gap != 0) fp.char_gap = char_gap;
-    int line_gap = bbs_get_attribute_value_int(attributes, num_attributes, LINE_GAP_ATTR); 
+    int line_gap = prusa_get_attribute_value_int(attributes, num_attributes, LINE_GAP_ATTR); 
     if (line_gap != 0) fp.line_gap = line_gap;
-    float boldness = bbs_get_attribute_value_float(attributes, num_attributes, BOLDNESS_ATTR);
+    float boldness = prusa_get_attribute_value_float(attributes, num_attributes, BOLDNESS_ATTR);
     if (std::fabs(boldness) > std::numeric_limits<float>::epsilon())
         fp.boldness = boldness;
-    float skew = bbs_get_attribute_value_float(attributes, num_attributes, SKEW_ATTR);
+    float skew = prusa_get_attribute_value_float(attributes, num_attributes, SKEW_ATTR);
     if (std::fabs(skew) > std::numeric_limits<float>::epsilon())
         fp.skew = skew;
-    int per_glyph = bbs_get_attribute_value_int(attributes, num_attributes, PER_GLYPH_ATTR);
+    int per_glyph = prusa_get_attribute_value_int(attributes, num_attributes, PER_GLYPH_ATTR);
     if (per_glyph == 1) fp.per_glyph = true;
 
     fp.align = FontProp::Align(
         read_horizontal_align(attributes, num_attributes, horizontal_align_to_name),
         read_vertical_align(attributes, num_attributes, vertical_align_to_name));
 
-    int collection_number = bbs_get_attribute_value_int(attributes, num_attributes, COLLECTION_NUMBER_ATTR);
+    int collection_number = prusa_get_attribute_value_int(attributes, num_attributes, COLLECTION_NUMBER_ATTR);
     if (collection_number > 0) fp.collection_number = static_cast<unsigned int>(collection_number);
 
-    fp.size_in_mm = bbs_get_attribute_value_float(attributes, num_attributes, LINE_HEIGHT_ATTR);
+    fp.size_in_mm = prusa_get_attribute_value_float(attributes, num_attributes, LINE_HEIGHT_ATTR);
 
-    std::string family = bbs_get_attribute_value_string(attributes, num_attributes, FONT_FAMILY_ATTR);
+    std::string family = prusa_get_attribute_value_string(attributes, num_attributes, FONT_FAMILY_ATTR);
     if (!family.empty()) fp.family = family;
-    std::string face_name = bbs_get_attribute_value_string(attributes, num_attributes, FONT_FACE_NAME_ATTR);
+    std::string face_name = prusa_get_attribute_value_string(attributes, num_attributes, FONT_FACE_NAME_ATTR);
     if (!face_name.empty()) fp.face_name = face_name;
-    std::string style = bbs_get_attribute_value_string(attributes, num_attributes, FONT_STYLE_ATTR);
+    std::string style = prusa_get_attribute_value_string(attributes, num_attributes, FONT_STYLE_ATTR);
     if (!style.empty()) fp.style = style;
-    std::string weight = bbs_get_attribute_value_string(attributes, num_attributes, FONT_WEIGHT_ATTR);
+    std::string weight = prusa_get_attribute_value_string(attributes, num_attributes, FONT_WEIGHT_ATTR);
     if (!weight.empty()) fp.weight = weight;
 
-    std::string style_name = bbs_get_attribute_value_string(attributes, num_attributes, STYLE_NAME_ATTR);
-    std::string font_descriptor = bbs_get_attribute_value_string(attributes, num_attributes, FONT_DESCRIPTOR_ATTR);
-    std::string type_str = bbs_get_attribute_value_string(attributes, num_attributes, FONT_DESCRIPTOR_TYPE_ATTR);
+    std::string style_name = prusa_get_attribute_value_string(attributes, num_attributes, STYLE_NAME_ATTR);
+    std::string font_descriptor = prusa_get_attribute_value_string(attributes, num_attributes, FONT_DESCRIPTOR_ATTR);
+    std::string type_str = prusa_get_attribute_value_string(attributes, num_attributes, FONT_DESCRIPTOR_TYPE_ATTR);
     EmbossStyle::Type type = bimap_cvt(type_to_name, std::string_view{type_str}, EmbossStyle::Type::undefined);
 
-    std::string text = bbs_get_attribute_value_string(attributes, num_attributes, TEXT_DATA_ATTR);
+    std::string text = prusa_get_attribute_value_string(attributes, num_attributes, TEXT_DATA_ATTR);
     EmbossStyle es{style_name, std::move(font_descriptor), type, std::move(fp)};
     return TextConfiguration{std::move(es), std::move(text)};
 }
@@ -9253,17 +9249,17 @@ std::optional<TextConfiguration> TextConfigurationSerialization::read(const char
 EmbossShape TextConfigurationSerialization::read_old(const char **attributes, unsigned int num_attributes)
 {
     EmbossShape es;
-    std::string fix_tr_mat_str = bbs_get_attribute_value_string(attributes, num_attributes, TRANSFORM_ATTR);
+    std::string fix_tr_mat_str = prusa_get_attribute_value_string(attributes, num_attributes, TRANSFORM_ATTR);
     if (!fix_tr_mat_str.empty())
-        es.fix_3mf_tr = bbs_get_transform_from_3mf_specs_string(fix_tr_mat_str);
+        es.fix_3mf_tr = prusa_get_transform_from_3mf_specs_string(fix_tr_mat_str);
 
 
-    if (bbs_get_attribute_value_int(attributes, num_attributes, USE_SURFACE_ATTR) == 1)
+    if (prusa_get_attribute_value_int(attributes, num_attributes, USE_SURFACE_ATTR) == 1)
         es.projection.use_surface = true;
 
-    es.projection.depth = bbs_get_attribute_value_float(attributes, num_attributes, DEPTH_ATTR);
+    es.projection.depth = prusa_get_attribute_value_float(attributes, num_attributes, DEPTH_ATTR);
 
-    int use_surface = bbs_get_attribute_value_int(attributes, num_attributes, USE_SURFACE_ATTR);
+    int use_surface = prusa_get_attribute_value_int(attributes, num_attributes, USE_SURFACE_ATTR);
     if (use_surface == 1)
         es.projection.use_surface = true;
 
@@ -9277,7 +9273,7 @@ Transform3d create_fix(const std::optional<Transform3d> &prev, const ModelVolume
     // when no change do not calculate transformation only store original fix matrix
 
     // Create transformation used after load actual stored volume
-    // Orca: do not bake volume transformation into meshes
+    // Do not bake volume transformation into meshes
     // const Transform3d &actual_trmat = volume.get_matrix();
     const Transform3d& actual_trmat = Transform3d::Identity();
 
@@ -9357,34 +9353,34 @@ void to_xml(std::stringstream &stream, const EmbossShape &es, const ModelVolume 
     // FIX of baked transformation
     Transform3d fix = create_fix(es.fix_3mf_tr, volume);
     stream << TRANSFORM_ATTR << "=\"";
-    _BBS_3MF_Exporter::add_transformation(stream, fix);
+    _PRUSA_3MF_Exporter::add_transformation(stream, fix);
     stream << "\" ";
 
     stream << "/>\n"; // end SHAPE_TAG    
 }
 
 std::optional<EmbossShape> read_emboss_shape(const char **attributes, unsigned int num_attributes) {    
-    double scale = bbs_get_attribute_value_float(attributes, num_attributes, SHAPE_SCALE_ATTR);
-    int unhealed = bbs_get_attribute_value_int(attributes, num_attributes, UNHEALED_ATTR);
+    double scale = prusa_get_attribute_value_float(attributes, num_attributes, SHAPE_SCALE_ATTR);
+    int unhealed = prusa_get_attribute_value_int(attributes, num_attributes, UNHEALED_ATTR);
     bool is_healed = unhealed != 1;
 
     EmbossProjection projection;
-    projection.depth = bbs_get_attribute_value_float(attributes, num_attributes, DEPTH_ATTR);
+    projection.depth = prusa_get_attribute_value_float(attributes, num_attributes, DEPTH_ATTR);
     if (is_approx(projection.depth, 0.))
         projection.depth = 10.;
 
-    int use_surface  = bbs_get_attribute_value_int(attributes, num_attributes, USE_SURFACE_ATTR);
+    int use_surface  = prusa_get_attribute_value_int(attributes, num_attributes, USE_SURFACE_ATTR);
     if (use_surface == 1)
         projection.use_surface = true;     
 
     std::optional<Transform3d> fix_tr_mat;
-    std::string fix_tr_mat_str = bbs_get_attribute_value_string(attributes, num_attributes, TRANSFORM_ATTR);
+    std::string fix_tr_mat_str = prusa_get_attribute_value_string(attributes, num_attributes, TRANSFORM_ATTR);
     if (!fix_tr_mat_str.empty()) { 
-        fix_tr_mat = bbs_get_transform_from_3mf_specs_string(fix_tr_mat_str);
+        fix_tr_mat = prusa_get_transform_from_3mf_specs_string(fix_tr_mat_str);
     }
 
-    std::string file_path = bbs_get_attribute_value_string(attributes, num_attributes, SVG_FILE_PATH_ATTR);
-    std::string file_path_3mf = bbs_get_attribute_value_string(attributes, num_attributes, SVG_FILE_PATH_IN_3MF_ATTR);
+    std::string file_path = prusa_get_attribute_value_string(attributes, num_attributes, SVG_FILE_PATH_ATTR);
+    std::string file_path_3mf = prusa_get_attribute_value_string(attributes, num_attributes, SVG_FILE_PATH_IN_3MF_ATTR);
 
     // MayBe: store also shapes to not store svg
     // But be carefull curve will be lost -> scale will not change sampling

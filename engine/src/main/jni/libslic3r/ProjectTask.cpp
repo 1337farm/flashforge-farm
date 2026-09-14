@@ -24,7 +24,7 @@ namespace pt = boost::property_tree;
 
 namespace Slic3r {
 
-    BBLProfile::BBLProfile(BBLProject* project)
+    PrusaProfile::PrusaProfile(PrusaProject* project)
     {
         project_ = nullptr;
         if (project) {
@@ -35,15 +35,15 @@ namespace Slic3r {
         profile_name = "N/A";
     }
 
-    BBLSliceInfo* BBLProfile::get_slice_info(std::string plate_idx)
+    PrusaSliceInfo* PrusaProfile::get_slice_info(std::string plate_idx)
     {
-        std::map<std::string, BBLSliceInfo*>::iterator it = slice_info.find(plate_idx);
+        std::map<std::string, PrusaSliceInfo*>::iterator it = slice_info.find(plate_idx);
         if (it == slice_info.end())
             return nullptr;
         return it->second;
     }
 
-    BBLTask::BBLTask(BBLProfile* profile)
+    PrusaTask::PrusaTask(PrusaProfile* profile)
     {
         profile_ = nullptr;
         if (profile) {
@@ -53,7 +53,7 @@ namespace Slic3r {
         }
     }
 
-    BBLSubTask::BBLSubTask(BBLTask* task)
+    PrusaSubTask::PrusaSubTask(PrusaTask* task)
     {
         parent_task_ = task;
         if (task) {
@@ -66,7 +66,7 @@ namespace Slic3r {
         task_bed_type  = "auto";
     }
 
-    int BBLSubTask::parse_content_json(std::string json_str)
+    int PrusaSubTask::parse_content_json(std::string json_str)
     {
         try {
             json j = json::parse(json_str);
@@ -93,43 +93,43 @@ namespace Slic3r {
         return -1;
     }
 
-    BBLSubTask::SubTaskStatus BBLSubTask::parse_status(std::string status)
+    PrusaSubTask::SubTaskStatus PrusaSubTask::parse_status(std::string status)
     {
         if (status.compare("CREATED") == 0) {
-            return BBLSubTask::SubTaskStatus::TASK_CREATED;
+            return PrusaSubTask::SubTaskStatus::TASK_CREATED;
         }
         else if (status.compare("READY") == 0) {
-            return BBLSubTask::SubTaskStatus::TASK_READY;
+            return PrusaSubTask::SubTaskStatus::TASK_READY;
         }
         else if (status.compare("RUNNING") == 0) {
-            return BBLSubTask::SubTaskStatus::TASK_RUNNING;
+            return PrusaSubTask::SubTaskStatus::TASK_RUNNING;
         }
         else if (status.compare("PAUSE") == 0) {
-            return BBLSubTask::SubTaskStatus::TASK_PAUSE;
+            return PrusaSubTask::SubTaskStatus::TASK_PAUSE;
         }
         else if (status.compare("FAILED") == 0) {
-            return BBLSubTask::SubTaskStatus::TASK_FAILED;
+            return PrusaSubTask::SubTaskStatus::TASK_FAILED;
         }
         else if (status.compare("FINISHED") == 0) {
-            return BBLSubTask::SubTaskStatus::TASK_FINISHED;
+            return PrusaSubTask::SubTaskStatus::TASK_FINISHED;
         }
         else {
-            return BBLSubTask::SubTaskStatus::TASK_CREATED;
+            return PrusaSubTask::SubTaskStatus::TASK_CREATED;
         }
     }
 
-    BBLSubTask::SubTaskStatus BBLSubTask::parse_user_service_task_status(int status)
+    PrusaSubTask::SubTaskStatus PrusaSubTask::parse_user_service_task_status(int status)
     {
         if (status == 1)
-            return BBLSubTask::SubTaskStatus::TASK_RUNNING;
+            return PrusaSubTask::SubTaskStatus::TASK_RUNNING;
         else if (status == 2)
-            return BBLSubTask::SubTaskStatus::TASK_FINISHED;
+            return PrusaSubTask::SubTaskStatus::TASK_FINISHED;
         else if (status == 3)
-            return BBLSubTask::SubTaskStatus::TASK_FAILED;
-        return BBLSubTask::SubTaskStatus::TASK_UNKNOWN;
+            return PrusaSubTask::SubTaskStatus::TASK_FAILED;
+        return PrusaSubTask::SubTaskStatus::TASK_UNKNOWN;
     }
 
-    int BBLTask::parse_content_json(std::string json)
+    int PrusaTask::parse_content_json(std::string json)
     {
         try {
             std::stringstream ss(json);
@@ -143,7 +143,7 @@ namespace Slic3r {
             if (root.get_child_optional("subtasks")!= boost::none) {
                 pt::ptree subtask_list = root.get_child("subtasks");
                 for (auto subtask = subtask_list.begin(); subtask != subtask_list.end(); ++subtask) {
-                    BBLSubTask* new_subtask = new BBLSubTask(this);
+                    PrusaSubTask* new_subtask = new PrusaSubTask(this);
                     /* create subtasks */
                     boost::optional<std::string> subtask_id = subtask->second.get_optional<std::string>("id");
                     if (subtask_id.has_value()) new_subtask->task_id = subtask_id.value();
@@ -172,7 +172,7 @@ namespace Slic3r {
         return 0;
     }
 
-    void BBLProject::reset()
+    void PrusaProject::reset()
     {
         project_model_id.clear();
         project_name.clear();
@@ -186,7 +186,7 @@ namespace Slic3r {
         project_path.clear();
     }
 
-    BBLModelTask::BBLModelTask()
+    PrusaModelTask::PrusaModelTask()
     {
         job_id      = -1;
         design_id   = -1;

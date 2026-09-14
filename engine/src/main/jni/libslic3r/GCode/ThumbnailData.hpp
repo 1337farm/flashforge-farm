@@ -7,7 +7,7 @@
 
 namespace Slic3r {
 
-//BBS: thumbnail_size in gcode file
+// thumbnail_size in gcode file
 static std::vector<Vec2d> THUMBNAIL_SIZE = { Vec2d(50, 50) };
 
 struct ThumbnailData
@@ -27,7 +27,7 @@ struct ThumbnailData
     }
 };
 
-//BBS: add plate id into thumbnail render logic
+// add plate id into thumbnail render logic
 using ThumbnailsList = std::vector<ThumbnailData>;
 
 struct ThumbnailsParams

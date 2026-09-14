@@ -239,10 +239,10 @@ Flow support_material_flow(const PrintObject *object, float layer_height)
         float(object->print()->config().nozzle_diameter.get_at(object->config().support_filament-1)),
         (layer_height > 0.f) ? layer_height : float(object->config().layer_height.value));
 }
-//BBS
+//PRUSA
 Flow support_transition_flow(const PrintObject* object)
 {
-    //BBS: support transition of tree support is bridge flow
+    // support transition of tree support is bridge flow
     float dmr = float(object->print()->config().nozzle_diameter.get_at(object->config().support_filament - 1));
     return Flow::bridging_flow(dmr, dmr);
 }

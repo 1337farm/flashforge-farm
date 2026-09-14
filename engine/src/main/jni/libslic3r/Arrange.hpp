@@ -53,13 +53,13 @@ struct ArrangePolygon {
     coord_t   inflation = 0;        /// Arrange with inflated polygon
     int       bed_idx{UNARRANGED};  /// To which logical bed does poly belong...
     int       priority{0};
-    //BBS: add locked_plate to indicate whether it is in the locked plate
+    // add locked_plate to indicate whether it is in the locked plate
     int       locked_plate{ -1 };
     bool      is_virt_object{ false };
     bool      is_extrusion_cali_object{ false };
     bool      is_wipe_tower{ false };
     bool      has_tree_support{false};
-    //BBS: add row/col for sudoku-style layout
+    // add row/col for sudoku-style layout
     int       row{0};
     int       col{0};
     std::vector<int> extrude_ids{};      /// extruder_id for least extruder switch
@@ -122,7 +122,7 @@ struct ArrangeParams {
 
     bool do_final_align = true;
 
-    //BBS: add specific arrange params
+    // add specific arrange params
     bool  allow_multi_materials_on_same_plate = true;
     bool  avoid_extrusion_cali_region         = true;
     bool  is_seq_print                        = false;

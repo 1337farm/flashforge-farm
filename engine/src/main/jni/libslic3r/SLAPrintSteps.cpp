@@ -398,7 +398,7 @@ void SLAPrint::Steps::drill_holes(SLAPrintObject &po)
         auto bb = bounding_box(m);
         Eigen::AlignedBox<float, 3> ebb{bb.min.cast<float>(),
                                         bb.max.cast<float>()};
-        //BBS
+        //PRUSA
         //AABBTreeIndirect::traverse(
         //            tree,
         //            AABBTreeIndirect::intersecting(ebb),
@@ -521,7 +521,7 @@ void SLAPrint::Steps::slice_model(SLAPrintObject &po)
     po.m_model_slices.clear();
     MeshSlicingParamsEx params;
     params.closing_radius = float(po.config().slice_closing_radius.value);
-    //BBS: always regular mode
+    // always regular mode
     //switch (po.config().slicing_mode.value) {
     //case SlicingMode::Regular:    params.mode = MeshSlicingParams::SlicingMode::Regular; break;
     //case SlicingMode::EvenOdd:    params.mode = MeshSlicingParams::SlicingMode::EvenOdd; break;

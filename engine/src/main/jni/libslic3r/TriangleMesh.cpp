@@ -211,7 +211,7 @@ bool TriangleMesh::from_stl(stl_file& stl, bool repair)
 
 bool TriangleMesh::ReadSTLFile(const char *input_file, bool repair, ImportstlProgressFn stlFn, int custom_header_length)
 {
-    // The OrcaSlicer admesh stl_open() does not take a progress callback or custom header
+    // The PrusaSlicer admesh stl_open() does not take a progress callback or custom header
     // length; those legacy extensions are dropped (STL load progress is not reported).
     (void) stlFn;
     (void) custom_header_length;

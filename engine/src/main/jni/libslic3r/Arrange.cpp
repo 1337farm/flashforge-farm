@@ -307,10 +307,10 @@ void fill_config(PConf& pcfg, const ArrangeParams &params) {
     // Allow parallel execution.
     pcfg.parallel = params.parallel;
 
-    // BBS: excluded regions in BBS bed
+    // excluded regions in PRUSA bed
     for (auto& poly : params.excluded_regions)
         process_arrangeable(poly, pcfg.m_excluded_regions);
-    // BBS: nonprefered regions in BBS bed
+    // nonprefered regions in PRUSA bed
     for (auto& poly : params.nonprefered_regions)
         process_arrangeable(poly, pcfg.m_nonprefered_regions);
     for (auto& itm : pcfg.m_excluded_regions) {
@@ -936,7 +936,7 @@ template<class Bin> void remove_large_items(std::vector<Item> &items, Bin &&bin)
     auto it = items.begin();
     while (it != items.end())
     {
-        //BBS: skip virtual object
+        // skip virtual object
         if (!it->is_virt_object && !sl::isInside(it->transformedShape(), bin))
             it = items.erase(it);
         else
@@ -1077,7 +1077,7 @@ static void process_arrangeable(const ArrangePolygon &arrpoly,
     item.extrude_ids = arrpoly.extrude_ids;
     item.height = arrpoly.height;
     item.name = arrpoly.name;
-    //BBS: add virtual object logic
+    // add virtual object logic
     item.is_virt_object = arrpoly.is_virt_object;
     item.is_wipe_tower = arrpoly.is_wipe_tower;
     item.bed_temp = arrpoly.first_bed_temp;

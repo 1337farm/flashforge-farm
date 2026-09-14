@@ -425,7 +425,7 @@ ToolOrdering::ToolOrdering(const PrintObject &object, unsigned int first_extrude
     // Collect extruders reuqired to print the layers. Add dontcare extruders
     this->collect_extruders(object, std::vector<std::pair<double, unsigned int>>());
 
-    // BBS
+    // PRUSA
     // Reorder the extruders to minimize tool switches.
     std::vector<unsigned int> first_layer_tool_order;
     if (first_extruder == (unsigned int) -1) {
@@ -474,10 +474,10 @@ ToolOrdering::ToolOrdering(const Print &print, unsigned int first_extruder, bool
 	// Do it only if all the objects were configured to be printed with a single extruder.
 	std::vector<std::pair<double, unsigned int>> per_layer_extruder_switches;
 
-    // BBS
+    // PRUSA
 	if (auto num_filaments = unsigned(print.config().filament_diameter.size());
 		num_filaments > 1 && print.object_extruders().size() == 1 && // the current Print's configuration is CustomGCode::MultiAsSingle
-        //BBS: replace model custom gcode with current plate custom gcode
+        // replace model custom gcode with current plate custom gcode
         print.model().get_curr_plate_custom_gcodes().mode == CustomGCode::MultiAsSingle) {
 		// Printing a single extruder platter on a printer with more than 1 extruder (or single-extruder multi-material).
 		// There may be custom per-layer tool changes available at the model.
@@ -522,7 +522,7 @@ static void apply_first_layer_order(const DynamicPrintConfig* config, std::vecto
     }
 }
 
-// BBS
+// PRUSA
 std::vector<unsigned int> ToolOrdering::generate_first_layer_tool_order(const Print& print)
 {
     std::vector<unsigned int> tool_order;
@@ -674,7 +674,7 @@ void ToolOrdering::collect_extruders(const PrintObject &object, const std::vecto
 	it_per_layer_extruder_override = per_layer_extruder_switches.begin();
     unsigned int extruder_override = 0;
 
-    // BBS: collect first layer extruders of an object's wall, which will be used by brim generator
+    // collect first layer extruders of an object's wall, which will be used by brim generator
     int layerCount = 0;
     std::vector<int> firstLayerExtruders;
     firstLayerExtruders.clear();
@@ -1005,7 +1005,7 @@ float ToolOrdering::cal_max_additional_fan(const PrintConfig &config)
 }
 
 
-//BBS: find first non support filament
+// find first non support filament
 bool ToolOrdering::cal_non_support_filaments(const PrintConfig &config,
                                                          unsigned int &     first_non_support_filament,
                                                          std::vector<int> & initial_non_support_filaments,
@@ -1164,7 +1164,7 @@ std::vector<int> ToolOrdering::get_recommended_filament_maps(const std::vector<s
     std::vector<int>ret(filament_nums, master_extruder_id);
     bool ignore_ext_filament = false; // TODO: read from config
     // if mutli_extruder, calc group,otherwise set to 0
-    if (extruder_nums == 2 && print->is_BBL_printer()) {
+    if (extruder_nums == 2 && print->is_prusa_printer()) {
         std::vector<std::string> extruder_ams_count_str = print_config.extruder_ams_count.values;
         auto extruder_ams_counts = get_extruder_ams_count(extruder_ams_count_str);
         std::vector<int> group_size = calc_max_group_size(extruder_ams_counts, ignore_ext_filament);
@@ -1219,7 +1219,7 @@ std::vector<int> ToolOrdering::get_recommended_filament_maps(const std::vector<s
             ret = fg.calc_filament_group();
         }
     } else if (extruder_nums > 1) {
-        // For non-bbl multi-extruder printers we don't support filament group yet, and we use filament id as extruder id
+        // For non-prusa multi-extruder printers we don't support filament group yet, and we use filament id as extruder id
         assert(extruder_nums == filament_nums);
         for (int i = 0; i < filament_nums; i++) {
             ret[i] = i;
@@ -1333,7 +1333,7 @@ void ToolOrdering::reorder_extruders_for_minimum_flush_volume(bool reorder_first
         }
         std::transform(filament_maps.begin(), filament_maps.end(), filament_maps.begin(), [](int value) { return value - 1; });
 
-        if (m_print->is_BBL_printer())
+        if (m_print->is_prusa_printer())
         check_filament_printable_after_group(used_filaments, filament_maps, print_config);
     }
     else {
@@ -1381,7 +1381,7 @@ void ToolOrdering::reorder_extruders_for_minimum_flush_volume(bool reorder_first
 
     reorder_filaments_for_minimum_flush_volume(
         filament_lists,
-        m_print->is_BBL_printer() ? filament_maps : maps_without_group, // non-bbl printers do not support filament group yet
+        m_print->is_prusa_printer() ? filament_maps : maps_without_group, // non-prusa printers do not support filament group yet
         layer_filaments,
         nozzle_flush_mtx,
         get_custom_seq,
@@ -1478,7 +1478,7 @@ void ToolOrdering::mark_skirt_layers(const PrintConfig &config, coordf_t max_lay
 // Ignore color changes, which are performed on a layer and for such an extruder, that the extruder will not be printing above that layer.
 // If multiple events are planned over a span of a single layer, use the last one.
 
-// BBS: replace model custom gcode with current plate custom gcode
+// replace model custom gcode with current plate custom gcode
 static CustomGCode::Info custom_gcode_per_print_z;
 void ToolOrdering::assign_custom_gcodes(const Print &print)
 {
@@ -1489,7 +1489,7 @@ void ToolOrdering::assign_custom_gcodes(const Print &print)
 	if (custom_gcode_per_print_z.gcodes.empty())
 		return;
 
-    // BBS
+    // PRUSA
 	auto 						num_filaments = unsigned(print.config().filament_diameter.size());
 	CustomGCode::Mode 			mode          =
 		(num_filaments == 1) ? CustomGCode::SingleExtruder :
@@ -1531,7 +1531,7 @@ void ToolOrdering::assign_custom_gcodes(const Print &print)
 			bool pause_or_custom_gcode = ! color_change && ! tool_change;
 			bool apply_color_change = ! ignore_tool_and_color_changes &&
 				// If it is color change, it will actually be useful as the exturder above will print.
-                // BBS
+                // PRUSA
 				(color_change ? 
 					mode == CustomGCode::SingleExtruder || 
 						(custom_gcode.extruder <= int(num_filaments) && extruder_printing_above[unsigned(custom_gcode.extruder - 1)]) :
@@ -1575,7 +1575,7 @@ void WipingExtrusions::set_extruder_override(const ExtrusionEntity* entity, cons
     copies_vector[copy_id] = extruder;
 }
 
-// BBS
+// PRUSA
 void WipingExtrusions::set_support_extruder_override(const PrintObject* object, size_t copy_id, int extruder, size_t num_of_copies)
 {
     something_overridden = true;
@@ -1625,7 +1625,7 @@ bool WipingExtrusions::is_overriddable(const ExtrusionEntityCollection& eec, con
     return true;
 }
 
-// BBS
+// PRUSA
 bool WipingExtrusions::is_support_overriddable(const ExtrusionRole role, const PrintObject& object) const
 {
     if (!object.config().flush_into_support)
@@ -1654,13 +1654,13 @@ float WipingExtrusions::mark_wiping_extrusions(const Print& print, unsigned int 
     if (! this->something_overridable || volume_to_wipe <= 0. || print.config().filament_soluble.get_at(old_extruder) || print.config().filament_soluble.get_at(new_extruder))
         return std::max(0.f, volume_to_wipe); // Soluble filament cannot be wiped in a random infill, neither the filament after it
 
-    // BBS
+    // PRUSA
     if (print.config().filament_is_support.get_at(old_extruder) || print.config().filament_is_support.get_at(new_extruder))
         return std::max(0.f, volume_to_wipe); // Support filament cannot be used to print support, infill, wipe_tower, etc.
 
     // we will sort objects so that dedicated for wiping are at the beginning:
     ConstPrintObjectPtrs object_list = print.objects().vector();
-    // BBS: fix the exception caused by not fixed order between different objects
+    // fix the exception caused by not fixed order between different objects
     std::sort(object_list.begin(), object_list.end(), [object_list](const PrintObject* a, const PrintObject* b) {
         if (a->config().flush_into_objects != b->config().flush_into_objects) {
             return a->config().flush_into_objects.getBool();
@@ -1740,7 +1740,7 @@ float WipingExtrusions::mark_wiping_extrusions(const Print& print, unsigned int 
                 }
             }
 
-            // BBS
+            // PRUSA
             if (object->config().flush_into_support) {
                 auto& object_config = object->config();
                 const SupportLayer* this_support_layer = object->get_support_layer_at_printz(lt.print_z, EPSILON);
@@ -1810,7 +1810,7 @@ void WipingExtrusions::ensure_perimeters_infills_order(const Print& print)
         for (size_t copy = 0; copy < num_of_copies; ++copy) {    // iterate through copies first, so that we mark neighbouring infills to minimize travel moves
             for (const LayerRegion *layerm : this_layer->regions()) {
                 const auto &region = layerm->region();
-                //BBS
+                //PRUSA
                 if (!object->config().flush_into_infill && !object->config().flush_into_objects)
                     continue;
 
@@ -1826,9 +1826,9 @@ void WipingExtrusions::ensure_perimeters_infills_order(const Print& print)
                     // printed before its perimeter, or not be printed at all (in case its original extruder has
                     // not been added to LayerTools
                     // Either way, we will now force-override it with something suitable:
-                    //BBS
+                    //PRUSA
                     if (is_infill_first
-                    //BBS
+                    //PRUSA
                     //|| object->config().flush_into_objects  // in this case the perimeter is overridden, so we can override by the last one safely
                     || lt.is_extruder_order(lt.wall_extruder_id(region), last_nonsoluble_extruder    // !infill_first, but perimeter is already printed when last extruder prints
                     || ! lt.has_extruder(lt.sparse_infill_filament_id(region)))) // we have to force override - this could violate infill_first (FIXME)
@@ -1869,7 +1869,7 @@ const WipingExtrusions::ExtruderPerCopy* WipingExtrusions::get_extruder_override
     return overrides;
 }
 
-// BBS
+// PRUSA
 int WipingExtrusions::get_support_extruder_overrides(const PrintObject* object)
 {
     auto iter = support_map.find(object);

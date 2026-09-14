@@ -360,7 +360,7 @@ static ClipperLib::Paths raw_offset_polyline(PathsProvider &&paths, float offset
 template<class TResult, typename PathsProvider>
 static TResult expand_paths(PathsProvider &&paths, float offset, ClipperLib::JoinType joinType, double miterLimit)
 {
-    // BBS
+    // PRUSA
     //assert(offset > 0);
     return clipper_union<TResult>(raw_offset(std::forward<PathsProvider>(paths), offset, joinType, miterLimit));
 }
@@ -375,7 +375,7 @@ template<> void remove_outermost_polygon<ClipperLib::PolyTree>(ClipperLib::PolyT
 template<class TResult, typename PathsProvider>
 static TResult shrink_paths(PathsProvider &&paths, float offset, ClipperLib::JoinType joinType, double miterLimit)
 {
-    // BBS
+    // PRUSA
     //assert(offset > 0);
     TResult out;
     if (auto raw = raw_offset(std::forward<PathsProvider>(paths), - offset, joinType, miterLimit); ! raw.empty()) {
@@ -393,7 +393,7 @@ static TResult shrink_paths(PathsProvider &&paths, float offset, ClipperLib::Joi
 template<class TResult, typename PathsProvider>
 static TResult offset_paths(PathsProvider &&paths, float offset, ClipperLib::JoinType joinType, double miterLimit)
 {
-    // BBS
+    // PRUSA
     //assert(offset != 0);
 
     return offset > 0 ?
@@ -711,7 +711,7 @@ Slic3r::Polygons intersection(const Slic3r::Surfaces &subject, const Slic3r::Pol
     { return _clipper(ClipperLib::ctIntersection, ClipperUtils::SurfacesProvider(subject), ClipperUtils::PolygonsProvider(clip), do_safety_offset); }
 Slic3r::Polygons intersection(const Slic3r::Surfaces &subject, const Slic3r::ExPolygons &clip, ApplySafetyOffset do_safety_offset)
     { return _clipper(ClipperLib::ctIntersection, ClipperUtils::SurfacesProvider(subject), ClipperUtils::ExPolygonsProvider(clip), do_safety_offset); }
-// BBS
+// PRUSA
 Slic3r::Polygons intersection(const Slic3r::Polygons& subject, const Slic3r::Polygon& clip, ApplySafetyOffset do_safety_offset)
 {
     Slic3r::Polygons clip_temp;
@@ -727,7 +727,7 @@ Slic3r::Polygons union_(const Slic3r::Polygons &subject, const ClipperLib::PolyF
     { return to_polygons(clipper_do<ClipperLib::Paths>(ClipperLib::ctUnion, ClipperUtils::PolygonsProvider(subject), ClipperUtils::EmptyPathsProvider(), fillType, ApplySafetyOffset::No)); }
 Slic3r::Polygons union_(const Slic3r::Polygons &subject, const Slic3r::Polygons &subject2)
     {
-        // BBS
+        // PRUSA
         Polygons polys = subject;
         for (const Polygon& poly : subject2)
             polys.push_back(poly);
@@ -766,7 +766,7 @@ Slic3r::ExPolygons diff_ex(const Slic3r::SurfacesPtr &subject, const Slic3r::Pol
     { return _clipper_ex(ClipperLib::ctDifference, ClipperUtils::SurfacesPtrProvider(subject), ClipperUtils::PolygonsProvider(clip), do_safety_offset); }
 Slic3r::ExPolygons diff_ex(const Slic3r::SurfacesPtr &subject, const Slic3r::ExPolygons &clip, ApplySafetyOffset do_safety_offset)
     { return _clipper_ex(ClipperLib::ctDifference, ClipperUtils::SurfacesPtrProvider(subject), ClipperUtils::ExPolygonsProvider(clip), do_safety_offset); }
-// BBS
+// PRUSA
 inline Slic3r::ExPolygons diff_ex(const Slic3r::Polygon& subject, const Slic3r::Polygons& clip, ApplySafetyOffset do_safety_offset)
 {
     Slic3r::Polygons subject_temp;
@@ -818,7 +818,7 @@ Slic3r::ExPolygons union_ex(const Slic3r::ExPolygons &subject, const Slic3r::Pol
     { return PolyTreeToExPolygons(clipper_do_polytree(ClipperLib::ctUnion, ClipperUtils::ExPolygonsProvider(subject), ClipperUtils::PolygonsProvider(subject2), ClipperLib::pftNonZero)); }
 Slic3r::ExPolygons union_ex(const Slic3r::Surfaces &subject)
     { return PolyTreeToExPolygons(clipper_do_polytree(ClipperLib::ctUnion, ClipperUtils::SurfacesProvider(subject), ClipperUtils::EmptyPathsProvider(), ClipperLib::pftNonZero)); }
-// BBS
+// PRUSA
 Slic3r::ExPolygons union_ex(const Slic3r::ExPolygons& poly1, const Slic3r::ExPolygons& poly2, bool safety_offset_)
     {
     ExPolygons expolys = poly1;

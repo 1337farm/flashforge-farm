@@ -1,4 +1,4 @@
-// Minimal stub for OrcaSlicer mobile build
+// Minimal stub for PrusaSlicer mobile build
 #ifndef slic3r_Utils_ColorSpaceConvert_hpp_
 #define slic3r_Utils_ColorSpaceConvert_hpp_
 

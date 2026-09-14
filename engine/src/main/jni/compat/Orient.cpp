@@ -4,7 +4,7 @@
 #include <ClipperUtils.hpp>
 #include <boost/geometry/index/rtree.hpp>
 #include <tbb/parallel_for.h>
-#include "bbl_utils.hpp"
+#include "prusa_utils.hpp"
 #include "libslic3r/AABBMesh.hpp"
 
 #if defined(_MSC_VER) && defined(__clang__)

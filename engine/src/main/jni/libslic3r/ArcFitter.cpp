@@ -43,7 +43,7 @@ void ArcFitter::do_arc_fitting(const Points& points, std::vector<PathFittingData
     current_segment.reserve(points.size());
     ArcSegment target_arc;
     for (size_t i = 0; i < points.size(); i++) {
-        //BBS: point in stack is not enough, build stack first
+        // point in stack is not enough, build stack first
         back_index = i;
         current_segment.push_back(points[i]);
         if (back_index - front_index < 2)
@@ -54,7 +54,7 @@ void ArcFitter::do_arc_fitting(const Points& points, std::vector<PathFittingData
                                              tolerance,
                                              DEFAULT_ARC_LENGTH_PERCENT_TOLERANCE);
         if (can_fit) {
-            //BBS: can be fit as arc, then save arc data temperarily
+            // can be fit as arc, then save arc data temperarily
             last_arc = target_arc;
             if (back_index == points.size() - 1) {
                 result.emplace_back(std::move(PathFittingData{ front_index,
@@ -65,14 +65,14 @@ void ArcFitter::do_arc_fitting(const Points& points, std::vector<PathFittingData
             }
         } else {
             if (back_index - front_index > 2) {
-                //BBS: althought current point_stack can't be fit as arc,
+                // althought current point_stack can't be fit as arc,
                 //but previous must can be fit if removing the top in stack, so save last arc
                 result.emplace_back(std::move(PathFittingData{ front_index,
                                    back_index - 1,
                                    last_arc.direction == ArcDirection::Arc_Dir_CCW ? EMovePathType::Arc_move_ccw : EMovePathType::Arc_move_cw,
                                    last_arc }));
             } else {
-                //BBS: save the first segment as line move when 3 point-line can't be fit as arc move
+                // save the first segment as line move when 3 point-line can't be fit as arc move
                 if (result.empty() || result.back().path_type != EMovePathType::Linear_move)
                     result.emplace_back(std::move(PathFittingData{front_index, front_index + 1, EMovePathType::Linear_move, ArcSegment()}));
                 else if(result.back().path_type == EMovePathType::Linear_move)
@@ -84,7 +84,7 @@ void ArcFitter::do_arc_fitting(const Points& points, std::vector<PathFittingData
             current_segment.push_back(points[front_index + 1]);
         }
     }
-	//BBS: handle the remain data
+	// handle the remain data
     if (front_index != back_index) {
         if (result.empty() || result.back().path_type != EMovePathType::Linear_move)
             result.emplace_back(std::move(PathFittingData{front_index, back_index, EMovePathType::Linear_move, ArcSegment()}));
@@ -96,21 +96,21 @@ void ArcFitter::do_arc_fitting(const Points& points, std::vector<PathFittingData
 
 void ArcFitter::do_arc_fitting_and_simplify(Points& points, std::vector<PathFittingData>& result, double tolerance)
 {
-    //BBS: 1 do arc fit first
+    // 1 do arc fit first
     if (abs(tolerance) > SCALED_EPSILON)
         ArcFitter::do_arc_fitting(points, result, tolerance);
     else
         result.push_back(PathFittingData{ 0, points.size() - 1, EMovePathType::Linear_move, ArcSegment() });
 
-    //BBS: 2 for straight part which can't fit arc, use DP simplify
+    // 2 for straight part which can't fit arc, use DP simplify
     //for arc part, only need to keep start and end point
     if (result.size() == 1 && result[0].path_type == EMovePathType::Linear_move) {
-        //BBS: all are straight segment, directly use DP simplify
+        // all are straight segment, directly use DP simplify
         points = MultiPoint::_douglas_peucker(points, tolerance);
         result[0].end_point_index = points.size() - 1;
         return;
     } else {
-        //BBS: has both arc part and straight part, we should spilit the straight part out and do DP simplify
+        // has both arc part and straight part, we should spilit the straight part out and do DP simplify
         Points simplified_points;
         simplified_points.reserve(points.size());
         simplified_points.push_back(points[0]);
@@ -119,7 +119,7 @@ void ArcFitter::do_arc_fitting_and_simplify(Points& points, std::vector<PathFitt
         {
             size_t start_index = result[i].start_point_index;
             size_t end_index = result[i].end_point_index;
-            //BBS: get the straight and arc part, and do simplifing independently.
+            // get the straight and arc part, and do simplifing independently.
             //Why: It's obvious that we need to use DP to simplify straight part to reduce point.
             //For arc part, theoretically, we only need to keep the start and end point, and
             //delete all other point. But when considering wipe operation, we must keep the original
@@ -129,16 +129,16 @@ void ArcFitter::do_arc_fitting_and_simplify(Points& points, std::vector<PathFitt
             for (size_t j = start_index; j <= end_index; j++)
                 straight_or_arc_part.push_back(points[j]);
             straight_or_arc_part = MultiPoint::_douglas_peucker(straight_or_arc_part, tolerance);
-            //BBS: how many point has been reduced
+            // how many point has been reduced
             reduce_count[i] = end_index - start_index + 1 - straight_or_arc_part.size();
-            //BBS: save the simplified result
+            // save the simplified result
             for (size_t j = 1; j < straight_or_arc_part.size(); j++) {
                 simplified_points.push_back(straight_or_arc_part[j]);
             }
         }
-        //BBS: save and will return the simplified_points
+        // save and will return the simplified_points
         points = simplified_points;
-        //BBS: modify the index in result because the point index must be changed to match the simplified points
+        // modify the index in result because the point index must be changed to match the simplified points
         for (size_t j = 1; j < reduce_count.size(); j++)
             reduce_count[j] += reduce_count[j - 1];
         for (size_t j = 0; j < result.size(); j++)

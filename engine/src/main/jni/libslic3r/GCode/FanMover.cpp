@@ -35,7 +35,7 @@ const std::string& FanMover::process_gcode(const std::string& gcode, bool flush)
         while (!m_buffer.empty()) {
             BufferData &front = m_buffer.front();
             m_process_output += front.raw + "\n";
-            // Orca: Keep the emitted fan state in sync when flushing buffered fan commands.
+            // Keep the emitted fan state in sync when flushing buffered fan commands.
             if (front.fan_speed >= 0)
                 m_front_buffer_fan_speed = front.fan_speed;
             remove_from_buffer(m_buffer.begin());
@@ -91,10 +91,10 @@ int16_t get_fan_speed(const std::string &line, GCodeFlavor flavor) {
         if (flavor == (gcfMach3) || flavor == (gcfMachinekit)) {
             return (int16_t)get_axis_value(line, 'P');
         } else {
-            // Bambu machines use both M106 P1(not P0!) and M106 for part cooling fan.
-            // Non-bambu machines usually use M106 (without P parameter) for part cooling fan.
-            // P2 is reserved for auxiliary fan regardless of bambu or not.
-            // To keep compatibility with Bambu machines, we accept M106 and M106 P1 as the only two valid form
+            // Prusa machines use both M106 P1(not P0!) and M106 for part cooling fan.
+            // Non-prusa machines usually use M106 (without P parameter) for part cooling fan.
+            // P2 is reserved for auxiliary fan regardless of prusa or not.
+            // To keep compatibility with Prusa machines, we accept M106 and M106 P1 as the only two valid form
             // of gcode that control the part cooling fan. Any other command will be ignored!
             const auto idx = get_axis_value(line, 'P');
             if (!isnan(idx) && idx != 1.0f) {
@@ -230,7 +230,7 @@ void FanMover::_remove_slow_fan(int16_t min_speed, float past_sec) {
 
 std::string FanMover::_set_fan(int16_t speed) {
     //const Tool* tool = m_writer.get_tool(m_currrent_extruder < 20 ? m_currrent_extruder : 0);
-    // ORCA: apply the per-printer non-zero fan PWM floor so reposted fan commands respect the clamp too.
+    // apply the per-printer non-zero fan PWM floor so reposted fan commands respect the clamp too.
     const int floor_pct = m_writer.config.part_cooling_fan_min_pwm.value;
     const unsigned int part_cooling_fan_min_pwm = floor_pct > 0 ? static_cast<unsigned int>(floor_pct) : 0u;
     return GCodeWriter::set_fan(m_writer.config.gcode_flavor.value, speed, part_cooling_fan_min_pwm);

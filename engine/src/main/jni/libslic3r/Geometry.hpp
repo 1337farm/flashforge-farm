@@ -467,7 +467,7 @@ public:
     Transform3d get_matrix_no_offset() const;
     Transform3d get_matrix_no_scaling_factor() const;
 
-    // Orca: Implement prusa's filament shrink compensation approach
+    // Implement prusa's filament shrink compensation approach
     Transform3d get_matrix_with_applied_shrinkage_compensation(const Vec3d &shrinkage_compensation) const;
     
     void set_matrix(const Transform3d& transform) { m_matrix = transform; }
@@ -479,7 +479,7 @@ public:
     // Bounding box is expected to be centered around zero in all axes.
     static Transformation volume_to_bed_transformation(const Transformation& instance_transformation, const BoundingBoxf3& bbox);
 
-    // BBS: backup use this compare
+    // backup use this compare
     friend bool operator==(Transformation const& l, Transformation const& r) {
         return l.m_matrix.isApprox(r.m_matrix);
     }

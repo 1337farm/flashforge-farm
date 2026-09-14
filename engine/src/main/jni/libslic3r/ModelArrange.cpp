@@ -92,14 +92,14 @@ template<class T>
 arrangement::ArrangePolygon get_arrange_poly(T obj, const Slic3r::DynamicPrintConfig& config)
 {
     ArrangePolygon ap = obj.get_arrange_polygon(config);
-    //BBS: always set bed_idx to 0 to use original transforms with no bed_idx
+    // always set bed_idx to 0 to use original transforms with no bed_idx
     //if this object is not arranged, it can keep the original transforms
     //ap.bed_idx        = ap.translation.x() / bed_stride_x(plater);
     ap.bed_idx = 0;
     ap.setter = [obj](const ArrangePolygon& p) {
         if (p.is_arranged()) {
             Vec2d t = p.translation.cast<double>();
-            //BBS: change to sudoku-style computation, do it in partplate list
+            // change to sudoku-style computation, do it in partplate list
             //t.x() += p.bed_idx * bed_stride(plater);
             //t.x() += col * bed_stride_x(plater);
             //t.y() -= row * bed_stride_y(plater);
@@ -120,7 +120,7 @@ ArrangePolygon get_instance_arrange_poly(ModelInstance* instance, const Slic3r::
 {
     ArrangePolygon ap = get_arrange_poly(PtrWrapper{ instance }, config);
 
-    //BBS: add temperature information
+    // add temperature information
     if (config.has("curr_bed_type")) {
         ap.bed_temp = 0;
         ap.first_bed_temp = 0;

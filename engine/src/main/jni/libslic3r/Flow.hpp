@@ -21,7 +21,7 @@ enum FlowRole {
     frTopSolidInfill,
     frSupportMaterial,
     frSupportMaterialInterface,
-    frSupportTransition,  // BBS
+    frSupportTransition,  // PRUSA
 };
 
 class FlowError : public Slic3r::InvalidArgument
@@ -140,7 +140,7 @@ private:
 };
 
 extern Flow support_material_flow(const PrintObject* object, float layer_height = 0.f);
-extern Flow support_transition_flow(const PrintObject *object); //BBS
+extern Flow support_transition_flow(const PrintObject *object); //PRUSA
 extern Flow support_material_1st_layer_flow(const PrintObject *object, float layer_height = 0.f);
 extern Flow support_material_interface_flow(const PrintObject *object, float layer_height = 0.f);
 

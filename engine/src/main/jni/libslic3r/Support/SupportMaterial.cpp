@@ -53,7 +53,7 @@ namespace Slic3r {
 
 // how much we extend support around the actual contact area
 //FIXME this should be dependent on the nozzle diameter!
-// BBS: change from 1.5 to 1.2
+// change from 1.5 to 1.2
 #define SUPPORT_MATERIAL_MARGIN 1.2
 
 // Increment used to reach MARGIN in steps to avoid trespassing thin objects
@@ -1247,7 +1247,7 @@ namespace SupportMaterialInternal {
             // since we're dealing with bridges, we can't assume width is larger than spacing,
             // so we take the largest value and also apply safety offset to be ensure no gaps
             // are left in between
-            // BBS
+            // PRUSA
             const PrintObjectConfig& object_config = layerm.layer()->object()->config();
             Flow perimeter_bridge_flow = layerm.bridging_flow(frPerimeter, object_config.thick_bridges);
             //FIXME one may want to use a maximum of bridging flow width and normal flow width, as the perimeters are calculated using the normal flow
@@ -1358,7 +1358,7 @@ struct SlicesMarginCache
     Polygons    all_polygons;
 };
 
-// BBS
+// PRUSA
 static const double length_thresh_well_supported = scale_(6);  // min: 6mm
 static const double area_thresh_well_supported = SQ(length_thresh_well_supported);  // min: 6x6=36mm^2
 static const double sharp_tail_xy_gap = 0.2f;
@@ -1383,14 +1383,14 @@ static inline ExPolygons detect_overhangs(
     // Snug overhang polygons.
     Polygons overhang_polygons;
 
-    // BBS.
+    // PRUSA.
     const bool   auto_normal_support = object_config.support_type.value == stNormalAuto;
     const bool   buildplate_only = ! annotations.buildplate_covered.empty();
     // If user specified a custom angle threshold, convert it to radians.
     // Zero means automatic overhang detection.
     // +1 makes the threshold inclusive
     double thresh_angle = object_config.support_threshold_angle.value > 0 ? object_config.support_threshold_angle.value + 1 : 0;
-    thresh_angle = std::min(thresh_angle, 89.); // BBS should be smaller than 90
+    thresh_angle = std::min(thresh_angle, 89.); // PRUSA should be smaller than 90
     const double threshold_rad = Geometry::deg2rad(thresh_angle);
     const bool bridge_no_support = object_config.bridge_no_support.value;
     const coordf_t xy_expansion = scale_(object_config.support_expansion.value);
@@ -1470,7 +1470,7 @@ static inline ExPolygons detect_overhangs(
                 }
                 //FIXME add user defined filtering here based on minimal area or minimum radius or whatever.
 
-                // BBS
+                // PRUSA
                 if (g_config_support_sharp_tails) {
                     for (ExPolygon& expoly : layerm->raw_slices) {
                         if (offset_ex(expoly, -0.5 * fw).empty()) continue;
@@ -1568,7 +1568,7 @@ static inline std::tuple<Polygons, Polygons, double> detect_contacts(
     // Enforcers projected to overhangs, trimmed
     Polygons enforcer_polygons;
 
-    // BBS.
+    // PRUSA.
     const bool   auto_normal_support = object_config.support_type.value == stNormalAuto;
     const bool   buildplate_only = !annotations.buildplate_covered.empty();
     float        no_interface_offset = 0.f;
@@ -1747,7 +1747,7 @@ static inline std::pair<SupportGeneratorLayer*, SupportGeneratorLayer*> new_cont
         bottom_z = (layer_id == 1) ? slicing_params.object_print_z_min : layer.lower_layer->lower_layer->print_z;
     }
     else {
-        // BBS: need to consider adaptive layer heights
+        // need to consider adaptive layer heights
         if (print_config.independent_support_layer_height) {
             print_z = layer.bottom_z() - slicing_params.gap_support_object;
             height = 0;
@@ -1786,7 +1786,7 @@ static inline std::pair<SupportGeneratorLayer*, SupportGeneratorLayer*> new_cont
             for (const LayerRegion* region : layer.regions())
                 bridging_height += region->region().bridging_height_avg(print_config);
             bridging_height /= coordf_t(layer.regions().size());
-            // BBS: align bridging height
+            // align bridging height
             if (!print_config.independent_support_layer_height)
                 bridging_height = std::ceil(bridging_height / object_config.layer_height - EPSILON) * object_config.layer_height;
             coordf_t bridging_print_z = layer.print_z - bridging_height - slicing_params.gap_support_object;
@@ -1805,7 +1805,7 @@ static inline std::pair<SupportGeneratorLayer*, SupportGeneratorLayer*> new_cont
                         bridging_layer->bottom_z = 0;
                         bridging_layer->height = slicing_params.first_print_layer_height;
                     } else {
-                        // BBS: if independent_support_layer_height is not enabled, the support layer_height should be the same as layer height.
+                        // if independent_support_layer_height is not enabled, the support layer_height should be the same as layer height.
                         // Note that for this case, adaptive layer height must be disabled.
                         bridging_layer->height = print_config.independent_support_layer_height ? 0. : object_config.layer_height;
                         // Don't know the height yet.
@@ -2101,7 +2101,7 @@ SupportGeneratorLayersPtr PrintObjectSupportMaterial::top_contact_layers(
     #define SLIC3R_IRUN , iRun
 #endif /* SLIC3R_DEBUG */
 
-    // BBS: tree support is selected so normal supports need not be generated.
+    // tree support is selected so normal supports need not be generated.
     // Note we still need to go through the following steps if support is disabled but raft is enabled.
     if (m_object_config->enable_support.value && (m_object_config->support_type.value != stNormalAuto && m_object_config->support_type.value != stNormal)) {
         return SupportGeneratorLayersPtr();
@@ -2162,7 +2162,7 @@ SupportGeneratorLayersPtr PrintObjectSupportMaterial::top_contact_layers(
             if (!lower_layer)
                 continue;
 
-            // BBS detect sharp tail
+            // PRUSA detect sharp tail
             const ExPolygons& lower_layer_sharptails = lower_layer->sharp_tails;
             const auto& lower_layer_sharptails_height = lower_layer->sharp_tails_height;
             for (const ExPolygon& expoly : layer->lslices) {
@@ -2240,7 +2240,7 @@ SupportGeneratorLayersPtr PrintObjectSupportMaterial::top_contact_layers(
     if (object.print()->canceled())
         return SupportGeneratorLayersPtr();
 
-    // BBS group overhang clusters
+    // PRUSA group overhang clusters
     const bool config_remove_small_overhangs = m_object_config->support_remove_small_overhang.value;
     if (config_remove_small_overhangs) {
         std::vector<OverhangCluster> clusters;
@@ -2459,7 +2459,7 @@ static inline SupportGeneratorLayer* detect_bottom_contacts(
                         layer_new.height -= diff;
                     }
                     else {
-                        // BBS: The trimmed layer height is smaller than support_layer_height_min. Walk to the next top contact layer.
+                        // The trimmed layer height is smaller than support_layer_height_min. Walk to the next top contact layer.
                         continue;
                     }
                 }
@@ -2884,7 +2884,7 @@ SupportGeneratorLayersPtr PrintObjectSupportMaterial::raft_and_intermediate_supp
                 intermediate_layers.push_back(&layer_new);
             }
         } else {
-            // ORCA: Bias by EPSILON so a gap effectively equal to
+            // Bias by EPSILON so a gap effectively equal to
             // max_suport_layer_height is not split by floating-point noise.
             size_t n_layers_extra = size_t(ceil((dist - EPSILON) / m_slicing_params.max_suport_layer_height));
             assert(n_layers_extra > 0);
@@ -2901,7 +2901,7 @@ SupportGeneratorLayersPtr PrintObjectSupportMaterial::raft_and_intermediate_supp
                 layer_new.height   = extr1->height;
                 intermediate_layers.push_back(&layer_new);
                 dist = extr2z - extr1z;
-                // ORCA: Recalculate with the same EPSILON bias after re-anchoring at the top
+                // Recalculate with the same EPSILON bias after re-anchoring at the top
                 // contact layer so near-equal gaps do not gain an extra split here either.
                 n_layers_extra = size_t(ceil((dist - EPSILON) / m_slicing_params.max_suport_layer_height));
                 if (n_layers_extra == 0)
@@ -3162,7 +3162,7 @@ void PrintObjectSupportMaterial::trim_support_layers_by_object(
 
                     bool is_overlap = is_layers_overlap(support_layer, object_layer);
                     for (const ExPolygon& expoly : object_layer.lslices) {
-                        // BBS
+                        // PRUSA
                         bool is_sharptail = !intersection_ex({ expoly }, object_layer.sharp_tails).empty();
                         coordf_t trimming_offset = is_sharptail ? scale_(sharp_tail_xy_gap) :
                                                    is_overlap ? gap_xy_scaled :

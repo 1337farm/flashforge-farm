@@ -14,7 +14,7 @@
 #include "../Exception.hpp"
 #include "../Utils.hpp"
 #include "../ExPolygon.hpp"
-//BBS: necessary header for new function
+// necessary header for new function
 #include "../PrintConfig.hpp"
 #include "../Flow.hpp"
 #include "../ExtrusionEntity.hpp"
@@ -90,11 +90,11 @@ struct FillParams
     // For Lateral Honeycomb
     float       infill_overhang_angle    { 60 };
 
-    // BBS
+    // PRUSA
     Flow            flow;
     ExtrusionRole   extrusion_role{ ExtrusionRole(0) };
     bool            using_internal_flow{ false };
-    //BBS: only used for new top surface pattern
+    // only used for new top surface pattern
     float           no_extrusion_overlap{ 0.0 };
     const           PrintRegionConfig* config{ nullptr };
     bool            dont_sort{ false }; // do not sort the lines, just simply connect them
@@ -123,7 +123,7 @@ public:
     // in radians, ccw, 0 = East
     float       angle;
 
-    // Orca: Fill direction is fixed absolute angle if SurfaceFillParams.fixed_angle or config.ironing_angle_fixed
+    // Fill direction is fixed absolute angle if SurfaceFillParams.fixed_angle or config.ironing_angle_fixed
     bool        fixed_angle{false};
     // In scaled coordinates. Maximum lenght of a perimeter segment connecting two infill lines.
     // Used by the FillRectilinear2, FillGrid2, FillTriangles, FillStars and FillCubic.
@@ -138,11 +138,11 @@ public:
     FillAdaptive::Octree* adapt_fill_octree = nullptr;
 
     // PrintConfig and PrintObjectConfig are used by infills that use Arachne (Concentric and FillEnsuring).
-    // Orca: also used by gap fill function.
+    // Also used by gap fill function.
     const PrintConfig       *print_config        = nullptr;
     const PrintObjectConfig *print_object_config = nullptr;
 
-    // BBS: all no overlap expolygons in same layer
+    // all no overlap expolygons in same layer
     ExPolygons  no_overlap_expolygons;
     bool dont_alternate_fill_direction = false;
 
@@ -174,7 +174,7 @@ public:
     virtual Polylines fill_surface(const Surface *surface, const FillParams &params);
     virtual ThickPolylines fill_surface_arachne(const Surface* surface, const FillParams& params);
     virtual void set_lock_region_param(const LockRegionParam &lock_param){};
-    // BBS: this method is used to fill the ExtrusionEntityCollection.
+    // this method is used to fill the ExtrusionEntityCollection.
     // It call fill_surface by default
     virtual void fill_surface_extrusion(const Surface *surface, const FillParams &params, ExtrusionEntitiesPtr &out);
 
@@ -212,7 +212,7 @@ protected:
 
     virtual std::pair<float, Point> _infill_direction(const Surface *surface) const;
     
-    // Orca: Dedicated function to calculate gap fill lines for the provided surface, according to the print object parameters
+    // Dedicated function to calculate gap fill lines for the provided surface, according to the print object parameters
     // and append them to the out ExtrusionEntityCollection.
     void _create_gap_fill(const Surface* surface, const FillParams& params, ExtrusionEntityCollection* out);
 

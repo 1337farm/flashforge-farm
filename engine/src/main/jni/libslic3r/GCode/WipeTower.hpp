@@ -93,7 +93,7 @@ public:
         // an extra retraction-unretraction pair.
         std::vector<Vec2f> wipe_path;
 
-		// BBS
+		// PRUSA
         float purge_volume = 0.f;
 
         // Initial tool
@@ -102,7 +102,7 @@ public:
         // New tool
         int new_tool;
 
-        // BBS: in bbl filament_change_gcode, toolhead will be moved to the wipe tower automatically.
+        // in prusa filament_change_gcode, toolhead will be moved to the wipe tower automatically.
         // But if finish_layer_tcr is before tool_change_tcr, we have to travel to the wipe tower before
         // executing the gcode finish_layer_tcr.
         bool is_finish_first = false;
@@ -176,7 +176,7 @@ public:
 	// y			-- y coordinates of wipe tower in mm ( left bottom corner )
 	// width		-- width of wipe tower in mm ( default 60 mm - leave as it is )
 	// wipe_area	-- space available for one toolchange in mm
-	// BBS: add partplate logic
+	// add partplate logic
 	WipeTower(const PrintConfig& config, int plate_idx, Vec3d plate_origin, size_t initial_tool, const float wipe_tower_height, const std::vector<unsigned int>& slice_used_filaments);
 
 
@@ -274,7 +274,7 @@ public:
 
 	// Returns gcode for a toolchange and a final print head position.
 	// On the first layer, extrude a brim around the future wipe tower first.
-	// BBS
+	// PRUSA
     ToolChangeResult tool_change(size_t new_tool, bool extrude_perimeter = false, bool first_toolchange_to_nonsoluble = false);
 
 	NozzleChangeResult nozzle_change(int old_filament_id, int new_filament_id);
@@ -317,7 +317,7 @@ public:
         std::string 	    material = "PLA";
         int                 category;
         bool                is_soluble = false;
-        // BBS
+        // PRUSA
         bool                is_support = false;
         int  			    nozzle_temperature = 0;
         int  			    nozzle_temperature_initial_layer = 0;
@@ -421,7 +421,7 @@ private:
     Vec2f  m_wipe_tower_pos; 			// Left front corner of the wipe tower in mm.
 	float  m_wipe_tower_width; 			// Width of the wipe tower.
 	float  m_wipe_tower_depth 	= 0.f; 	// Depth of the wipe tower
-	// BBS
+	// PRUSA
 	float  m_wipe_tower_height = 0.f;
     float  m_wipe_tower_brim_width      = 0.f; 	// Width of brim (mm) from config
     float  m_wipe_tower_brim_width_real = 0.f; 	// Width of brim (mm) after generation
@@ -487,7 +487,7 @@ private:
 	// A fill-in direction (positive Y, negative Y) alternates with each layer.
 	wipe_shape   	m_current_shape = SHAPE_NORMAL;
     size_t 	m_current_tool  = 0;
-	// Orca: support mmu wipe tower
+	// Support mmu wipe tower
     std::vector<std::vector<float>> wipe_volumes;
 
 	float           m_depth_traversed = 0.f; // Current y position at the wipe tower.
@@ -521,7 +521,7 @@ private:
 
 	bool is_tpu_filament(int filament_id) const;
 
-	// BBS
+	// PRUSA
 	box_coordinates align_perimeter(const box_coordinates& perimeter_box);
 
 
@@ -536,7 +536,7 @@ private:
             float wipe_volume;
 			float wipe_length;
             float nozzle_change_depth{0};
-			// BBS
+			// PRUSA
 			float purge_volume;
             ToolChange(size_t old, size_t newtool, float depth=0.f, float ramming_depth=0.f, float fwl=0.f, float wv=0.f, float wl = 0, float pv = 0)
 				: old_tool{ old }, new_tool{ newtool }, required_depth{ depth }, ramming_depth{ ramming_depth }, first_wipe_line{ fwl }, wipe_volume{ wv }, wipe_length{ wl }, purge_volume{ pv } {}
@@ -560,7 +560,7 @@ private:
     // Stores information about used filament length per extruder:
     std::vector<float> m_used_filament_length;
 
-    // BBS: consider both soluable and support properties
+    // consider both soluable and support properties
     // Return index of first toolchange that switches to non-soluble extruder
     // ot -1 if there is no such toolchange.
     int first_toolchange_to_nonsoluble_nonsupport(

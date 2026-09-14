@@ -83,6 +83,13 @@ target_include_directories(farm PRIVATE
         ${PRUSA_SRC}/src/slic3r-base/include
         ${PRUSA_SRC}/src/slic3r-biz-algorithms/include
         ${PRUSA_SRC}/src/slic3r-biz-arrange/include
+        ${PRUSA_SRC}/src/slic3r-shared/include
+        ${PRUSA_SRC}/src/slic3r-biz-cgal-algorithms/include
+        ${PRUSA_SRC}/src/slic3r-biz-parser/include
+        ${PRUSA_SRC}/src/slic3r-gcode-reader/include
+        ${PRUSA_SRC}/src/slic3r-jthread/include
+        ${PRUSA_SRC}/src/libpgcode/include
+        ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
         ${ENGINE_INCLUDE_SUBDIRS}               # flattened sys-style includes (<expat.h>, <nlopt.h>, ...)
         ${ENGINE_JNI}/render                # flat render headers: GLModel.hpp, GLShader.hpp, bed_utils.hpp
         ${ENGINE_JNI}/libvgcode/include     # vgcode flat include: Viewer.hpp

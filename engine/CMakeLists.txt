@@ -1190,7 +1190,7 @@ add_library(slic3r
 
         src/main/jni/libnest2d/src/libnest2d.cpp
 
-        src/main/jni/bbl/Orient.cpp
+        src/main/jni/compat/Orient.cpp
 
         # engine_compat.cpp provides the single nanosvg implementation and
         # stub definitions for unvendored backends (draco/mcut).

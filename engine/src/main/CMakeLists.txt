@@ -1181,7 +1181,7 @@ add_library(slic3r
 
         src/main/jni/libnest2d/src/libnest2d.cpp
 
-        src/main/jni/bbl/Orient.cpp
+        src/main/jni/compat/Orient.cpp
 
         src/main/jni/render/GLModel.cpp
         src/main/jni/render/GLShader.cpp

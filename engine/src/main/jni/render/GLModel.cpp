@@ -547,8 +547,8 @@ namespace Slic3r {
             // vertices + indices
             unsigned int vertices_counter = 0;
             for (uint32_t i = 0; i < its.indices.size(); ++i) {
-                const stl_triangle_vertex_indices face = its.indices[i];
-                const std::array<stl_vertex, 3>    vertex = Biz::Algorithms::TriangleMesh::its_triangle_vertices(
+                const auto                                face = its.indices[i];
+                const std::array<stl_vertex, 3>            vertex = Biz::Algorithms::its_triangle_vertices(
                     its, static_cast<size_t>(face));
                 const stl_vertex n = Biz::Algorithms::TriangleMesh::face_normal_normalized(vertex[0]);
                 for (size_t j = 0; j < 3; ++j) {
@@ -878,12 +878,11 @@ namespace Slic3r {
             data.add_vertex(Vec3f(0.0f, radius + half_tip_width, half_thickness), normal);
             data.add_vertex(Vec3f(-tip_height, radius, half_thickness), normal);
 
-            Vec3f normal;
-            normal = Vec3f(-half_tip_width, -tip_height, 0.0f).normalized();
-            data.add_vertex(Vec3f(-tip_height, radius, -half_thickness), normal);
-            data.add_vertex(Vec3f(0.0f, radius - half_tip_width, -half_thickness), normal);
-            data.add_vertex(Vec3f(-tip_height, radius, half_thickness), normal);
-            data.add_vertex(Vec3f(0.0f, radius - half_tip_width, half_thickness), normal);
+            Vec3f normal2 = Vec3f(-half_tip_width, -tip_height, 0.0f).normalized();
+            data.add_vertex(Vec3f(-tip_height, radius, -half_thickness), normal2);
+            data.add_vertex(Vec3f(0.0f, radius - half_tip_width, -half_thickness), normal2);
+            data.add_vertex(Vec3f(-tip_height, radius, half_thickness), normal2);
+            data.add_vertex(Vec3f(0.0f, radius - half_tip_width, half_thickness), normal2);
 
             data.add_vertex(Vec3f(0.0f, radius - half_tip_width, -half_thickness), (Vec3f)Vec3f::UnitX());
             data.add_vertex(Vec3f(0.0f, inner_radius, -half_thickness), (Vec3f)Vec3f::UnitX());

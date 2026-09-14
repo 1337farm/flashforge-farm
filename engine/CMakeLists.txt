@@ -478,6 +478,10 @@ set(MCUT_BUILD_TESTS OFF)
 set(MCUT_BUILD_TUTORIALS OFF)
 add_subdirectory(src/main/jni/mcut)
 
+# Fetched PrusaSlicer 3.0 tree (engine/prusa30/fetch_prusaslicer.sh, PRUSA_REF pin).
+# Defined before first use: add_library() below references ${PRUSA_SRC} sources.
+set(PRUSA_SRC "${CMAKE_CURRENT_SOURCE_DIR}/build/prusaslicer-src" CACHE PATH "Fetched 3.0 upstream tree")
+
 add_library(slic3r
         SHARED
         src/main/jni/semver/semver.c
@@ -766,8 +770,6 @@ target_compile_definitions(slic3r PUBLIC -DUSE_TBB -DTBB_USE_CAPTURED_EXCEPTION=
         -DLIBNEST2D_OPTIMIZER_nlopt -DLIBNEST2D_THREADING_tbb -DLIBNEST2D_STATIC -DENABLE_OPENGL_ES -DSLIC3R_OPENGL_ES
         -DUSE_CPP11_REGEX)
 
-# Fetched PrusaSlicer 3.0 tree (engine/prusa30/fetch_prusaslicer.sh, PRUSA_REF pin).
-set(PRUSA_SRC "${CMAKE_CURRENT_SOURCE_DIR}/build/prusaslicer-src" CACHE PATH "Fetched 3.0 upstream tree")
 target_include_directories(slic3r PRIVATE
         src/main/jni
         ${PRUSA_SRC}/src/libslic3r/include

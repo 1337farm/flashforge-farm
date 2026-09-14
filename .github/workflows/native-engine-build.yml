@@ -867,6 +867,11 @@ jobs:
             --title "GMP/MPFR deps (latest)" \
             --notes "Rolling release of the GMP/MPFR native deps built from source. Re-published whenever the dep rebuilds."
 
+      - name: Fetch PrusaSlicer 3.0 core (vendored tree deleted in #210)
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          bash engine/prusa30/fetch_prusaslicer.sh
+
       - name: Build native engine .so from source (standalone CMake)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |

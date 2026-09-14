@@ -109,7 +109,7 @@ template void BoundingBoxBase<Point, Points>::merge(const BoundingBoxBase<Point,
 template void BoundingBoxBase<Vec2f>::merge(const BoundingBoxBase<Vec2f> &bb);
 template void BoundingBoxBase<Vec2d>::merge(const BoundingBoxBase<Vec2d> &bb);
 
-//BBS
+//PRUSA
 template <class PointType>
 Polygon BoundingBox3Base<PointType>::polygon(bool is_scaled) const
 {

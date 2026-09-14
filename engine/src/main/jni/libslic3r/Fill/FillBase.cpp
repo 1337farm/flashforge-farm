@@ -25,16 +25,16 @@
 #include "FillRectilinear.hpp"
 #include "FillAdaptive.hpp"
 #include "FillLightning.hpp"
-// BBS: new infill pattern header
+// new infill pattern header
 #include "FillConcentricInternal.hpp"
 #include "FillCrossHatch.hpp"
 // #define INFILL_DEBUG_OUTPUT
 
 namespace Slic3r {
 
-//BBS: 0% of sparse_infill_line_width, no anchor at the start of sparse infill
+// 0% of sparse_infill_line_width, no anchor at the start of sparse infill
 float Fill::infill_anchor = 400;
-//BBS: 20mm
+// 20mm
 float Fill::infill_anchor_max = 20;
 
 Fill* Fill::new_from_type(const InfillPattern type)
@@ -65,10 +65,10 @@ Fill* Fill::new_from_type(const InfillPattern type)
     case ipSupportCubic:        return new FillAdaptive::Filler();
     case ipSupportBase:         return new FillSupportBase();  // simply line fill
     case ipLightning:           return new FillLightning::Filler();
-    // BBS: for internal solid infill only
+    // for internal solid infill only
     case ipConcentricInternal:  return new FillConcentricInternal();
-    // BBS: for bottom and top surface only
-    // Orca: Replace BBS implementation with Prusa implementation
+    // for bottom and top surface only
+    // Replace PRUSA implementation with Prusa implementation
     case ipMonotonicLine:       return new FillMonotonicLines();
     case ipZigZag:              return new FillZigZag();
     case ipCrossZag:            return new FillCrossZag();
@@ -129,7 +129,7 @@ ThickPolylines Fill::fill_surface_arachne(const Surface* surface, const FillPara
     return thick_polylines_out;
 }
 
-// BBS: this method is used to fill the ExtrusionEntityCollection. It call fill_surface by default
+// this method is used to fill the ExtrusionEntityCollection. It call fill_surface by default
 void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& params, ExtrusionEntitiesPtr& out)
 {
     Polylines polylines;
@@ -162,7 +162,7 @@ void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& para
         out.push_back(eec = new ExtrusionEntityCollection());
         // Only concentric fills are not sorted.
         eec->no_sort = this->no_sort();
-        // ORCA: special flag for flow rate calibration
+        // special flag for flow rate calibration
         auto is_flow_calib = params.extrusion_role == erTopSolidInfill && this->print_object_config->has("calib_flowrate_topinfill_special_order") &&
                              this->print_object_config->option("calib_flowrate_topinfill_special_order")->getBool();
         if (is_flow_calib) {
@@ -185,19 +185,19 @@ void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& para
                 eec->entities[i]->set_reverse();
         }
 
-        // Orca: run gap fill
+        // Run gap fill
         this->_create_gap_fill(surface, params, eec);
     }
 }
 
-// Orca: Dedicated function to calculate gap fill lines for the provided surface, according to the print object parameters
+// Dedicated function to calculate gap fill lines for the provided surface, according to the print object parameters
 // and append them to the out ExtrusionEntityCollection.
 void Fill::_create_gap_fill(const Surface* surface, const FillParams& params, ExtrusionEntityCollection* out){
 
-    //Orca: just to be safe, check against null pointer for the print object config and if NULL return.
+    // Just to be safe, check against null pointer for the print object config and if NULL return.
     if (this->print_object_config == nullptr) return;
 
-    // Orca: Enable gap fill as per the user preference. Return early if gap fill is to not be applied.
+    // Enable gap fill as per the user preference. Return early if gap fill is to not be applied.
     if ((this->print_object_config->gap_fill_target.value == gftNowhere) ||
         (surface->surface_type == stInternalSolid && this->print_object_config->gap_fill_target.value != gftEverywhere))
         return;
@@ -215,7 +215,7 @@ void Fill::_create_gap_fill(const Surface* surface, const FillParams& params, Ex
         ExPolygons gaps_ex = diff_ex(
                                      opening_ex(gapfill_areas, float(min / 2.)),
                                      offset2_ex(gapfill_areas, -float(max / 2.), float(max / 2. + ClipperSafetyOffset)));
-        //BBS: sort the gap_ex to avoid mess travel
+        // sort the gap_ex to avoid mess travel
         Points ordering_points;
         ordering_points.reserve(gaps_ex.size());
         ExPolygons gaps_ex_sorted;
@@ -228,7 +228,7 @@ void Fill::_create_gap_fill(const Surface* surface, const FillParams& params, Ex
 
         ThickPolylines polylines;
         for (ExPolygon& ex : gaps_ex_sorted) {
-            //BBS: Use DP simplify to avoid duplicated points and accelerate medial-axis calculation as well.
+            // Use DP simplify to avoid duplicated points and accelerate medial-axis calculation as well.
             ex.douglas_peucker(SCALED_RESOLUTION * 0.1);
             ex.medial_axis(min, max, &polylines);
         }
@@ -307,7 +307,7 @@ std::pair<float, Point> Fill::_infill_direction(const Surface *surface) const
         out_angle = float(surface->bridge_angle);
     } else if (this->layer_id != size_t(-1) && !fixed_angle) {
         // alternate fill direction
-        //Orca: Do not alternate direction if Fill.fixed_angle is true
+        // Do not alternate direction if Fill.fixed_angle is true
         if (!this->dont_alternate_fill_direction) {
             out_angle += this->_layer_angle(this->layer_id / surface->thickness_layers);
         }
@@ -1710,7 +1710,7 @@ void Fill::connect_infill(Polylines &&infill_ordered, const std::vector<const Po
             size_t                    polyline_idx2  = get_and_update_merged_with(((cp2 - graph.map_infill_end_point_to_boundary.data()) / 2));
             const Points             &contour        = graph.boundary[cp1->contour_idx];
 
-            // Orca: If multiline infill is requested, skip connections that are too short.
+            // If multiline infill is requested, skip connections that are too short.
             if (params.multiline > 1 && arc.arc_length < scale_(spacing) * params.multiline) {
                 continue;
             }
@@ -2708,7 +2708,7 @@ void Fill::connect_base_support(Polylines &&infill_ordered, const Polygons &boun
     connect_base_support(std::move(infill_ordered), polygons_src, bbox, polylines_out, spacing, params);
 }
 
-// Fill Multiline. The desktop Orca source uses Clipper2 here, but this Android
+// Fill Multiline. The desktop slicer source uses Clipper2 here, but this Android
 // port does not ship Clipper2. Keep the original single-line fill instead of
 // failing the native build.
 void multiline_fill(Polylines& polylines, const FillParams& params, float spacing)

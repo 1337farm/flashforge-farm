@@ -85,7 +85,7 @@ namespace Slic3r {
 PrintObject::PrintObject(Print* print, ModelObject* model_object, const Transform3d& trafo, PrintInstances&& instances) :
     PrintObjectBaseWithState(print, model_object),
     m_trafo(trafo),
-    // BBS
+    // PRUSA
     m_tree_support_preview_cache(nullptr)
 {
     // Compute centering offet to be applied to our meshes so that we work with smaller coordinates
@@ -479,7 +479,7 @@ void PrintObject::make_perimeters()
     // hollow objects
     for (size_t region_id = 0; region_id < this->num_printing_regions(); ++ region_id) {
         const PrintRegion &region = this->printing_region(region_id);
-        //BBS: remove extra_perimeters, always false
+        // remove extra_perimeters, always false
         //if (! region.config().extra_perimeters || region.config().wall_loops == 0 || region.config().sparse_infill_density == 0 || this->layer_count() < 2)
             continue;
 
@@ -613,7 +613,7 @@ void PrintObject::prepare_infill()
     // and to add a configurable number of solid layers above the BOTTOM / BOTTOMBRIDGE surfaces
     // to close these surfaces reliably.
     //FIXME Vojtech: Is this a good place to add supporting infills below sloping perimeters?
-    // Orca: Brought this function call before the process_external_surfaces, to allow bridges over holes to expand more than
+    // : Brought this function call before the process_external_surfaces, to allow bridges over holes to expand more than
     // one perimeter. Example of this is the bridge over the benchy lettering.
     this->discover_horizontal_shells();
     m_print->throw_if_canceled();
@@ -804,7 +804,7 @@ void PrintObject::contour_z()
     this->set_done(posContouring);
 }
 
-// BBS
+// PRUSA
 void PrintObject::clear_overhangs_for_lift()
 {
     if (!m_shared_object) {
@@ -853,7 +853,7 @@ void PrintObject::generate_support_material()
         this->clear_support_layers();
 
         if(!has_support() && !m_print->get_no_check_flag()) {
-            // BBS: pop a warning if objects have significant amount of overhangs but support material is not enabled
+            // pop a warning if objects have significant amount of overhangs but support material is not enabled
             // Note: we also need to pop warning if support is disabled and only raft is enabled
             m_print->set_status(50, L("Checking support necessity"));
             typedef std::chrono::high_resolution_clock clock_;
@@ -918,7 +918,7 @@ void PrintObject::simplify_extrusion_path()
     if (this->set_started(posSimplifyPath)) {
         m_print->set_status(75, L("Optimizing toolpath"));
         BOOST_LOG_TRIVIAL(debug) << "Simplify extrusion path of object in parallel - start";
-        //BBS: infill and walls
+        // infill and walls
         tbb::parallel_for(
             tbb::blocked_range<size_t>(0, m_layers.size()),
             [this](const tbb::blocked_range<size_t>& range) {
@@ -936,7 +936,7 @@ void PrintObject::simplify_extrusion_path()
     if (this->set_started(posSimplifyInfill)) {
         m_print->set_status(75, L("Optimizing toolpath"));
         BOOST_LOG_TRIVIAL(debug) << "Simplify infill extrusion path of object in parallel - start";
-        //BBS: infills
+        // infills
         tbb::parallel_for(
             tbb::blocked_range<size_t>(0, m_layers.size()),
             [this](const tbb::blocked_range<size_t>& range) {
@@ -1105,7 +1105,7 @@ bool PrintObject::invalidate_state_by_config_options(
             || opt_key == "brim_type"
             || opt_key == "brim_ears_max_angle"
             || opt_key == "brim_ears_detection_length"
-            // BBS: brim generation depends on printing speed
+            // brim generation depends on printing speed
             || opt_key == "outer_wall_speed"
             || opt_key == "small_perimeter_speed"
             || opt_key == "small_perimeter_threshold"
@@ -1119,7 +1119,7 @@ bool PrintObject::invalidate_state_by_config_options(
             if (opt_key == "brim_type") {
                 const auto* old_brim_type = old_config.option<ConfigOptionEnum<BrimType>>(opt_key);
                 const auto* new_brim_type = new_config.option<ConfigOptionEnum<BrimType>>(opt_key);
-                //BBS: When switch to manual brim, the object must have brim, then re-generate perimeter
+                // When switch to manual brim, the object must have brim, then re-generate perimeter
                 //to make the wall order of first layer to be outer-first
                 if (old_brim_type->value == btOuterOnly || new_brim_type->value == btOuterOnly)
                     steps.emplace_back(posPerimeters);
@@ -1192,7 +1192,7 @@ bool PrintObject::invalidate_state_by_config_options(
             || opt_key == "support_bottom_z_distance"
             || opt_key == "xy_hole_compensation"
             || opt_key == "xy_contour_compensation"
-            //BBS: [Arthur] the following params affect bottomBridge surface type detection
+            // [Arthur] the following params affect bottomBridge surface type detection
             || opt_key == "support_type"
             || opt_key == "bridge_no_support"
             || opt_key == "max_bridge_length"
@@ -1228,14 +1228,14 @@ bool PrintObject::invalidate_state_by_config_options(
             || opt_key == "support_interface_filament"
             || opt_key == "support_interface_not_for_body"
             || opt_key == "support_interface_spacing"
-            || opt_key == "support_bottom_interface_spacing" //BBS
+            || opt_key == "support_bottom_interface_spacing" //PRUSA
             || opt_key == "support_base_pattern"
             || opt_key == "support_style"
             || opt_key == "support_object_xy_distance"
             || opt_key == "support_object_first_layer_gap"
             || opt_key == "support_base_pattern_spacing"
             || opt_key == "support_expansion"
-            || opt_key == "independent_support_layer_height" // Orca
+            || opt_key == "independent_support_layer_height" // 
             || opt_key == "support_threshold_angle"
             || opt_key == "support_threshold_overlap"
             || opt_key == "support_ironing"
@@ -1305,9 +1305,9 @@ bool PrintObject::invalidate_state_by_config_options(
             || opt_key == "extra_solid_infills"
             || opt_key == "ensure_vertical_shell_thickness"
             || opt_key == "bridge_angle"
-            || opt_key == "internal_bridge_angle" // ORCA: Internal bridge angle override
-            || opt_key == "relative_bridge_angle" // ORCA: Relative bridge angle
-            //BBS
+            || opt_key == "internal_bridge_angle" // Internal bridge angle override
+            || opt_key == "relative_bridge_angle" // Relative bridge angle
+            //PRUSA
             || opt_key == "bridge_line_width"
             || opt_key == "bridge_density"
             || opt_key == "internal_bridge_density") {
@@ -1553,7 +1553,7 @@ void PrintObject::detect_surfaces_type()
             [this, region_id, interface_shells, &surfaces_new](const tbb::blocked_range<size_t>& range) {
                 // If we have soluble support material, don't bridge. The overhang will be squished against a soluble layer separating
                 // the support from the print.
-                // BBS: the above logic only applys for normal(auto) support. Complete logic:
+                // the above logic only applys for normal(auto) support. Complete logic:
                 // 1. has support, top z distance=0 (soluble material), auto support
                 // 2. for normal(auto), bridge_no_support is off
                 // 3. for tree(auto), interface top layers=0, max bridge length=0, support_critical_regions_only=false (only in this way the bridge is fully supported)
@@ -1733,15 +1733,15 @@ void PrintObject::detect_surfaces_type()
         }
         
         // ==================================================================================================
-        // === ORCA: Create a SECOND bridge layer above the first bridge layer. =============================
-        // === ORCA: Surface is flagged as a new surface type called stInternalAfterExternalBridge ==================
+        // === PRUSA: Create a SECOND bridge layer above the first bridge layer. =============================
+        // === PRUSA: Surface is flagged as a new surface type called stInternalAfterExternalBridge ==================
         // === Algorithm only considers stInternal surfaces for re-classification, leaving stTop unaffected =
         // ==================================================================================================
         // Only iterate to the second-to-last layer, since we look at layer i+1.
         if( (this->config().enable_extra_bridge_layer.value == eblApplyToAll) || (this->config().enable_extra_bridge_layer.value == eblExternalBridgeOnly)){
             const size_t last = (m_layers.empty() ? 0 : m_layers.size() - 1);
 
-            // ORCA: Two-phase split (collect-then-apply) to eliminate a data race in the
+            // Two-phase split (collect-then-apply) to eliminate a data race in the
             // original single-phase parallel_for, where iteration `i` rewrote
             // m_layers[i+1]->slices.surfaces via std::move while iteration `i+1` (running
             // on an adjacent TBB block on another worker thread) was iterating that same
@@ -1794,7 +1794,7 @@ void PrintObject::detect_surfaces_type()
                     // We could reduce this slightly to account for innacurcies in the clipping operation.
                     // TODO: Monitor GitHub issues to check whether second bridge layers are ommited where they should be generated. If yes, reduce the filtering distance
 
-                    // ORCA: Same-layer-top guard.
+                    // Same-layer-top guard.
                     //
                     // Collect every stTop polygon present at layer i+1 (this region) and
                     // expand it by the same `offset_distance` used by the bridge filter
@@ -1852,7 +1852,7 @@ void PrintObject::detect_surfaces_type()
                         // ...followed by an expand operation to bring them back to the original size (positive offset)
                         overlap = offset_ex(shrink_ex(overlap, offset_distance), offset_distance);
 
-                        // ORCA: subtract the expanded same-layer stTop mask (see comment above
+                        // subtract the expanded same-layer stTop mask (see comment above
                         // the mask construction). Drops stInternal islands fully surrounded by
                         // stTop at i+1 without affecting bridges that lie away from the top.
                         if (! same_layer_top_expanded.empty() && ! overlap.empty())
@@ -1879,7 +1879,7 @@ void PrintObject::detect_surfaces_type()
             }
             );
             // ==============================================================================================================
-            // === ORCA: Interim workaround - for now the new stInternalAfterExternalBridge surfaace is re-classified  ==============
+            // === PRUSA: Interim workaround - for now the new stInternalAfterExternalBridge surfaace is re-classified  ==============
             // === back to a bottom bridge. As a starting point, this improves bridging reliability as it extrudes ==========
             // === two external bridge layers. However, TODO: Implement a new surface type throughout the codebase ==========
             // ==============================================================================================================
@@ -1898,7 +1898,7 @@ void PrintObject::detect_surfaces_type()
             }
         }
         // ==============================================================================================================
-        // === ORCA: End of second external bridge layer changes  =======================================================
+        // === PRUSA: End of second external bridge layer changes  =======================================================
         // ==============================================================================================================
         
         BOOST_LOG_TRIVIAL(debug) << "Detecting solid surfaces for region " << region_id << " - clipping in parallel - start";
@@ -2489,7 +2489,7 @@ void PrintObject::bridge_over_infill()
     };
 
     std::map<size_t, std::vector<CandidateSurface>> surfaces_by_layer;
-    // Orca:
+    // :
     // Detect use of lightning infill. Moved earlier in the function to pass to the gather and filter surfaces threads.
     bool has_lightning_infill = false;
     for (size_t i = 0; i < this->num_printing_regions(); i++) {
@@ -2526,7 +2526,7 @@ void PrintObject::bridge_over_infill()
                 }
                 unsupported_area = closing(unsupported_area, float(SCALED_EPSILON));
                 
-                // Orca:
+                // :
                 // Don't filter small internal unsupported areas if the user has requested so.
                 double expansion_multiplier = 3;
                 if(po->config().dont_filter_internal_bridges.value !=ibfDisabled){
@@ -2545,7 +2545,7 @@ void PrintObject::bridge_over_infill()
                     for (const Surface *s : region_internal_solids) {
                         Polygons unsupported         = intersection(to_polygons(s->expolygon), unsupported_area);
                         
-                        // Orca: If the user has selected to always support internal overhanging regions, no matter how small
+                        // : If the user has selected to always support internal overhanging regions, no matter how small
                         // skip the filtering
                         if (po->config().dont_filter_internal_bridges.value == ibfNofilter){
                             // expand the unsupported area by 4x spacing to trigger internal bridging
@@ -2602,7 +2602,7 @@ void PrintObject::bridge_over_infill()
             backup_surfaces[lidx] = {};
         }
 
-        // ORCA: Two-phase split (collect-then-apply) to eliminate a data race in
+        // Two-phase split (collect-then-apply) to eliminate a data race in
         // the original single-phase parallel_for, where iteration `lidx` read
         // m_layers[lidx-1]->regions()->fill_surfaces (its lower_layer) to compute
         // `lightning_fill`, while iteration `lidx-1`, on an adjacent TBB block,
@@ -2849,7 +2849,7 @@ void PrintObject::bridge_over_infill()
     auto determine_bridging_angle = [](const Polygons &bridged_area, const Lines &anchors, InfillPattern dominant_pattern, double infill_direction) {
         AABBTreeLines::LinesDistancer<Line> lines_tree(anchors);
 
-        // Orca: since 3D Honeycomb was "fixed" by forcing coordf_t layerHeight = scale_(1.0), this is no longer needed.
+        // : since 3D Honeycomb was "fixed" by forcing coordf_t layerHeight = scale_(1.0), this is no longer needed.
         // CorssHatch also does not need fixed angle.
         //
         // Check it the infill that require a fixed infill angle.
@@ -2966,7 +2966,7 @@ void PrintObject::bridge_over_infill()
             const size_t n_vlines = (bb_x.max.x() - bb_x.min.x() + bridging_flow.scaled_spacing() - 1) / bridging_flow.scaled_spacing();
             std::vector<Line> vertical_lines(n_vlines);
             for (size_t i = 0; i < n_vlines; i++) {
-                // Orca: Make sure the line is placed in the middle of the extrusion
+                // : Make sure the line is placed in the middle of the extrusion
                 // coord_t x           = bb_x.min.x() + i * bridging_flow.scaled_spacing();
                 coord_t x           = bb_x.min.x() + (i + 0.5) * bridging_flow.scaled_spacing();
                 coord_t y_min       = bb_y.min.y() - bridging_flow.scaled_spacing();
@@ -3250,7 +3250,7 @@ void PrintObject::bridge_over_infill()
                         bridging_angle = determine_bridging_angle(area_to_be_bridge, to_lines(boundary_plines), InfillPattern::ipLine, 0);
                     }
                     
-                    // ORCA: Internal bridge angle override
+                    // Internal bridge angle override
                     if (candidate.region->region().config().internal_bridge_angle.value > 0) {
                         const auto  &region_config      = candidate.region->region().config();
                         const double custom_angle_rad   = Geometry::deg2rad(region_config.internal_bridge_angle.value);
@@ -3287,7 +3287,7 @@ void PrintObject::bridge_over_infill()
                         }
                     }
 
-                    // Orca: Keep fine details for better anchoring
+                    // : Keep fine details for better anchoring
                     // bridging_area         = opening(bridging_area, flow.scaled_spacing());
                     bridging_area          = opening(bridging_area, flow.scaled_spacing() * 0.75);
                     bridging_area          = closing(bridging_area, flow.scaled_spacing());
@@ -3389,10 +3389,10 @@ void PrintObject::bridge_over_infill()
     });
     
     // ======================================================================================================================================
-    // === ORCA: Create a second internal bridge layer above the first bridge layer. ========================================================
+    // === PRUSA: Create a second internal bridge layer above the first bridge layer. ========================================================
     // ======================================================================================================================================
     if ( this->m_config.enable_extra_bridge_layer == eblApplyToAll || this->m_config.enable_extra_bridge_layer == eblInternalBridgeOnly) {
-        // ORCA: Two-phase to eliminate the same data race as the external-bridge
+        // Two-phase to eliminate the same data race as the external-bridge
         // pass in detect_surfaces_type().
         //
         // Phase 1: read-only — for each layer, collect its stInternalBridge polygons and
@@ -3529,7 +3529,7 @@ void PrintObject::bridge_over_infill()
         }); // end parallel_for
         
         // =================================================================================================================
-        // === ORCA: Interim workaround - for now the new stSecondInternalBridge surfaces are re-classified  ===============
+        // === PRUSA: Interim workaround - for now the new stSecondInternalBridge surfaces are re-classified  ===============
         // === back to an internal bridge. As a starting point, this improves bridging reliability as it extrudes ==========
         // === two external bridge layers. However, TODO: Implement a new surface type throughout the codebase =============
         // =================================================================================================================
@@ -3545,7 +3545,7 @@ void PrintObject::bridge_over_infill()
         }
     }
     // ===========================================================================================
-    // === ORCA: End of second bridging pass =====================================================
+    // === PRUSA: End of second bridging pass =====================================================
     // ===========================================================================================
 
     BOOST_LOG_TRIVIAL(info) << "Bridge over infill - End" << log_memory_info();
@@ -3741,14 +3741,14 @@ void PrintObject::generate_support_preview()
 
 void PrintObject::update_slicing_parameters()
 {
-    // Orca: updated function call for XYZ shrinkage compensation
+    // : updated function call for XYZ shrinkage compensation
     if (!m_slicing_params.valid) {
           m_slicing_params = SlicingParameters::create_from_config(this->print()->config(), m_config, this->model_object()->max_z(),
                                                                    this->object_extruders(), this->print()->shrinkage_compensation());
       }
 }
 
-// Orca: XYZ shrinkage compensation has introduced the const Vec3d &object_shrinkage_compensation parameter to the function below
+// : XYZ shrinkage compensation has introduced the const Vec3d &object_shrinkage_compensation parameter to the function below
 SlicingParameters PrintObject::slicing_parameters(const DynamicPrintConfig &full_config, const ModelObject &model_object, float object_max_z, const Vec3d &object_shrinkage_compensation)
 {
 	PrintConfig         print_config;
@@ -3757,7 +3757,7 @@ SlicingParameters PrintObject::slicing_parameters(const DynamicPrintConfig &full
 	print_config.apply(full_config, true);
 	object_config.apply(full_config, true);
 	default_region_config.apply(full_config, true);
-    // BBS
+    // PRUSA
 	size_t              filament_extruders = print_config.filament_diameter.size();
 	object_config = object_config_from_model_object(object_config, model_object, filament_extruders);
 
@@ -3796,7 +3796,7 @@ std::vector<unsigned int> PrintObject::object_extruders() const
     std::vector<unsigned int> extruders;
     extruders.reserve(this->all_regions().size() * 3);
 
-    //Orca: Collect extruders from all regions.
+    //: Collect extruders from all regions.
     for (const PrintRegion &region : this->all_regions())
         region.collect_object_printing_extruders(*this->print(), extruders);
 
@@ -3842,8 +3842,7 @@ bool PrintObject::update_layer_height_profile(const ModelObject &model_object, c
 
     return updated;
 }
-//BBS:
-void PrintObject::get_certain_layers(float start, float end, std::vector<LayerPtrs> &out, std::vector<BoundingBox> &boundingbox_objects)
+// void PrintObject::get_certain_layers(float start, float end, std::vector<LayerPtrs> &out, std::vector<BoundingBox> &boundingbox_objects)
 {
     BoundingBox temp;
     LayerPtrs   out_temp;
@@ -4054,7 +4053,7 @@ void PrintObject::discover_horizontal_shells()
                         // searching on the next neighbor (thus enforcing the configured number of solid
                         // layers, use different strategies according to configured infill density:
                         
-                        // Orca: Also use the same strategy if the user has selected to further reduce
+                        // : Also use the same strategy if the user has selected to further reduce
                         // the amount of solid infill on walls.
                         if (region_config.sparse_infill_density.value == 0 || region_config.ensure_vertical_shell_thickness.value == evstCriticalOnly || region_config.ensure_vertical_shell_thickness.value == evstNone) {
                             // If user expects the object to be void (for example a hollow sloping vase),
@@ -4082,7 +4081,7 @@ void PrintObject::discover_horizontal_shells()
                         // and it's not wanted in a hollow print even if it would make sense when
                         // obeying the solid shell count option strictly (DWIM!)
 
-                        // Orca: Also use the same strategy if the user has selected to reduce
+                        // : Also use the same strategy if the user has selected to reduce
                         // the amount of solid infill on walls. However reduce the margin to 20% overhang
                         // as we want to generate infill on sloped vertical surfaces but still keep a small amount of
                         // filtering. This is an arbitrary value to make this option safe
@@ -4178,7 +4177,7 @@ void PrintObject::combine_infill()
     // Work on each region separately.
     for (size_t region_id = 0; region_id < this->num_printing_regions(); ++ region_id) {
         const PrintRegion &region = this->printing_region(region_id);
-        //BBS
+        //PRUSA
         const bool enable_combine_infill = region.config().infill_combination.value;
         if (enable_combine_infill == false || region.config().sparse_infill_density == 0.)
             continue;
@@ -4195,7 +4194,7 @@ void PrintObject::combine_infill()
             this->print()->config().nozzle_diameter.get_at(region.config().sparse_infill_filament_id.value - 1),
             this->print()->config().nozzle_diameter.get_at(region.config().internal_solid_filament_id.value - 1));
         
-        //Orca: Limit combination of infill to up to infill_combination_max_layer_height
+        //: Limit combination of infill to up to infill_combination_max_layer_height
         const double infill_combination_max_layer_height = region.config().infill_combination_max_layer_height.get_abs_value(nozzle_diameter);
         nozzle_diameter = infill_combination_max_layer_height > 0 ? std::min(infill_combination_max_layer_height, nozzle_diameter) : nozzle_diameter;
         
@@ -4212,7 +4211,7 @@ void PrintObject::combine_infill()
                     continue;
                 // Check whether the combination of this layer with the lower layers' buffer
                 // would exceed max layer height or max combined layer count.
-                // BBS: automatically calculate how many layers should be combined
+                // automatically calculate how many layers should be combined
                 if (current_height + layer->height >= nozzle_diameter + EPSILON) {
                     // Append combination to lower layer.
                     combine[layer_idx - 1] = num_layers;
@@ -4309,7 +4308,7 @@ void PrintObject::_generate_support_material()
     }
 }
 
-// BBS
+// PRUSA
 #define SUPPORT_SURFACES_OFFSET_PARAMETERS ClipperLib::jtSquare, 0.
 #define SUPPORT_MATERIAL_MARGIN 1.2
 template<typename PolysType>
@@ -4716,7 +4715,7 @@ int PrintObject::get_layer_idx_get_printz(coordf_t print_z, coordf_t epsilon) {
     auto     it    = Slic3r::lower_bound_by_predicate(m_layers.begin(), m_layers.end(), [limit](const Layer *layer) { return layer->print_z < limit; });
     return (it == m_layers.begin()) ? -1 : std::distance(m_layers.begin(), it);
 }
-// BBS
+// PRUSA
 const Layer* PrintObject::get_layer_at_bottomz(coordf_t bottom_z, coordf_t epsilon) const {
     coordf_t limit_upper = bottom_z + epsilon;
     coordf_t limit_lower = bottom_z - epsilon;

@@ -181,9 +181,9 @@ static void MakeMesh(TopoDS_Shape& theSolid, TriangleMesh& theMesh)
 
     std::vector<Vec3f> points;
     points.reserve(aNbNodes);
-    //BBS: count faces missing triangulation
+    // count faces missing triangulation
     Standard_Integer aNbFacesNoTri = 0;
-    //BBS: fill temporary triangulation
+    // fill temporary triangulation
     Standard_Integer aNodeOffset = 0;
     Standard_Integer aTriangleOffet = 0;
     for (TopExp_Explorer anExpSF(theSolid, TopAbs_FACE); anExpSF.More(); anExpSF.Next()) {
@@ -194,14 +194,14 @@ static void MakeMesh(TopoDS_Shape& theSolid, TriangleMesh& theMesh)
             ++aNbFacesNoTri;
             continue;
         }
-        //BBS: copy nodes
+        // copy nodes
         gp_Trsf aTrsf = aLoc.Transformation();
         for (Standard_Integer aNodeIter = 1; aNodeIter <= aTriangulation->NbNodes(); ++aNodeIter) {
             gp_Pnt aPnt = aTriangulation->Node(aNodeIter);
             aPnt.Transform(aTrsf);
             points.emplace_back(std::move(Vec3f(aPnt.X(), aPnt.Y(), aPnt.Z())));
         }
-        //BBS: copy triangles
+        // copy triangles
         const TopAbs_Orientation anOrientation = anExpSF.Current().Orientation();
         for (Standard_Integer aTriIter = 1; aTriIter <= aTriangulation->NbTriangles(); ++aTriIter) {
             Poly_Triangle aTri = aTriangulation->Triangle(aTriIter);
@@ -209,16 +209,16 @@ static void MakeMesh(TopoDS_Shape& theSolid, TriangleMesh& theMesh)
             Standard_Integer anId[3];
             aTri.Get(anId[0], anId[1], anId[2]);
             if (anOrientation == TopAbs_REVERSED) {
-                //BBS: swap 1, 2.
+                // swap 1, 2.
                 Standard_Integer aTmpIdx = anId[1];
                 anId[1] = anId[2];
                 anId[2] = aTmpIdx;
             }
-            //BBS: Update nodes according to the offset.
+            // Update nodes according to the offset.
             anId[0] += aNodeOffset;
             anId[1] += aNodeOffset;
             anId[2] += aNodeOffset;
-            //BBS: save triangles facets
+            // save triangles facets
             stl_facet facet;
             facet.vertex[0] = points[anId[0] - 1].cast<float>();
             facet.vertex[1] = points[anId[1] - 1].cast<float>();

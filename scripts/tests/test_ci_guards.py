@@ -171,10 +171,10 @@ def main():
         {},
     )
     rel_run = str(rel.get("run", ""))
-    if "readelf -d" not in rel_run or "libTK" not in rel_run or "'Orca Slicer'" not in rel_run:
+    if "readelf -d" not in rel_run or "libTK" not in rel_run or "'PrusaSlicer'" not in rel_run:
         failures.append(
             "engine release-reuse step must run the full quality gate (size, "
-            "no libTK runtime DT_NEEDED, Orca Slicer/Arachne/gmp/mpfr markers) "
+            "no libTK runtime DT_NEEDED, PrusaSlicer/Arachne/gmp/mpfr markers) "
             "so a stale .so falls through to a fresh build"
         )
     if "engine_src" not in rel_run or "HEAD:engine" not in rel_run:

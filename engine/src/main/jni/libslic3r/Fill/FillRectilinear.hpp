@@ -162,8 +162,8 @@ protected:
     float _layer_angle(size_t idx) const override { return 0.f; }
 };
 
-// Orca: Introduced FillMonotonicLines from Prusa slicer, inhereting from FillRectilinear
-// This replaces the FillMonotonicLineWGapFill from BBS
+// Introduced FillMonotonicLines from Prusa slicer, inhereting from FillRectilinear
+// This replaces the FillMonotonicLineWGapFill from PRUSA
 class FillMonotonicLines : public FillRectilinear
 {
 public:
@@ -173,7 +173,7 @@ public:
     bool no_sort() const override { return true; }
 };
 
-//Orca: Replaced with FillMonotonicLines, inheriting from FillRectilinear
+// Replaced with FillMonotonicLines, inheriting from FillRectilinear
 /*class FillMonotonicLineWGapFill : public Fill
 {
 public:

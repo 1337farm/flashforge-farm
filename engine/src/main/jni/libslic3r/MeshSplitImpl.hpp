@@ -256,10 +256,10 @@ std::vector<Vec3i32> create_face_neighbors_index(ExPolicy &&ex, const indexed_tr
                     if (vertex_index < 0) continue;
                     // Has NOT oposite direction?
                     if (edge_indices[0] != face_indices[(vertex_index + 1) % 3]) continue;
-                    //BBS: if this neighbor has already marked before, skip it
+                    // if this neighbor has already marked before, skip it
                     if (neighbors[other_face][vertex_index] != no_value)
                         continue;
-                    //BBS: the same triangle with opposite direction, also treat it as open edges
+                    // the same triangle with opposite direction, also treat it as open edges
                     //if (its_triangle_vertex_the_same(face_indices, triangle_indices))
                     //    continue;
                     neighbor_edge = other_face;

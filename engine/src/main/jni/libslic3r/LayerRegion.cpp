@@ -116,7 +116,7 @@ void LayerRegion::make_perimeters(const SurfaceCollection &slices, const LayerRe
         &this->perimeters,
         &this->thin_fills,
         fill_surfaces,
-        //BBS
+        //PRUSA
         fill_no_overlap
     );
     
@@ -534,7 +534,7 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
     SurfaceCollection bridges;
     {
         BOOST_LOG_TRIVIAL(trace) << "Processing external surface, detecting bridges. layer" << this->layer()->print_z;
-        // ORCA: Relative/Align Bridge Angle
+        // Relative/Align Bridge Angle
         const auto  &region_config    = this->region().config();
         const double custom_angle_deg = region_config.bridge_angle.value;
         const bool   relative_angle   = region_config.relative_bridge_angle.value;
@@ -630,12 +630,12 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
 void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Polygons *lower_layer_covered)
 {
     const bool      has_infill = this->region().config().sparse_infill_density.value > 0.;
-    //BBS
+    //PRUSA
     auto nozzle_diameter = this->region().nozzle_dmr_avg(this->layer()->object()->print()->config());
     const float margin = float(scale_(EXTERNAL_INFILL_MARGIN));
     const float bridge_margin = std::min(float(scale_(BRIDGE_INFILL_MARGIN)), float(scale_(nozzle_diameter * BRIDGE_INFILL_MARGIN / 0.4)));
 
-    // BBS
+    // PRUSA
     const PrintObjectConfig& object_config = this->layer()->object()->config();
 
 #ifdef SLIC3R_DEBUG_SLICE_PROCESSING
@@ -674,7 +674,7 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
                 if (max_grid_area < 0 || surface.expolygon.area() < max_grid_area)
                     surfaces_append(top, offset_ex(surface.expolygon, margin, EXTERNAL_SURFACES_OFFSET_PARAMETERS), surface);
                 else
-                    //BBS: Don't need to expand too much in this situation. Expand 3mm to eliminate hole and 1mm for contour
+                    // Don't need to expand too much in this situation. Expand 3mm to eliminate hole and 1mm for contour
                     surfaces_append(top, intersection_ex(offset(surface.expolygon.contour, margin / 3.0, EXTERNAL_SURFACES_OFFSET_PARAMETERS),
                                                          offset_ex(surface.expolygon, margin, EXTERNAL_SURFACES_OFFSET_PARAMETERS)), surface);
             } else if (surface.surface_type == stBottom || (surface.surface_type == stBottomBridge && lower_layer == nullptr)) {
@@ -748,7 +748,7 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
                         break;
                     }
                 // Grown by 3mm.
-                //BBS: eliminate too narrow area to avoid generating bridge on top layer when wall loop is 1
+                // eliminate too narrow area to avoid generating bridge on top layer when wall loop is 1
                 //Polygons polys = offset(bridges[i].expolygon, bridge_margin, EXTERNAL_SURFACES_OFFSET_PARAMETERS);
                 Polygons polys = offset2({ bridges[i].expolygon }, -scale_(nozzle_diameter * 0.1), bridge_margin, EXTERNAL_SURFACES_OFFSET_PARAMETERS);
                 if (idx_island == -1) {
@@ -816,7 +816,7 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
                 // would get merged into a single one while they need different directions
                 // also, supply the original expolygon instead of the grown one, because in case
                 // of very thin (but still working) anchors, the grown expolygon would go beyond them
-                // ORCA: Relative/Align Bridge Angle
+                // Relative/Align Bridge Angle
                 const auto &region_config   = this->region().config();
                 const double custom_angle_deg = region_config.bridge_angle.value;
                 const bool   relative_angle   = region_config.relative_bridge_angle.value;
@@ -842,7 +842,7 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
                 #ifdef SLIC3R_DEBUG
                 printf("Processing bridge at layer %zu:\n", this->layer()->id());
                 #endif
-                //BBS: use 0 as custom angle to enable auto detection all the time
+                // use 0 as custom angle to enable auto detection all the time
                 double custom_angle = Geometry::deg2rad(this->region().config().bridge_angle.value);
                 if(custom_angle > 0)
                         bridges[idx_last].bridge_angle = custom_angle;
@@ -949,7 +949,7 @@ void LayerRegion::prepare_fill_surfaces()
     if (! spiral_mode && this->region().config().top_shell_layers == 0) {
         for (Surface &surface : this->fill_surfaces.surfaces)
             if (surface.is_top())
-                //BBS
+                //PRUSA
                 //surface.surface_type = this->layer()->object()->config().infill_only_where_needed ? stInternalVoid : stInternal;
                 surface.surface_type = PrintObject::infill_only_where_needed ? stInternalVoid : stInternal;
     }

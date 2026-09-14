@@ -25,7 +25,7 @@
 #include <boost/property_tree/ini_parser.hpp>
 #include <boost/format.hpp>
 #include <string.h>
-//BBS: add json support
+// add json support
 #include "nlohmann/json.hpp"
 
 using namespace nlohmann;
@@ -36,7 +36,7 @@ using namespace nlohmann;
 
 namespace Slic3r {
 
-//BBS: add json support
+// add json support
 //static const std::string CONFIG_VERSION_KEY = "version";
 //static const std::string CONFIG_NAME_KEY = "name";
 //static const std::string CONFIG_URL_KEY = "url";
@@ -285,7 +285,7 @@ ConfigOption* ConfigOptionDef::create_empty_option() const
 	    case coBool:            return new ConfigOptionBool();
 	    case coBools:           return new ConfigOptionBools();
 	    case coEnum:            return new ConfigOptionEnumGeneric(this->enum_keys_map);
-        // BBS
+        // PRUSA
         case coEnums:           return new ConfigOptionEnumsGeneric(this->enum_keys_map);
 	    default:                throw ConfigurationError(std::string("Unknown option type for option ") + this->label);
 	    }
@@ -406,7 +406,7 @@ std::ostream& ConfigDef::print_cli_help(std::ostream& out, bool show_defaults, s
 
             for (auto& arg : cli_args) {
                 arg.insert(0, (arg.size() == 1) ? "-" : "--");
-                //BBS: refine the print help format
+                // refine the print help format
                 if (!def.cli_params.empty())
                     arg += " " + def.cli_params;
                 /*if ( def.type == coInt || def.type == coInts) {
@@ -509,7 +509,7 @@ void ConfigBase::apply_only(const ConfigBase &other, const t_config_option_keys 
 }
 
 // Are the two configs equal? Ignoring options not present in both configs.
-//BBS: add skipped keys logic
+// add skipped keys logic
 bool ConfigBase::equals(const ConfigBase &other, const std::set<std::string>* skipped_keys) const
 {
     for (const t_config_option_key &opt_key : this->keys()) {
@@ -588,7 +588,7 @@ bool ConfigBase::set_deserialize_nothrow(const t_config_option_key &opt_key_src,
     this->handle_legacy(opt_key, value);
     if (opt_key.empty()) {
         // Ignore the option.
-        //BBS: record these options, keep only one repeated opt_key
+        // record these options, keep only one repeated opt_key
         auto iter = std::find(substitutions_ctxt.unrecogized_keys.begin(), substitutions_ctxt.unrecogized_keys.end(), opt_key_src);
         if (iter == substitutions_ctxt.unrecogized_keys.end())
             substitutions_ctxt.unrecogized_keys.push_back(opt_key_src);
@@ -780,7 +780,7 @@ void ConfigBase::setenv_() const
     }
 }
 
-//BBS
+//PRUSA
 ConfigSubstitutions ConfigBase::load_string_map(std::map<std::string, std::string>& key_values, ForwardCompatibilitySubstitutionRule compatibility_rule)
 {
     CNumericLocalesSetter locales_setter;
@@ -799,7 +799,7 @@ ConfigSubstitutions ConfigBase::load_string_map(std::map<std::string, std::strin
     return std::move(substitutions_ctxt.substitutions);
 }
 
-//BBS: add json support
+// add json support
 ConfigSubstitutions ConfigBase::load(const std::string &file, ForwardCompatibilitySubstitutionRule compatibility_rule)
 {
     std::map<std::string, std::string> key_values;
@@ -810,13 +810,13 @@ ConfigSubstitutions ConfigBase::load(const std::string &file, ForwardCompatibili
         return this->load_from_json(file, compatibility_rule, key_values, reason);
     }
     else {
-        // OrcaSlicer's native config format is JSON, but bundled vendor profiles are .ini;
+        // Slic3r-family config format is JSON, but bundled vendor profiles are .ini;
         // re-enable the .ini loader for compatibility with bundled profile files.
         return this->load_from_ini(file, compatibility_rule);
     }
 }
 
-//BBS: add json support
+// add json support
 ConfigSubstitutions ConfigBase::load_from_json(const std::string &file, ForwardCompatibilitySubstitutionRule compatibility_rule, std::map<std::string, std::string>& key_values, std::string& reason)
 {
     int ret = 0;
@@ -893,42 +893,42 @@ int ConfigBase::load_from_json(const std::string &file, ConfigSubstitutionContex
         }
         //parse the json elements
         for (auto it = j.begin(); it != j.end(); it++) {
-            if (boost::iequals(it.key(),BBL_JSON_KEY_VERSION)) {
-                key_values.emplace(BBL_JSON_KEY_VERSION, it.value());
+            if (boost::iequals(it.key(),PRUSA_JSON_KEY_VERSION)) {
+                key_values.emplace(PRUSA_JSON_KEY_VERSION, it.value());
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_IS_CUSTOM)) {
+            else if (boost::iequals(it.key(), PRUSA_JSON_KEY_IS_CUSTOM)) {
                 //skip it
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_NAME)) {
-                key_values.emplace(BBL_JSON_KEY_NAME, it.value());
+            else if (boost::iequals(it.key(), PRUSA_JSON_KEY_NAME)) {
+                key_values.emplace(PRUSA_JSON_KEY_NAME, it.value());
                 if (it.value() == "project_settings")
                     is_project_settings = true;
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_URL)) {
-                key_values.emplace(BBL_JSON_KEY_URL, it.value());
+            else if (boost::iequals(it.key(), PRUSA_JSON_KEY_URL)) {
+                key_values.emplace(PRUSA_JSON_KEY_URL, it.value());
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_TYPE)) {
-                key_values.emplace(BBL_JSON_KEY_TYPE, it.value());
+            else if (boost::iequals(it.key(), PRUSA_JSON_KEY_TYPE)) {
+                key_values.emplace(PRUSA_JSON_KEY_TYPE, it.value());
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_SETTING_ID)) {
-                key_values.emplace(BBL_JSON_KEY_SETTING_ID, it.value());
+            else if (boost::iequals(it.key(), PRUSA_JSON_KEY_SETTING_ID)) {
+                key_values.emplace(PRUSA_JSON_KEY_SETTING_ID, it.value());
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_FILAMENT_ID)) {
-                key_values.emplace(BBL_JSON_KEY_FILAMENT_ID, it.value());
+            else if (boost::iequals(it.key(), PRUSA_JSON_KEY_FILAMENT_ID)) {
+                key_values.emplace(PRUSA_JSON_KEY_FILAMENT_ID, it.value());
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_FROM)) {
-                key_values.emplace(BBL_JSON_KEY_FROM, it.value());
+            else if (boost::iequals(it.key(), PRUSA_JSON_KEY_FROM)) {
+                key_values.emplace(PRUSA_JSON_KEY_FROM, it.value());
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_DESCRIPTION)) {
-                key_values.emplace(BBL_JSON_KEY_DESCRIPTION, it.value());
+            else if (boost::iequals(it.key(), PRUSA_JSON_KEY_DESCRIPTION)) {
+                key_values.emplace(PRUSA_JSON_KEY_DESCRIPTION, it.value());
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_INSTANTIATION)) {
-                key_values.emplace(BBL_JSON_KEY_INSTANTIATION, it.value());
+            else if (boost::iequals(it.key(), PRUSA_JSON_KEY_INSTANTIATION)) {
+                key_values.emplace(PRUSA_JSON_KEY_INSTANTIATION, it.value());
             }
-            else if (!load_inherits_to_config && boost::iequals(it.key(), BBL_JSON_KEY_INHERITS)) {
-                key_values.emplace(BBL_JSON_KEY_INHERITS, it.value());
-            } else if (boost::iequals(it.key(), ORCA_JSON_KEY_RENAMED_FROM)) {
-                key_values.emplace(ORCA_JSON_KEY_RENAMED_FROM, it.value());
+            else if (!load_inherits_to_config && boost::iequals(it.key(), PRUSA_JSON_KEY_INHERITS)) {
+                key_values.emplace(PRUSA_JSON_KEY_INHERITS, it.value());
+            } else if (boost::iequals(it.key(), PRUSA_JSON_KEY_RENAMED_FROM)) {
+                key_values.emplace(PRUSA_JSON_KEY_RENAMED_FROM, it.value());
             } else {
                 t_config_option_key opt_key = it.key();
                 std::string value_str;
@@ -945,7 +945,7 @@ int ConfigBase::load_from_json(const std::string &file, ConfigSubstitutionContex
                             new_support_style = "tree_hybrid";
                         }
                     } else if (opt_key == "wall_infill_order") {
-                        //BBS: check wall_infill order to decide if it be different and append to diff_setting_append
+                        // check wall_infill order to decide if it be different and append to diff_setting_append
                         if (it.value() == "outer wall/inner wall/infill" || it.value() == "infill/outer wall/inner wall" || it.value() == "inner-outer-inner wall/infill") {
                             get_wall_sequence = "wall_seq_diff_to_system";
                         }
@@ -960,7 +960,7 @@ int ConfigBase::load_from_json(const std::string &file, ConfigSubstitutionContex
                     t_config_option_key opt_key_src = opt_key;
                     this->handle_legacy(opt_key, value_str);
                     if (opt_key.empty()) {
-                        //BBS: record these options
+                        // record these options
                         substitution_context.unrecogized_keys.push_back(opt_key_src);
                         continue;
                     }
@@ -999,7 +999,7 @@ int ConfigBase::load_from_json(const std::string &file, ConfigSubstitutionContex
                         }
                     }
 
-                    // BBS: we only support 2 depth array
+                    // we only support 2 depth array
                     valid = parse_str_arr(it, single_sep, array_sep,escape_string_type, value_str);
                     if (!valid) {
                         BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << ": parse " << file << " error, invalid json array for " << it.key();
@@ -1196,7 +1196,7 @@ ConfigSubstitutions ConfigBase::load(const boost::property_tree::ptree &tree, Fo
     return std::move(substitutions_ctxt.substitutions);
 }
 
-// BBS
+// PRUSA
 static bool         is_whitespace(char c) { return c == ' ' || c == '\t'; }
 static bool         is_end_of_line(char c) { return c == '\r' || c == '\n' || c == 0; }
 static bool         is_end_of_gcode_line(char c) { return c == ';' || is_end_of_line(c); }
@@ -1220,7 +1220,7 @@ size_t ConfigBase::load_from_gcode_string_legacy(ConfigBase& config, const char*
     if (str == nullptr)
         return 0;
 
-    // BBS. Remove line numbers.
+    // PRUSA. Remove line numbers.
     std::regex match_pattern("\nN[0-9]* *");
     std::string replace_pattern = "\n";
     char* result = (char*)calloc(strlen(str) + 1, 1);
@@ -1358,28 +1358,28 @@ ConfigSubstitutions ConfigBase::load_from_gcode_file(const std::string &file, Fo
     // Read a 64k block from the end of the G-code.
 	boost::nowide::ifstream ifs(file);
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(":  before parse_file %1%") % file.c_str();
-    // Look for Slic3r or OrcaSlicer header.
+    // Look for Slic3r-family header.
     // Look for the header across the whole file as the G-code may have been extended at the start by a post-processing script or the user.
-    //BBS
+    //PRUSA
     bool has_delimiters = true;
     {
-        //BBS
-        std::string bambuslicer_gcode_header = "; OrcaSlicer";
+        //PRUSA
+        std::string prusaslicer_gcode_header = "; PrusaSlicer";
 
-        std::string orcaslicer_gcode_header = std::string("; generated by ");
-        orcaslicer_gcode_header += SLIC3R_APP_NAME;
+        std::string prusaslicer_generated_header = std::string("; generated by ");
+        prusaslicer_generated_header += SLIC3R_APP_NAME;
 
         std::string header;
         bool        header_found = false;
         while (std::getline(ifs, header)) {
-            // BBS
+            // PRUSA
             const char* line_c = skip_whitespaces(header.c_str());
             if (std::toupper(*line_c) == 'N')
                 line_c = skip_word(line_c);
             line_c = skip_whitespaces(line_c);
-            // BBS
-            if (strncmp(bambuslicer_gcode_header.c_str(), line_c, strlen(bambuslicer_gcode_header.c_str())) == 0 ||
-                strncmp(orcaslicer_gcode_header.c_str(), line_c, strlen(orcaslicer_gcode_header.c_str())) == 0) {
+            // PRUSA
+            if (strncmp(prusaslicer_gcode_header.c_str(), line_c, strlen(prusaslicer_gcode_header.c_str())) == 0 ||
+                strncmp(prusaslicer_generated_header.c_str(), line_c, strlen(prusaslicer_generated_header.c_str())) == 0) {
                 header_found = true;
                 break;
             }
@@ -1398,7 +1398,7 @@ ConfigSubstitutions ConfigBase::load_from_gcode_file(const std::string &file, Fo
 
     if (has_delimiters)
     {
-        //BBS
+        //PRUSA
         // PrusaSlicer starting with 2.4.0-alpha0 delimits the config section stored into G-code with
         // ; CONFIG_BLOCK_START
         // ...
@@ -1469,14 +1469,14 @@ ConfigSubstitutions ConfigBase::load_from_gcode_file(const std::string &file, Fo
     return std::move(substitutions_ctxt.substitutions);
 }
 
-//BBS: add json support
+// add json support
 void ConfigBase::save_to_json(const std::string &file, const std::string &name, const std::string &from, const std::string &version) const
 {
     json j;
     //record the headers
-    j[BBL_JSON_KEY_VERSION] = version;
-    j[BBL_JSON_KEY_NAME] = name;
-    j[BBL_JSON_KEY_FROM] = from;
+    j[PRUSA_JSON_KEY_VERSION] = version;
+    j[PRUSA_JSON_KEY_NAME] = name;
+    j[PRUSA_JSON_KEY_FROM] = from;
 
     //record all the key-values
     for (const std::string &opt_key : this->keys())
@@ -1639,7 +1639,7 @@ bool DynamicConfig::read_cli(int argc, const char* const argv[], t_config_option
         auto it = opts.find(token);
         bool no = false;
         if (it == opts.end()) {
-            //BBS: don't use 'no-' for boolean options
+            // don't use 'no-' for boolean options
             boost::nowide::cerr << "Invalid option --" << token.c_str() << std::endl;
             return false;
             /* Remove the "no-" prefix used to negate boolean options.
@@ -1831,7 +1831,7 @@ t_config_option_keys StaticConfig::keys() const
 
 // Iterate over the pairs of options with equal keys, call the fn.
 // Returns true on early exit by fn().
-//BBS: add skipped key logic
+// add skipped key logic
 template<typename Fn>
 static inline bool dynamic_config_iterate(const DynamicConfig &lhs, const DynamicConfig &rhs, Fn fn, const std::set<std::string>* skipped_keys = nullptr)
 {
@@ -1859,7 +1859,7 @@ static inline bool dynamic_config_iterate(const DynamicConfig &lhs, const Dynami
 }
 
 // Are the two configs equal? Ignoring options not present in both configs.
-//BBS: add skipped keys logic
+// add skipped keys logic
 bool DynamicConfig::equals(const DynamicConfig &other, const std::set<std::string>* skipped_keys) const
 {
     return ! dynamic_config_iterate(*this, other,

@@ -175,7 +175,7 @@ void SVG::draw(const Polygon &polygon, std::string fill)
 void SVG::draw(const Polygons &polygons, std::string fill)
 {
     for (Polygons::const_iterator it = polygons.begin(); it != polygons.end(); ++it) {
-        // BBS
+        // PRUSA
         if (it->is_counter_clockwise())
             this->draw(*it, fill);
         else
@@ -320,7 +320,7 @@ void SVG::draw_legend(const Point &pt, const char *text, const char *color)
         "black", text);
 }
 
-//BBS
+//PRUSA
 void SVG::draw_grid(const BoundingBox& bbox, const std::string& stroke, coordf_t stroke_width, coordf_t step)
 {
     // draw grid

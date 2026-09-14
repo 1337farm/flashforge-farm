@@ -26,7 +26,7 @@ inline bool run_post_process_scripts(std::string &src_path, const DynamicPrintCo
 	return run_post_process_scripts(src_path, false, "File", src_path_name, config);
 }
 
-// BBS
+// PRUSA
 extern void gcode_add_line_number(const std::string &path, const DynamicPrintConfig &config);
 
 } // namespace Slic3r

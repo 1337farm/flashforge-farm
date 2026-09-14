@@ -185,11 +185,11 @@
     <string name="SettingsDeleteProfile">Delete current</string>
     <string name="Changelog">Changelog</string>
     <string name="ChangelogOK">OK</string>
-    <string name="OrcaConversionPleaseWait">Converting profiles, please wait…</string>
-    <string name="OrcaConversionNotAConfigBundle">Not a config bundle</string>
-    <string name="OrcaConversionCopying">Copying profile bundle…</string>
-    <string name="OrcaConversionReading">Reading profile bundle…</string>
-    <string name="OrcaConversionImporting">Installing profiles… %1$d%%</string>
+    <string name="ProfileConversionPleaseWait">Converting profiles, please wait…</string>
+    <string name="ProfileConversionNotAConfigBundle">Not a config bundle</string>
+    <string name="ProfileConversionCopying">Copying profile bundle…</string>
+    <string name="ProfileConversionReading">Reading profile bundle…</string>
+    <string name="ProfileConversionImporting">Installing profiles… %1$d%%</string>
     <string name="SettingsInterfaceVerboseProgress">Show detailed progress</string>
     <string name="SettingsInterfaceVerboseProgressDescription">Show per-step details (file names, engine messages) while downloading, importing and installing.</string>
     <string name="AppCrashed">Something went wrong</string>

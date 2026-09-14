@@ -88,7 +88,7 @@ public class Native {
 
     static native void set_svg_path_prefix(String prefix);
     static native void set_crash_log_dir(String dir);
-    public static String orca_bundle_read(String archivePath, String extractDir) throws IOException, JSONException {
+    public static String profile_bundle_read(String archivePath, String extractDir) throws IOException, JSONException {
         File extractRoot = new File(extractDir);
         if (!extractRoot.exists() && !extractRoot.mkdirs()) {
             throw new IOException("Failed to create extraction directory: " + extractRoot);
@@ -100,7 +100,7 @@ public class Native {
             JSONArray files = new JSONArray();
             String bundleStructureJson = collectJsonFiles(extractRoot, extractRoot, files);
             if (bundleStructureJson == null) {
-                throw new IOException("bundle_structure.json not found in Orca bundle");
+                throw new IOException("bundle_structure.json not found in profile bundle");
             }
 
             JSONObject result = new JSONObject();

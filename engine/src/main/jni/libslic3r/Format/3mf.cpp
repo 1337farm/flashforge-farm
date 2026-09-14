@@ -937,7 +937,7 @@ ModelVolumeType type_from_string(const std::string &s)
             ++object_idx;
         }
 
-        //BBS: copy object isteadof instance
+        // copy object isteadof instance
         int object_size = model.objects.size();
         for (int obj_index = 0; obj_index < object_size; obj_index ++) {
             ModelObject* object = model.objects[obj_index];
@@ -2558,7 +2558,7 @@ ModelVolumeType type_from_string(const std::string &s)
             stream << " <" << METADATA_TAG << " name=\"Copyright\">" << "</" << METADATA_TAG << ">\n";
             stream << " <" << METADATA_TAG << " name=\"LicenseTerms\">" << "</" << METADATA_TAG << ">\n";
             stream << " <" << METADATA_TAG << " name=\"Rating\">" << "</" << METADATA_TAG << ">\n";
-            // Orca: PRIVACY: do not store creation & modification date in 3mf
+            // PRIVACY: do not store creation & modification date in 3mf
             stream << " <" << METADATA_TAG << " name=\"CreationDate\">" << "</" << METADATA_TAG << ">\n";
             stream << " <" << METADATA_TAG << " name=\"ModificationDate\">" << "</" << METADATA_TAG << ">\n";
             stream << " <" << METADATA_TAG << " name=\"Application\">" << SLIC3R_APP_KEY << "-" << SLIC3R_VERSION << "</" << METADATA_TAG << ">\n";
@@ -3214,7 +3214,7 @@ bool _3MF_Exporter::_add_custom_gcode_per_print_z_file_to_archive( mz_zip_archiv
     //        code_tree.put("<xmlattr>.color"     , code.color    );
     //        code_tree.put("<xmlattr>.extra"     , code.extra    );
 
-    //        //BBS
+    //        //PRUSA
     //        std::string gcode = //code.type == CustomGCode::ColorChange ? config->opt_string("color_change_gcode")    :
     //                            code.type == CustomGCode::PausePrint  ? config->opt_string("machine_pause_gcode")     :
     //                            code.type == CustomGCode::Template    ? config->opt_string("template_custom_gcode")   :

@@ -114,9 +114,9 @@ void set_logging_level(unsigned int level)
 {
     logSeverity = level_to_boost(level);
 
-    // Orca: force at info or lower level logging for pre-release builds.
-    // Note: not setting to debug or trace as they might affect long time usage especially with BBL printers.
-    const std::string version = SoftFever_VERSION;
+    
+    // Note: not setting to debug or trace as they might affect long time usage especially with PRUSA printers.
+    const std::string version = SLIC3R_VERSION;
     if (level < (unsigned int) boost::log::trivial::info &&
         (boost::algorithm::icontains(version, "dev") || boost::algorithm::icontains(version, "alpha") ||
          boost::algorithm::icontains(version, "beta"))) {
@@ -239,7 +239,7 @@ const std::string& resources_dir()
     return g_resources_dir;
 }
 
-//BBS: add temporary dir
+// add temporary dir
 static std::string g_temporary_dir;
 void set_temporary_dir(const std::string &dir)
 {
@@ -356,7 +356,7 @@ void set_log_path_and_level(const std::string& file, unsigned int level)
 	}
 #endif
 
-	//BBS log file at C:\\Users\\[yourname]\\AppData\\Roaming\\OrcaSlicer\\log\\[log_filename].log
+	//PRUSA log file at C:\\Users\\[yourname]\\AppData\\Roaming\\PrusaSlicer\\log\\[log_filename].log
 	auto log_folder = boost::filesystem::path(g_data_dir) / "log";
 	if (!boost::filesystem::exists(log_folder)) {
 		boost::filesystem::create_directory(log_folder);
@@ -392,7 +392,7 @@ void flush_logs()
 	return;
 }
 
-// ORCA
+// PRUSA
 boost::filesystem::path get_log_file_name()
 {
     if (g_log_sink)
@@ -548,7 +548,7 @@ namespace WindowsSupport
 			if (from_handle)
 		  		break;
 		}
-		//BBS: add some log for error tracing
+		// add some log for error tracing
 		if (! from_handle)
 		{
 			auto err_code = map_windows_error(GetLastError());
@@ -575,7 +575,7 @@ namespace WindowsSupport
 			if (! errcode || errcode != std::errc::permission_denied)
 		  		return errcode;
 
-			//BBS: add some log for error tracing
+			// add some log for error tracing
 			BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << boost::format(",first rename file from %1% to %2% failed, reason: %3%") % from.c_str() % to.c_str() % errcode.message();
 			// The destination file probably exists and is currently open in another
 			// process, either because the file was opened without FILE_SHARE_DELETE or
@@ -592,7 +592,7 @@ namespace WindowsSupport
 				if (errcode == std::errc::no_such_file_or_directory)
 					continue;
 
-				//BBS: add some log for error tracing
+				// add some log for error tracing
 				BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << boost::format(",open dest file %1% failed, reason: %2%") % to.c_str() % errcode.message();
 				return errcode;
 			}
@@ -616,7 +616,7 @@ namespace WindowsSupport
 							auto errcode = map_windows_error(GetLastError());
 							if (errcode == std::errc::no_such_file_or_directory)
 						  		break;
-							//BBS: add some log for error tracing
+							// add some log for error tracing
 							BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << boost::format(", line %1%, error: %2%") % __LINE__ % errcode.message();
 							return errcode;
 						}
@@ -627,7 +627,7 @@ namespace WindowsSupport
 							break;
 						continue;
 					}
-					//BBS: add some log for error tracing
+					// add some log for error tracing
 					BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << boost::format(", line %1%, error: %2%") % __LINE__ % errcode.message();
 					return errcode;
 				}
@@ -641,7 +641,7 @@ namespace WindowsSupport
 		}
 
 		// The most likely root cause.
-		//BBS: add some log for error tracing
+		// add some log for error tracing
 		BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << boost::format(", line %1%, error in the end, permission_denied") % __LINE__;
 		return std::make_error_code(std::errc::permission_denied);
 	}
@@ -1026,13 +1026,13 @@ bool is_idx_file(const boost::filesystem::directory_entry &dir_entry)
 	return is_plain_file(dir_entry) && strcasecmp(dir_entry.path().extension().string().c_str(), ".idx") == 0;
 }
 
-//BBS: refine gcode appendix
+// refine gcode appendix
 bool is_gcode_file(const std::string &path)
 {
 	return boost::iends_with(path, ".gcode"); // || boost::iends_with(path, ".g");
 }
 
-//BBS: add json support
+// add json support
 bool is_json_file(const std::string& path)
 {
 	return boost::iends_with(path, ".json");
@@ -1232,12 +1232,12 @@ std::string string_printf(const char *format, ...)
 
 std::string header_slic3r_generated()
 {
-	return std::string(SLIC3R_APP_NAME " " SoftFever_VERSION);
+	return std::string(SLIC3R_APP_NAME " " SLIC3R_VERSION);
 }
 
 std::string header_gcodeviewer_generated()
 {
-	return std::string(GCODEVIEWER_APP_NAME " " SoftFever_VERSION);
+	return std::string(GCODEVIEWER_APP_NAME " " SLIC3R_VERSION);
 }
 
 unsigned get_current_pid()
@@ -1249,7 +1249,7 @@ unsigned get_current_pid()
 #endif
 }
 
-// BBS: backup & restore
+// backup & restore
 std::string get_process_name(int pid)
 {
 #ifdef WIN32
@@ -1599,13 +1599,13 @@ bool makedir(const std::string path) {
 	return true;  // dir already exists
 }
 
-bool bbl_calc_md5(std::string &filename, std::string &md5_out)
+bool prusa_calc_md5(std::string &filename, std::string &md5_out)
 {
     md5_out = "dummy_md5";
     return true;
 }
 
-// SoftFever: copy directory recursively
+// copy directory recursively
 void copy_directory_recursively(const boost::filesystem::path& source,
                                 const boost::filesystem::path& target,
                                 std::function<bool(const std::string)> filter,

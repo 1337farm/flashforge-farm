@@ -95,7 +95,7 @@ ExtrusionMultiPath thick_polyline_to_multi_path(const ThickPolyline& thick_polyl
     return multi_path;
 }
 
-//BBS: new function to filter width to avoid too fragmented segments
+// new function to filter width to avoid too fragmented segments
 static ExtrusionPaths thick_polyline_to_extrusion_paths_2(const ThickPolyline& thick_polyline, ExtrusionRole role, const Flow& flow, const float tolerance)
 {
     ExtrusionPaths paths;
@@ -117,9 +117,9 @@ static ExtrusionPaths thick_polyline_to_extrusion_paths_2(const ThickPolyline& t
         if (line_len < SCALED_EPSILON) continue;
 
         double thickness_delta = std::max(fabs(max_width - line.b_width), fabs(min_width - line.b_width));
-        //BBS: has large difference in width
+        // has large difference in width
         if (thickness_delta > tolerance) {
-            //BBS: 1 generate path from start_index to i(not included)
+            // 1 generate path from start_index to i(not included)
             if (start_index != i){
                 path = ExtrusionPath(role);
                 double length = lines[start_index].length();
@@ -145,7 +145,7 @@ static ExtrusionPaths thick_polyline_to_extrusion_paths_2(const ThickPolyline& t
             max_width = line.a_width;
             min_width = line.a_width;
 
-            //BBS: 2 handle the i-th segment
+            // 2 handle the i-th segment
             thickness_delta = fabs(line.a_width - line.b_width);
             if (thickness_delta > tolerance){
                 const unsigned int segments = (unsigned int)ceil(thickness_delta / tolerance);
@@ -181,13 +181,13 @@ static ExtrusionPaths thick_polyline_to_extrusion_paths_2(const ThickPolyline& t
                 continue;
             }
         }
-        //BBS: just update the max and min width and continue
+        // just update the max and min width and continue
         else {
             max_width = std::max(max_width, std::max(line.a_width, line.b_width));
             min_width = std::min(min_width, std::min(line.a_width, line.b_width));
         }
     }
-    //BBS: handle the remaining segment
+    // handle the remaining segment
     size_t final_size = lines.size();
     if (start_index < final_size) {
         path = ExtrusionPath(role);

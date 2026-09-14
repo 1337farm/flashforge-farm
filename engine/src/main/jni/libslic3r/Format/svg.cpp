@@ -311,7 +311,7 @@ bool load_svg(const char *path, Model *model, std::string &message)
     // todo: zhimin, Can be accelerated in parallel with tbb 
     for (size_t i = 0 ; i < namedSolids.size(); i++) {
         BRepMesh_IncrementalMesh mesh(namedSolids[i].shape, STEP_TRANS_CHORD_ERROR, false, STEP_TRANS_ANGLE_RES, true);
-        // BBS: calculate total number of the nodes and triangles
+        // calculate total number of the nodes and triangles
         int aNbNodes     = 0;
         int aNbTriangles = 0;
         for (TopExp_Explorer anExpSF(namedSolids[i].shape, TopAbs_FACE); anExpSF.More(); anExpSF.Next()) {
@@ -324,7 +324,7 @@ bool load_svg(const char *path, Model *model, std::string &message)
         }
 
         if (aNbTriangles == 0 || aNbNodes == 0)
-            // BBS: No triangulation on the shape.
+            // No triangulation on the shape.
             continue;
 
         stl[i].stats.type                = inmemory;
@@ -334,9 +334,9 @@ bool load_svg(const char *path, Model *model, std::string &message)
 
         std::vector<Vec3f> points;
         points.reserve(aNbNodes);
-        // BBS: count faces missing triangulation
+        // count faces missing triangulation
         Standard_Integer aNbFacesNoTri = 0;
-        // BBS: fill temporary triangulation
+        // fill temporary triangulation
         Standard_Integer aNodeOffset    = 0;
         Standard_Integer aTriangleOffet = 0;
         for (TopExp_Explorer anExpSF(namedSolids[i].shape, TopAbs_FACE); anExpSF.More(); anExpSF.Next()) {
@@ -347,14 +347,14 @@ bool load_svg(const char *path, Model *model, std::string &message)
                 ++aNbFacesNoTri;
                 continue;
             }
-            // BBS: copy nodes
+            // copy nodes
             gp_Trsf aTrsf = aLoc.Transformation();
             for (Standard_Integer aNodeIter = 1; aNodeIter <= aTriangulation->NbNodes(); ++aNodeIter) {
                 gp_Pnt aPnt = aTriangulation->Node(aNodeIter);
                 aPnt.Transform(aTrsf);
                 points.emplace_back(std::move(Vec3f(aPnt.X(), aPnt.Y(), aPnt.Z())));
             }
-            // BBS: copy triangles
+            // copy triangles
             const TopAbs_Orientation anOrientation = anExpSF.Current().Orientation();
             Standard_Integer         anId[3];
             for (Standard_Integer aTriIter = 1; aTriIter <= aTriangulation->NbTriangles(); ++aTriIter) {
@@ -362,7 +362,7 @@ bool load_svg(const char *path, Model *model, std::string &message)
 
                 aTri.Get(anId[0], anId[1], anId[2]);
                 if (anOrientation == TopAbs_REVERSED) std::swap(anId[1], anId[2]);
-                // BBS: save triangles facets
+                // save triangles facets
                 stl_facet facet;
                 facet.vertex[0] = points[anId[0] + aNodeOffset - 1].cast<float>();
                 facet.vertex[1] = points[anId[1] + aNodeOffset - 1].cast<float>();
@@ -386,7 +386,7 @@ bool load_svg(const char *path, Model *model, std::string &message)
     new_object->input_file = path;
     auto stage_unit3 = stl.size() / LOAD_STEP_STAGE_UNIT_NUM + 1;
     for (size_t i = 0; i < stl.size(); i++) {
-        // BBS: maybe mesh is empty from step file. Don't add
+        // maybe mesh is empty from step file. Don't add
         if (stl[i].stats.number_of_facets > 0) {
             TriangleMesh triangle_mesh;
             triangle_mesh.from_stl(stl[i]);

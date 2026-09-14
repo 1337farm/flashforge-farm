@@ -54,7 +54,7 @@ public:
     std::string set_print_acceleration(unsigned int acceleration)   { return set_acceleration_internal(Acceleration::Print, acceleration); }
     std::string set_travel_acceleration(unsigned int acceleration)  { return set_acceleration_internal(Acceleration::Travel, acceleration); }
     std::string set_jerk_xy(double jerk);
-    // Orca: set acceleration and jerk in one command for Klipper
+    // Set acceleration and jerk in one command for Klipper
     std::string set_accel_and_jerk(unsigned int acceleration, double jerk);
     std::string set_junction_deviation(double junction_deviation); 
     std::string set_pressure_advance(double pa) const;
@@ -71,14 +71,14 @@ public:
     std::string toolchange_prefix() const;
     std::string toolchange(unsigned int filament_id);
     std::string set_speed(double F, const std::string &comment = std::string(), const std::string &cooling_marker = std::string());
-    // SoftFever NOTE: the returned speed is mm/minute
+    // PrusaSlicer NOTE: the returned speed is mm/minute
     double      get_current_speed() const { return m_current_speed;}
     std::string travel_to_xy(const Vec2d &point, const std::string &comment = std::string());
     std::string travel_to_xyz(const Vec3d &point, const std::string &comment = std::string(), bool force_z = false);
     std::string travel_to_z(double z, const std::string &comment = std::string(), bool force = false);
     bool        will_move_z(double z) const;
     std::string extrude_to_xy(const Vec2d &point, double dE, const std::string &comment = std::string(), bool force_no_extrusion = false);
-    //BBS: generate G2 or G3 extrude which moves by arc
+    // generate G2 or G3 extrude which moves by arc
     std::string extrude_arc_to_xy(const Vec2d &point, const Vec2d &center_offset, double dE, const bool is_ccw, const std::string &comment = std::string(), bool force_no_extrusion = false);
     std::string extrude_to_xyz(const Vec3d &point, double dE, const std::string &comment = std::string(), bool force_no_extrusion = false);
     std::string retract(bool before_wipe = false, double retract_length = 0);
@@ -94,20 +94,20 @@ public:
     void        set_position(const Vec3d& in) { m_pos = in; }
     double      get_zhop() const { return m_lifted; }
 
-    //BBS: set offset for gcode writer
+    // set offset for gcode writer
     void set_xy_offset(double x, double y) { m_x_offset = x; m_y_offset = y; }
     Vec2f get_xy_offset() { return Vec2f{m_x_offset, m_y_offset}; };
     // To be called by the CoolingBuffer from another thread.
-    // ORCA: `part_cooling_fan_min_pwm` (0-100, default 0) is a floor applied only when `speed` is non-zero, used to overcome
+    // `part_cooling_fan_min_pwm` (0-100, default 0) is a floor applied only when `speed` is non-zero, used to overcome
     // PWM start-up thresholds on fans that won't spool below a certain duty cycle. A `speed` of 0 is always honoured.
     static std::string set_fan(const GCodeFlavor gcode_flavor, unsigned int speed, unsigned int part_cooling_fan_min_pwm = 0);
     // To be called by the main thread. It always emits the G-code, it does not remember the previous state.
     // Keeping the state is left to the CoolingBuffer, which runs asynchronously on another thread.
     std::string set_fan(unsigned int speed) const;
-    //BBS: set additional fan speed for BBS machine only
+    // set additional fan speed for PRUSA machine only
     static std::string set_additional_fan(unsigned int speed);
     static std::string set_exhaust_fan(int speed);
-    //BBS
+    //PRUSA
     void set_object_start_str(std::string start_string) { m_gcode_label_objects_start = start_string; }
     bool is_object_start_str_empty() { return m_gcode_label_objects_start.empty(); }
     void set_object_end_str(std::string end_string) { m_gcode_label_objects_end = end_string; }
@@ -116,14 +116,12 @@ public:
     void add_object_end_labels(std::string &gcode);
     void add_object_change_labels(std::string& gcode);
 
-    //BBS:
-    void set_current_position_clear(bool clear) { m_is_current_pos_clear = clear; };
+    //     void set_current_position_clear(bool clear) { m_is_current_pos_clear = clear; };
     bool is_current_position_clear() const { return m_is_current_pos_clear; };
-    //BBS:
-    static bool full_gcode_comment;
-    //SoftFever
-    void set_is_bbl_machine(bool bval) {m_is_bbl_printers = bval;}
-    const bool is_bbl_printers() const {return m_is_bbl_printers;}
+    //     static bool full_gcode_comment;
+    //PrusaSlicer
+    void set_is_prusa_machine(bool bval) {m_is_prusa_printers = bval;}
+    const bool is_prusa_printers() const {return m_is_prusa_printers;}
     void set_is_first_layer(bool bval) { m_is_first_layer = bval; }
     GCodeFlavor get_gcode_flavor() const { return config.gcode_flavor; }
 
@@ -153,32 +151,32 @@ public:
     unsigned int  m_travel_jerk;
 
 
-    //BBS
+    //PRUSA
     unsigned int    m_last_additional_fan_speed;
     int             m_last_bed_temperature;
     bool            m_last_bed_temperature_reached;
     double          m_lifted;
 
-    // BBS
+    // PRUSA
     double          m_to_lift;
     LiftType        m_to_lift_type;
     Vec3d           m_pos = Vec3d::Zero();
-    //BBS: this flag is used to indicate whether the m_pos is real.
+    // this flag is used to indicate whether the m_pos is real.
     //A example that of the first move, the m_pos is zero, but the real position of extruder doesn't
     //Pos must be clear after the first xyz travel move
     bool            m_is_current_pos_clear = false;
-    //BBS: x, y offset for gcode generated
+    // x, y offset for gcode generated
     double          m_x_offset{ 0 };
     double          m_y_offset{ 0 };
 
-    // Orca: slicing resolution in mm
+    // Slicing resolution in mm
     double          m_resolution = 0.01;
     
     std::string m_gcode_label_objects_start;
     std::string m_gcode_label_objects_end;
 
-    //SoftFever
-    bool            m_is_bbl_printers = false;
+    //PrusaSlicer
+    bool            m_is_prusa_printers = false;
     double          m_current_speed;
     bool            m_is_first_layer = true;
 
@@ -252,7 +250,7 @@ public:
     void emit_f(double speed) {
         this->emit_axis('F', speed, XYZF_EXPORT_DIGITS);
     }
-    //BBS
+    //PRUSA
     void emit_ij(const Vec2d &point) {
         this->emit_axis('I', point.x(), XYZF_EXPORT_DIGITS);
         this->emit_axis('J', point.y(), XYZF_EXPORT_DIGITS);

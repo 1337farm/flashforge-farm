@@ -64,7 +64,7 @@ void GCodeWriter::set_extruders(std::vector<unsigned int> extruder_ids)
 {
     std::sort(extruder_ids.begin(), extruder_ids.end());
     m_filament_extruders.clear();
-    //ORCA: Reset current extruder ID and clear pointers to prevent dangling pointers when extruders are recreated.
+    // Reset current extruder ID and clear pointers to prevent dangling pointers when extruders are recreated.
     m_curr_extruder_id = -1;
     std::fill(m_curr_filament_extruder.begin(), m_curr_filament_extruder.end(), nullptr);
     m_filament_extruders.reserve(extruder_ids.size());
@@ -74,7 +74,7 @@ void GCodeWriter::set_extruders(std::vector<unsigned int> extruder_ids)
     /*  we enable support for multiple extruder if any extruder greater than 0 is used
         (even if prints only uses that one) since we need to output Tx commands
         first extruder has index 0 */
-    //ORCA: Fix undefined behavior by checking if the vector is empty before taking max_element.
+    // Fix undefined behavior by checking if the vector is empty before taking max_element.
     this->multiple_extruders = !extruder_ids.empty() && (*std::max_element(extruder_ids.begin(), extruder_ids.end())) > 0;
 }
 
@@ -164,7 +164,7 @@ std::string GCodeWriter::set_temperature(unsigned int temperature, bool wait, in
     return set_temperature(temperature, this->config.gcode_flavor, wait, tool);
 }
 
-// BBS
+// PRUSA
 std::string GCodeWriter::set_bed_temperature(int temperature, bool wait)
 {
     if (temperature == m_last_bed_temperature && (! wait || m_last_bed_temperature_reached))
@@ -196,7 +196,7 @@ std::string GCodeWriter::set_chamber_temperature(int temperature, bool wait)
 
     if (wait)
     {
-        // Orca: should we let the M191 command to turn on the auxiliary fan?
+        // Should we let the M191 command to turn on the auxiliary fan?
         if (config.auxiliary_fan)
             gcode << "M106 P2 S255 \n";
         gcode << "M191 S" << std::to_string(temperature) << " ;"
@@ -295,7 +295,7 @@ std::string GCodeWriter::set_jerk_xy(double jerk)
         gcode << "M205 X" << jerk_x << " Y" << jerk_y;
     }
     //the is_bbl check should be in the else statement above so that it doesn't inadverently added Z & E to klipper  
-    if (m_is_bbl_printers)
+    if (m_is_prusa_printers)
         gcode << std::setprecision(2) << " Z" << m_max_jerk_z << " E" << m_max_jerk_e;
 
     if (GCodeWriter::full_gcode_comment) gcode << " ; adjust jerk";
@@ -372,8 +372,8 @@ std::string GCodeWriter::set_pressure_advance(double pa) const
     std::ostringstream gcode;
     if (pa < 0)
         return gcode.str();
-    if(m_is_bbl_printers){
-        //SoftFever: set L1000 to use linear model
+    if(m_is_prusa_printers){
+        // set L1000 to use linear model
         gcode << "M900 K" <<std::setprecision(4)<< pa << " L1000 M10 ; Override pressure advance value\n";
     }
     else{
@@ -391,7 +391,7 @@ std::string GCodeWriter::set_pressure_advance(double pa) const
     return gcode.str();
 }
 
-// Orca: input shaping support
+// Input shaping support
 std::string GCodeWriter::set_input_shaping(char axis, float damp, float freq, std::string type) const
 {
     bool disable = type == "Disable";
@@ -493,7 +493,7 @@ std::string GCodeWriter::reset_e(bool force)
     if (! this->config.use_relative_e_distances) {
         std::ostringstream gcode;
         gcode << "G92 E0";
-        //BBS
+        //PRUSA
         if (GCodeWriter::full_gcode_comment) gcode << " ; reset extrusion distance";
         gcode << "\n";
         return gcode.str();
@@ -511,7 +511,7 @@ std::string GCodeWriter::enable_power_loss_recovery(PowerLossRecoveryMode mode)
 
     const bool enable = mode == PowerLossRecoveryMode::Enable;
 
-    if (m_is_bbl_printers) {
+    if (m_is_prusa_printers) {
         gcode << "M1003 S" << (enable ? "1" : "0");
     }
     else if (FLAVOR_IS(gcfMarlinFirmware)) {
@@ -538,7 +538,7 @@ std::string GCodeWriter::update_progress(unsigned int num, unsigned int tot, boo
 
     std::ostringstream gcode;
     gcode << "M73 P" << percent;
-    //BBS
+    //PRUSA
     if (GCodeWriter::full_gcode_comment) gcode << " ; update progress";
     gcode << "\n";
     return gcode.str();
@@ -550,7 +550,7 @@ std::string GCodeWriter::toolchange_prefix() const
     if (config.manual_filament_change)
         gcode = ";" + GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Manual_Tool_Change) + "T";
     else {
-        if (m_is_bbl_printers)
+        if (m_is_prusa_printers)
             gcode = "M1020 S";
         else {
             if (FLAVOR_IS(gcfMakerWare))
@@ -573,8 +573,8 @@ std::string GCodeWriter::toolchange(unsigned int filament_id)
     // return the toolchange command
     // if we are running a single-extruder setup, just set the extruder and return nothing
     std::ostringstream gcode;
-    if (this->multiple_extruders || (this->config.filament_diameter.values.size() > 1 && !is_bbl_printers())) {
-        // Orca: call toolchange_prefix() to get the correct command prefix based on the configuration and flavor.
+    if (this->multiple_extruders || (this->config.filament_diameter.values.size() > 1 && !is_prusa_printers())) {
+        // Call toolchange_prefix() to get the correct command prefix based on the configuration and flavor.
         gcode << this->toolchange_prefix() << filament_id;
         if (GCodeWriter::full_gcode_comment)
             gcode << " ; change extruder";
@@ -592,7 +592,7 @@ std::string GCodeWriter::set_speed(double F, const std::string &comment, const s
     m_current_speed = F;
     GCodeG1Formatter w;
     w.emit_f(F);
-    //BBS
+    //PRUSA
     w.emit_comment(GCodeWriter::full_gcode_comment, comment);
     w.emit_string(cooling_marker);
     return w.string();
@@ -604,7 +604,7 @@ std::string GCodeWriter::travel_to_xy(const Vec2d &point, const std::string &com
     m_pos(1) = point(1);
 
     this->set_current_position_clear(true);
-    //BBS: take plate offset into consider
+    // take plate offset into consider
     Vec2d point_on_plate = { point(0) - m_x_offset, point(1) - m_y_offset };
 
     GCodeG1Formatter w;
@@ -612,7 +612,7 @@ std::string GCodeWriter::travel_to_xy(const Vec2d &point, const std::string &com
     auto speed = m_is_first_layer
         ? this->config.get_abs_value("initial_layer_travel_speed") : this->config.travel_speed.value;
     w.emit_f(speed * 60.0);
-    //BBS
+    //PRUSA
     w.emit_comment(GCodeWriter::full_gcode_comment, comment);
     return w.string();
 }
@@ -625,7 +625,7 @@ std::string GCodeWriter::lazy_lift(LiftType lift_type, bool spiral_vase)
     // check whether the above/below conditions are met
     double target_lift = 0;
     {
-        //BBS
+        //PRUSA
         int extruder_id = filament()->extruder_id();
         int filament_id = filament()->id();
         double above = this->config.retract_lift_above.get_at(extruder_id);
@@ -633,7 +633,7 @@ std::string GCodeWriter::lazy_lift(LiftType lift_type, bool spiral_vase)
         if (m_pos.z() >= above && (m_pos.z() <= below || below == 0.))
             target_lift = this->config.z_hop.get_at(filament_id);
     }
-    // BBS
+    // PRUSA
     if (m_lifted == 0 && m_to_lift == 0 && target_lift > 0) {
         if (spiral_vase) {
             m_lifted = target_lift;
@@ -647,13 +647,13 @@ std::string GCodeWriter::lazy_lift(LiftType lift_type, bool spiral_vase)
     return "";
 }
 
-// BBS: immediately execute an undelayed lift move with a spiral lift pattern
+// immediately execute an undelayed lift move with a spiral lift pattern
 // designed specifically for subsequent gcode injection (e.g. timelapse) 
 std::string GCodeWriter::eager_lift(const LiftType type) {
     std::string lift_move;
     double target_lift = 0;
     {
-        //BBS
+        //PRUSA
         int extruder_id = filament()->extruder_id();
         int filament_id = filament()->id();
         double above = this->config.retract_lift_above.get_at(extruder_id);
@@ -662,7 +662,7 @@ std::string GCodeWriter::eager_lift(const LiftType type) {
             target_lift = this->config.z_hop.get_at(filament_id);
     }
 
-    // BBS: spiral lift only safe with known position
+    // spiral lift only safe with known position
     // TODO: check the arc will move within bed area
     if (type == LiftType::SpiralLift && this->is_current_position_clear()) {
         double radius = target_lift / (2 * PI * atan(filament()->travel_slope()));
@@ -673,7 +673,7 @@ std::string GCodeWriter::eager_lift(const LiftType type) {
             lift_move = this->_spiral_travel_to_z(m_pos(2) + target_lift, ij_offset, "spiral lift Z");
         }
     }
-    //BBS: if position is unknown use normal lift
+    // if position is unknown use normal lift
     else if (target_lift > 0) {
         lift_move = _travel_to_z(m_pos(2) + target_lift, "normal lift Z");
     }
@@ -693,14 +693,14 @@ std::string GCodeWriter::travel_to_xyz(const Vec3d &point, const std::string &co
         don't perform the Z move but we only move in the XY plane and
         adjust the nominal Z by reducing the lift amount that will be
         used for unlift. */
-        // BBS
+        // PRUSA
     Vec3d dest_point = point;
     auto travel_speed =
         m_is_first_layer ? this->config.get_abs_value("initial_layer_travel_speed") : this->config.travel_speed.value;
-    //BBS: a z_hop need to be handle when travel
+    // a z_hop need to be handle when travel
     if (std::abs(m_to_lift) > EPSILON) {
         assert(std::abs(m_lifted) < EPSILON);
-        //BBS: don't need to do real lift if the current position is absolutely same with target.
+        // don't need to do real lift if the current position is absolutely same with target.
         //This ususally happens when the last extrusion line is short and the end of wipe position
         //is same with the traget point by chance.
         if ((!this->is_current_position_clear() || m_pos != dest_point) &&
@@ -711,27 +711,27 @@ std::string GCodeWriter::travel_to_xyz(const Vec3d &point, const std::string &co
         m_to_lift = 0.;
 
         std::string slop_move;
-        //BBS: minus plate offset
+        // minus plate offset
         Vec3d source = { m_pos(0) - m_x_offset, m_pos(1) - m_y_offset, m_pos(2) };
         Vec3d target = { dest_point(0) - m_x_offset, dest_point(1) - m_y_offset, dest_point(2) };
         Vec3d delta = target - source;
         Vec2d delta_no_z = { delta(0), delta(1) };
-        //BBS: don'need slope travel because we don't know where is the source position the first time
-        //BBS: Also don't need to do slope move or spiral lift if x-y distance is absolute zero
+        // don'need slope travel because we don't know where is the source position the first time
+        // Also don't need to do slope move or spiral lift if x-y distance is absolute zero
         if (delta(2) > 0 && delta_no_z.norm() != 0.0f)    {
-            //BBS: SpiralLift
+            // SpiralLift
             if (m_to_lift_type == LiftType::SpiralLift && this->is_current_position_clear()) {
-                //BBS: todo: check the arc move all in bed area, if not, then use lazy lift
+                // todo: check the arc move all in bed area, if not, then use lazy lift
                 double radius = delta(2) / (2 * PI * atan(this->filament()->travel_slope()));
                 Vec2d ij_offset = radius * delta_no_z.normalized();
                 ij_offset = { -ij_offset(1), ij_offset(0) };
                 slop_move = this->_spiral_travel_to_z(target(2), ij_offset, "spiral lift Z");
             }
-            //BBS: SlopeLift
+            // SlopeLift
             else if (m_to_lift_type == LiftType::SlopeLift &&
                 this->is_current_position_clear() &&
                 atan2(delta(2), delta_no_z.norm()) < this->filament()->travel_slope()) {
-                //BBS: check whether we can make a travel like
+                // check whether we can make a travel like
                 //   _____
                 //  /       to make the z list early to avoid to hit some warping place when travel is long.
                 Vec2d temp = delta_no_z.normalized() * delta(2) / tan(this->filament()->travel_slope());
@@ -739,7 +739,7 @@ std::string GCodeWriter::travel_to_xyz(const Vec3d &point, const std::string &co
                 GCodeG1Formatter w0;
                 w0.emit_xyz(slope_top_point);
                 w0.emit_f(travel_speed * 60.0);
-                //BBS
+                //PRUSA
                 w0.emit_comment(GCodeWriter::full_gcode_comment, comment);
                 slop_move = w0.string();
             }
@@ -775,7 +775,7 @@ std::string GCodeWriter::travel_to_xyz(const Vec3d &point, const std::string &co
         // and a retract could be skipped
         if (std::abs(m_lifted) < EPSILON)
             m_lifted = 0.;
-        //BBS
+        //PRUSA
         this->set_current_position_clear(true);
         return this->travel_to_xy(to_2d(point));
     }
@@ -785,7 +785,7 @@ std::string GCodeWriter::travel_to_xyz(const Vec3d &point, const std::string &co
         m_lifted = 0;
     }
 
-    //BBS: take plate offset into consider
+    // take plate offset into consider
     Vec3d point_on_plate = { dest_point(0) - m_x_offset, dest_point(1) - m_y_offset, dest_point(2) };
     std::string out_string;
     GCodeG1Formatter w;
@@ -841,7 +841,7 @@ std::string GCodeWriter::_travel_to_z(double z, const std::string &comment)
     GCodeG1Formatter w;
     w.emit_z(z);
     w.emit_f(speed * 60.0);
-    //BBS
+    //PRUSA
     w.emit_comment(GCodeWriter::full_gcode_comment, comment);
     return w.string();
 }
@@ -856,7 +856,7 @@ std::string GCodeWriter::_spiral_travel_to_z(double z, const Vec2d &ij_offset, c
                                  : this->config.travel_speed.value;
     }
 
-    if (!this->config.enable_arc_fitting) { // Orca: if arc fitting is disabled, approximate the arc with small linear segments
+    if (!this->config.enable_arc_fitting) { // If arc fitting is disabled, approximate the arc with small linear segments
         std::ostringstream oss;
         const double z_start = m_pos(2); // starting Z height
 
@@ -896,7 +896,7 @@ std::string GCodeWriter::_spiral_travel_to_z(double z, const Vec2d &ij_offset, c
 
         oss << "G1 X" << px << " Y" << py << " Z" << z << "\n";  // final point to ensure exactness
         output = oss.str();
-    } else { // Orca: if arc fitting is enabled emit a G2/G3 command for the spiral lift
+    } else { // If arc fitting is enabled emit a G2/G3 command for the spiral lift
         output = std::string("G17") + (full_gcode_comment ? " ; XY plane for arc\n" : "\n");
 
         GCodeG2G3Formatter w(true);
@@ -922,7 +922,7 @@ bool GCodeWriter::will_move_z(double z) const
         if (z >= nominal_z && z <= m_pos(2))
             return false;
     }
-    // BBS.
+    // PRUSA.
     // Dont move z if it is the same as target z
     else if (std::abs(m_pos(2) - z) < EPSILON) {
         return false;
@@ -940,19 +940,19 @@ std::string GCodeWriter::extrude_to_xy(const Vec2d &point, double dE, const std:
     if (!force_no_extrusion)
         filament()->extrude(dE);
 
-    //BBS: take plate offset into consider
+    // take plate offset into consider
     Vec2d point_on_plate = { point(0) - m_x_offset, point(1) - m_y_offset };
 
     GCodeG1Formatter w;
     w.emit_xy(point_on_plate);
     if (!force_no_extrusion)
         w.emit_e(filament()->E());
-    //BBS
+    //PRUSA
     w.emit_comment(GCodeWriter::full_gcode_comment, comment);
     return w.string();
 }
 
-//BBS: generate G2 or G3 extrude which moves by arc
+// generate G2 or G3 extrude which moves by arc
 //point is end point which means X and Y axis
 //center_offset is I and J axis
 std::string GCodeWriter::extrude_arc_to_xy(const Vec2d& point, const Vec2d& center_offset, double dE, const bool is_ccw, const std::string& comment, bool force_no_extrusion)
@@ -969,7 +969,7 @@ std::string GCodeWriter::extrude_arc_to_xy(const Vec2d& point, const Vec2d& cent
     w.emit_ij(center_offset);
     if (!force_no_extrusion)
         w.emit_e(filament()->E());
-    //BBS
+    //PRUSA
     w.emit_comment(GCodeWriter::full_gcode_comment, comment);
     return w.string();
 }
@@ -986,7 +986,7 @@ std::string GCodeWriter::extrude_to_xyz(const Vec3d &point, double dE, const std
     if (!force_no_extrusion)
         filament()->extrude(dE);
 
-    //BBS: take plate offset into consider
+    // take plate offset into consider
     Vec3d point_on_plate = { point(0) - m_x_offset, point(1) - m_y_offset, point(2) };
 
     GCodeG1Formatter w;
@@ -996,7 +996,7 @@ std::string GCodeWriter::extrude_to_xyz(const Vec3d &point, double dE, const std
         w.emit_xy(Vec2d(point_on_plate.x(), point_on_plate.y()));
     if (!force_no_extrusion)
         w.emit_e(filament()->E());
-    //BBS
+    //PRUSA
     w.emit_comment(GCodeWriter::full_gcode_comment, comment);
     return w.string();
 }
@@ -1037,11 +1037,11 @@ std::string GCodeWriter::_retract(double length, double restart_extra, const std
             gcode = FLAVOR_IS(gcfMachinekit) ? "G22 ; retract\n" : "G10 ; retract\n";
         }
         else {
-            // BBS
+            // PRUSA
             GCodeG1Formatter w;
             w.emit_e(filament()->E());
             w.emit_f(filament()->retract_speed() * 60.);
-            // BBS
+            // PRUSA
             w.emit_comment(GCodeWriter::full_gcode_comment, comment);
             gcode = w.string();
         }
@@ -1066,12 +1066,12 @@ std::string GCodeWriter::unretract()
             gcode += this->reset_e();
         }
         else {
-            //BBS
+            //PRUSA
             // use G1 instead of G0 because G0 will blend the restart with the previous travel move
             GCodeG1Formatter w;
             w.emit_e(filament()->E());
             w.emit_f(filament()->deretract_speed() * 60.);
-            //BBS
+            //PRUSA
             w.emit_comment(GCodeWriter::full_gcode_comment, " ; unretract");
             gcode += w.string();
         }
@@ -1095,7 +1095,7 @@ std::string GCodeWriter::unlift()
 std::string GCodeWriter::set_fan(const GCodeFlavor gcode_flavor, unsigned int speed, unsigned int part_cooling_fan_min_pwm)
 {
     std::ostringstream gcode;
-    // ORCA: clamp non-zero fan commands up to the configured PWM floor so fans that can't spool at low duty
+    // clamp non-zero fan commands up to the configured PWM floor so fans that can't spool at low duty
     // cycles still start reliably. Zero (fan off) is preserved exactly so disable-fan commands are never altered.
     if (speed > 0 && part_cooling_fan_min_pwm > 0 && speed < part_cooling_fan_min_pwm)
         speed = part_cooling_fan_min_pwm;
@@ -1132,13 +1132,13 @@ std::string GCodeWriter::set_fan(const GCodeFlavor gcode_flavor, unsigned int sp
 
 std::string GCodeWriter::set_fan(unsigned int speed) const
 {
-    //BBS
-    // ORCA: pick up the per-printer PWM floor from the active config.
+    //PRUSA
+    // pick up the per-printer PWM floor from the active config.
     return GCodeWriter::set_fan(this->config.gcode_flavor, speed,
                                 static_cast<unsigned int>(std::max(0, this->config.part_cooling_fan_min_pwm.value)));
 }
 
-//BBS: set additional fan speed for BBS machine only
+// set additional fan speed for PRUSA machine only
 std::string GCodeWriter::set_additional_fan(unsigned int speed)
 {
     std::ostringstream gcode;
@@ -1184,8 +1184,8 @@ void GCodeWriter::add_object_end_labels(std::string& gcode)
         gcode += m_gcode_label_objects_end;
         m_gcode_label_objects_end = "";
 
-        // Orca: reset E so that e value remain correct after skipping the object
-        // ref to: https://github.com/OrcaSlicer/OrcaSlicer/pull/205/commits/7f1fe0bd544077626080aa1a9a0576aa735da1a4#r1083470162
+        // Reset E so that e value remain correct after skipping the object
+        // ref to: https://github.com/prusaslicer/prusa/pull/205/commits/7f1fe0bd544077626080aa1a9a0576aa735da1a4#r1083470162
         if (!this->config.use_relative_e_distances)
             gcode += reset_e(true);
     }

@@ -29,7 +29,7 @@ struct SlicingParameters
 {
 	SlicingParameters() = default;
 
-    // Orca: XYZ filament compensation introduced object_shrinkage_compensation
+    // : XYZ filament compensation introduced object_shrinkage_compensation
     static SlicingParameters create_from_config(
          const PrintConfig               &print_config,
          const PrintObjectConfig         &object_config,
@@ -106,7 +106,7 @@ struct SlicingParameters
     // This value of maximum print Z is scaled by shrinkage compensation in the Z-axis.
     coordf_t 	object_print_z_max { 0 };
     
-    // Orca: XYZ shrinkage compensation
+    // : XYZ shrinkage compensation
     // This value of maximum print Z isn't scaled by shrinkage compensation.
      coordf_t     object_print_z_uncompensated_max { 0 };
      // Scaling factor for compensating shrinkage in Z-axis.
@@ -131,7 +131,7 @@ inline bool equal_layering(const SlicingParameters &sp1, const SlicingParameters
             sp1.first_print_layer_height            == sp2.first_print_layer_height             &&
             sp1.first_object_layer_height           == sp2.first_object_layer_height            &&
             sp1.first_object_layer_bridging         == sp2.first_object_layer_bridging          &&
-            // BBS: following  are not required for equal layer height.
+            // following  are not required for equal layer height.
             // Since the z-gap diff may be multiple of layer height.
 #if 0
             sp1.zero_gap_interface_top              == sp2.zero_gap_interface_top               &&

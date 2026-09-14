@@ -2,7 +2,7 @@
 """Corpus regression tests for the foreign-profile converter.
 
 Runs the one-way converter over the repo's real stored-config corpus
-(scripts/tests/engine_repro/regress/*.ini — genuine Orca-engine serializations)
+(scripts/tests/engine_repro/regress/*.ini — genuine legacy-engine serializations)
 and locks the migration behavior: key renames apply, native Prusa keys pass
 through, output is deterministic, and --report emits a complete audit.
 Fast (<5s): pure data conversion, no engine build.
@@ -26,12 +26,12 @@ PYTHON = shutil.which("python3") or "python3"
 
 def _convert_all():
     doc = json.loads(MAP.read_text())
-    table = doc["dialects"]["orca"]
+    table = doc["dialects"]["legacy"]
     gcode = doc.get("gcode_placeholder_renames", {})
     results = {}
     for ini in sorted(REGRESS.glob("*.ini")):
         entries = cvt.read_ini_profile(ini)
-        out, _ = cvt.convert(entries, table, "orca", gcode)
+        out, _ = cvt.convert(entries, table, "legacy", gcode)
         results[ini.name] = out
     return results
 
@@ -60,7 +60,7 @@ def test_report_audit(tmp_path):
     report = tmp_path / "report.json"
     r = subprocess.run(
         [PYTHON, str(SCRIPTS / "convert_to_prusa.py"),
-         "--dialect", "orca", "--dir", str(REGRESS),
+         "--dialect", "legacy", "--dir", str(REGRESS),
          "--out-dir", str(tmp_path / "out"),
          "--report", str(report), "--map", str(MAP)],
         capture_output=True, text=True)

@@ -476,7 +476,7 @@ private:
 
     void smooth_nodes();
 
-    /*! BBS: MusangKing: maximum layer height
+    /*! PRUSA: MusangKing: maximum layer height
      * \brief Optimize the generation of tree support by pre-planning the layer_heights
      *
     */

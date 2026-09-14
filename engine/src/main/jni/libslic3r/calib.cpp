@@ -521,7 +521,7 @@ std::string CalibPressureAdvanceLine::print_pa_lines(double start_x, double star
 
     if (m_draw_numbers) {
 
-        // Orca: skip drawing indicator lines
+        // : skip drawing indicator lines
         // gcode << writer.set_speed(fast);
         // gcode << move_to(Vec2d(start_x + m_length_short, y_pos + (num - 1) * m_space_y + 2), writer);
         // gcode << writer.extrude_to_xy(Vec2d(start_x + m_length_short, y_pos + (num - 1) * m_space_y + 7), thin_e_per_mm * 7);
@@ -549,12 +549,12 @@ void CalibPressureAdvanceLine::delta_modify_start(double &startx, double &starty
 }
 
 CalibPressureAdvancePattern::CalibPressureAdvancePattern(
-    const Calib_Params &params, const DynamicPrintConfig &config, bool is_bbl_machine, const ModelObject &object, const Vec3d &origin)
+    const Calib_Params &params, const DynamicPrintConfig &config, bool is_prusa_machine, const ModelObject &object, const Vec3d &origin)
     : m_params(params),CalibPressureAdvance(config)
 {
     this->m_draw_digit_mode = DrawDigitMode::Bottom_To_Top;
 
-    refresh_setup(config, is_bbl_machine, object, origin);
+    refresh_setup(config, is_prusa_machine, object, origin);
 }
 
 Vec3d CalibPressureAdvancePattern::handle_pos_offset() const
@@ -578,14 +578,14 @@ double CalibPressureAdvancePattern::flow_val() const
 };
 
 CustomGCode::Info CalibPressureAdvancePattern::generate_custom_gcodes(const DynamicPrintConfig &config,
-                                                                      bool                      is_bbl_machine,
+                                                                      bool                      is_prusa_machine,
                                                                       const ModelObject        &object,
                                                                       const Vec3d              &origin)
 {
     std::stringstream gcode;
     gcode << "; start pressure advance pattern for layer\n";
 
-        refresh_setup(config, is_bbl_machine, object, origin);
+        refresh_setup(config, is_prusa_machine, object, origin);
 
     gcode << move_to(Vec2d(m_starting_point.x(), m_starting_point.y()), m_writer, "Move to start XY position");
     gcode << m_writer.travel_to_z(height_first_layer() + height_z_offset(), "Move to start Z position");
@@ -767,7 +767,7 @@ double CalibPressureAdvancePattern::line_width() const
 };
 
 void CalibPressureAdvancePattern::refresh_setup(const DynamicPrintConfig &config,
-                                                bool                      is_bbl_machine,
+                                                bool                      is_prusa_machine,
                                                 const ModelObject         &object,
                                                 const Vec3d              &origin)
 {
@@ -776,7 +776,7 @@ void CalibPressureAdvancePattern::refresh_setup(const DynamicPrintConfig &config
     m_config.apply(object.volumes.front()->config.get(), true);
 
     _refresh_starting_point(object);
-    _refresh_writer(is_bbl_machine, object, origin);
+    _refresh_writer(is_prusa_machine, object, origin);
 }
 
 void CalibPressureAdvancePattern::_refresh_starting_point(const ModelObject &object)
@@ -791,14 +791,14 @@ void CalibPressureAdvancePattern::_refresh_starting_point(const ModelObject &obj
     m_starting_point.y() -= std::sin(to_radians(m_corner_angle) / 2) * m_wall_side_length + (bbox.max.y() - bbox.min.y()) / 2;
 }
 
-void CalibPressureAdvancePattern::_refresh_writer(bool is_bbl_machine, const ModelObject &object, const Vec3d &origin)
+void CalibPressureAdvancePattern::_refresh_writer(bool is_prusa_machine, const ModelObject &object, const Vec3d &origin)
 {
     PrintConfig print_config;
     print_config.apply(m_config, true);
 
     m_writer.apply_print_config(print_config);
     m_writer.set_xy_offset(origin(0), origin(1));
-    m_writer.set_is_bbl_machine(is_bbl_machine);
+    m_writer.set_is_prusa_machine(is_prusa_machine);
 
     const unsigned int extruder_id = object.volumes.front()->extruder_id();
     m_writer.set_extruders({extruder_id});

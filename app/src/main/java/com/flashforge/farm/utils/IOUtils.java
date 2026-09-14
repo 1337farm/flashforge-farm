@@ -79,13 +79,13 @@ public class IOUtils {
         }
     }
 
-    private static String mapOrcaConfigKey(String key) {
+    private static String mapLegacyConfigKey(String key) {
         switch (key) {
             // Cases ConfigObject.KEY_MIGRATION can't express:
-            // Orca's bundled JSONs use the plural form; the engine key (and the whitelist entry) is singular.
+            // Legacy bundled JSONs use the plural form; the engine key (and the whitelist entry) is singular.
             case "chamber_temperatures": return "chamber_temperature";
         }
-        // KEY_MIGRATION (legacy <-> Orca engine names) is the single source of truth for renames;
+        // KEY_MIGRATION (legacy <-> Prusa engine names) is the single source of truth for renames;
         // a key the whitelist knows under its legacy name is resolved here, all others pass through.
         return ConfigObject.legacyKey(key);
     }
@@ -93,7 +93,7 @@ public class IOUtils {
     private static ConfigObject downloadProfilesRecursively(String vendor, String type, String profile, List<String> supportedKeys) throws IOException, JSONException, MissingProfileException {
         ConfigObject cfg = new ConfigObject();
 
-        HttpURLConnection con = (HttpURLConnection) new URL(String.format("https://raw.githubusercontent.com/SoftFever/OrcaSlicer/main/resources/profiles/%s/%s/%s.json", vendor, type, profile)).openConnection();
+        HttpURLConnection con = (HttpURLConnection) new URL(String.format("https://raw.githubusercontent.com/PrusaSlicer/PrusaSlicer/main/resources/profiles/%s/%s/%s.json", vendor, type, profile)).openConnection();
         if (con.getResponseCode() == 404) {
             throw new MissingProfileException(profile);
         }
@@ -141,8 +141,8 @@ public class IOUtils {
                 throw new MissingProfileException(inherit);
             } else {
                 String vendor;
-                if (inherit.contains("@BBL")) {
-                    vendor = "BBL";
+                if (inherit.contains("@PRUSA")) {
+                    vendor = "PRUSA";
                 } else if (type.equals("process")) {
                     int i = inherit.indexOf('@') + 1;
                     int j = inherit.indexOf(' ', i);
@@ -152,7 +152,7 @@ public class IOUtils {
                     vendor = inherit.substring(0, inherit.indexOf(' '));
                 }
 
-                if (vendor.equals("Generic") || inherit.startsWith("Bambu Lab")) vendor = "BBL";
+                if (vendor.equals("Generic") || inherit.startsWith("Prusa")) vendor = "PRUSA";
 
                 ConfigObject inherited = null;
                 try {
@@ -165,7 +165,7 @@ public class IOUtils {
 
                 if (inherited != null) {
                     for (Map.Entry<String, String> en : inherited.values.entrySet()) {
-                        String key = mapOrcaConfigKey(en.getKey());
+                        String key = mapLegacyConfigKey(en.getKey());
 
                         if (key.equals("pressure_advance")) {
                             StringBuilder sb = new StringBuilder("SET_PRESSURE_ADVANCE ADVANCE=").append(en.getValue());
@@ -206,7 +206,7 @@ public class IOUtils {
                 if (v.length() > 3 && v.charAt(0) == '[' && v.charAt(1) == '"' && v.charAt(v.length() - 2) == '"' && v.charAt(v.length() - 1) == ']') v = v.substring(2, v.length() - 2);
                 cfg.setTitle(v);
             } else if (!key.equals("inherits")) {
-                String mappedKey = mapOrcaConfigKey(key);
+                String mappedKey = mapLegacyConfigKey(key);
                 if (supportedKeys.contains(mappedKey)) {
                     String val = configJsonToString(obj.get(key));
                     if (mappedKey.equals("start_filament_gcode") || mappedKey.equals("end_filament_gcode") ||

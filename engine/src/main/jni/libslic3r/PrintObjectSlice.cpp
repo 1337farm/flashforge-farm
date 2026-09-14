@@ -9,7 +9,7 @@
 #include "Layer.hpp"
 #include "MultiMaterialSegmentation.hpp"
 #include "Print.hpp"
-//BBS
+//PRUSA
 #include "ShortestPath.hpp"
 #include "libslic3r/Feature/Interlocking/InterlockingGenerator.hpp"
 
@@ -167,7 +167,7 @@ static std::vector<VolumeSlices> slice_volumes_inner(
     params_base.closing_radius = print_object_config.slice_closing_radius.value;
     params_base.extra_offset   = 0;
     params_base.trafo          = object_trafo;
-    //BBS: 0.0025mm is safe enough to simplify the data to speed slicing up for high-resolution model.
+    // 0.0025mm is safe enough to simplify the data to speed slicing up for high-resolution model.
     //Also has on influence on arc fitting which has default resolution 0.0125mm.
     params_base.resolution = print_config.resolution <= 0.001 ? 0.0f : 0.0025;
     switch (print_object_config.slicing_mode.value) {
@@ -178,10 +178,10 @@ static std::vector<VolumeSlices> slice_volumes_inner(
 
     params_base.mode_below     = params_base.mode;
 
-    // BBS
+    // PRUSA
     const size_t num_extruders = print_config.filament_diameter.size();
     const bool   is_mm_painted = num_extruders > 1 && std::any_of(model_volumes.cbegin(), model_volumes.cend(), [](const ModelVolume *mv) { return mv->is_mm_painted(); });
-    // BBS: don't do size compensation when slice volume.
+    // don't do size compensation when slice volume.
     // Will handle contour and hole size compensation seperately later.
     //const auto   extra_offset  = is_mm_painted ? 0.f : std::max(0.f, float(print_object_config.xy_contour_compensation.value));
     const auto   extra_offset = 0.f;
@@ -363,7 +363,7 @@ static std::vector<std::vector<ExPolygons>> slices_to_regions(
                     }
                 };
 
-                // BBS
+                // PRUSA
                 auto trim_overlap = [](ExPolygons& expolys_a, ExPolygons& expolys_b) {
                     ExPolygons trimming_a;
                     ExPolygons trimming_b;
@@ -436,7 +436,7 @@ static std::vector<std::vector<ExPolygons>> slices_to_regions(
 #else
                                         const PrintObjectRegions::VolumeRegion& region2 = layer_range.volume_regions[idx_region2];
                                         if (!region2.model_volume->is_negative_volume() && overlap_in_xy(*region.bbox, *region2.bbox))
-                                            //BBS: handle negative_volume seperately, always minus the negative volume and don't need to trim overlap
+                                            // handle negative_volume seperately, always minus the negative volume and don't need to trim overlap
                                             if (!region.model_volume->is_negative_volume())
                                                 trim_overlap(temp_slices[idx_region2].expolygons, temp_slices[idx_region].expolygons);
                                             else
@@ -480,7 +480,7 @@ static std::vector<std::vector<ExPolygons>> slices_to_regions(
     return slices_by_region;
 }
 
-//BBS: justify whether a volume is connected to another one
+// justify whether a volume is connected to another one
 bool doesVolumeIntersect(VolumeSlices& vs1, VolumeSlices& vs2)
 {
     if (vs1.volume_id == vs2.volume_id) return true;
@@ -513,7 +513,7 @@ bool doesVolumeIntersect(VolumeSlices& vs1, VolumeSlices& vs2)
     return is_intersect;
 }
 
-//BBS: grouping the volumes of an object according to their connection relationship
+// grouping the volumes of an object according to their connection relationship
 bool groupingVolumes(std::vector<VolumeSlices> objSliceByVolume, std::vector<groupedVolumeSlices>& groups, double resolution, int firstLayerReplacedBy)
 {
     std::vector<int> groupIndex(objSliceByVolume.size(), -1);
@@ -595,7 +595,7 @@ bool groupingVolumes(std::vector<VolumeSlices> objSliceByVolume, std::vector<gro
     return true;
 }
 
-//BBS: filter the members of "objSliceByVolume" such that only "model_part" are included
+// filter the members of "objSliceByVolume" such that only "model_part" are included
 std::vector<VolumeSlices> findPartVolumes(const std::vector<VolumeSlices>& objSliceByVolume, ModelVolumePtrs model_volumes) {
     std::vector<VolumeSlices> outPut;
     for (const auto& vs : objSliceByVolume) {
@@ -674,7 +674,7 @@ void reGroupingLayerPolygons(std::vector<groupedVolumeSlices>& gvss, ExPolygons 
 /*
 std::string fix_slicing_errors(PrintObject* object, LayerPtrs &layers, const std::function<void()> &throw_if_canceled, int &firstLayerReplacedBy)
 {
-    std::string error_msg;//BBS
+    std::string error_msg;//PRUSA
 
     if (layers.size() == 0) return error_msg;
 
@@ -682,12 +682,12 @@ std::string fix_slicing_errors(PrintObject* object, LayerPtrs &layers, const std
     // These layers will be fixed in parallel.
     std::vector<size_t> buggy_layers;
     buggy_layers.reserve(layers.size());
-    // BBS: get largest external perimenter width of all layers
+    // get largest external perimenter width of all layers
     auto get_ext_peri_width = [](Layer* layer) {return layer->m_regions.empty() ? 0 : layer->m_regions[0]->flow(frExternalPerimeter).scaled_width(); };
     auto it = std::max_element(layers.begin(), layers.end(), [get_ext_peri_width](auto& a, auto& b) {return get_ext_peri_width(a) < get_ext_peri_width(b); });
     coord_t thresh = get_ext_peri_width(*it) * 0.5;// half of external perimeter width  // 0.5 * scale_(this->config().line_width);
     for (size_t idx_layer = 0; idx_layer < layers.size(); ++idx_layer) {
-        // BBS: detect empty layers (layers with very small regions) and mark them as problematic, then these layers will copy the nearest good layer
+        // detect empty layers (layers with very small regions) and mark them as problematic, then these layers will copy the nearest good layer
         auto layer = layers[idx_layer];
         ExPolygons lslices;
         for (size_t region_id = 0; region_id < layer->m_regions.size(); ++region_id) {
@@ -716,7 +716,7 @@ std::string fix_slicing_errors(PrintObject* object, LayerPtrs &layers, const std
             for (size_t buggy_layer_idx = range.begin(); buggy_layer_idx < range.end(); ++ buggy_layer_idx) {
                 throw_if_canceled();
                 size_t idx_layer = buggy_layers[buggy_layer_idx];
-                // BBS: only replace empty layers lower than 1mm
+                // only replace empty layers lower than 1mm
                 const coordf_t thresh_empty_layer_height = 1;
                 Layer* layer = layers[idx_layer];
                 if (layer->print_z>= thresh_empty_layer_height)
@@ -729,7 +729,7 @@ std::string fix_slicing_errors(PrintObject* object, LayerPtrs &layers, const std
                     // Find the first valid layer below / above the current layer.
                     const Surfaces *upper_surfaces = nullptr;
                     const Surfaces *lower_surfaces = nullptr;
-                    //BBS: only repair empty layers lowers than 1mm
+                    // only repair empty layers lowers than 1mm
                     for (size_t j = idx_layer + 1; j < layers.size(); ++j) {
                         if (!layers[j]->slicing_errors) {
                             upper_surfaces = &layers[j]->regions()[region_id]->slices.surfaces;
@@ -758,7 +758,7 @@ std::string fix_slicing_errors(PrintObject* object, LayerPtrs &layers, const std
                             expolys.emplace_back(surface.expolygon);
                         }
                     if (!expolys.empty()) {
-                        //BBS
+                        //PRUSA
                         is_replaced = true;
                         layerm->slices.set(union_ex(expolys), stInternal);
                     }
@@ -782,11 +782,11 @@ std::string fix_slicing_errors(PrintObject* object, LayerPtrs &layers, const std
             layers[i]->set_id(layers[i]->id() - 1);
     }
 
-    //BBS
+    //PRUSA
     if(error_msg.empty() && !buggy_layers.empty())
         error_msg = L("The model has too many empty layers.");
 
-    // BBS: first layer slices are sorted by volume group, if the first layer is empty and replaced by the 2nd layer
+    // first layer slices are sorted by volume group, if the first layer is empty and replaced by the 2nd layer
 // the later will be stored in "object->firstLayerObjGroupsMod()"
     if (!buggy_layers.empty() && buggy_layers.front() == 0 && layers.size() > 1)
         firstLayerReplacedBy = 1;
@@ -802,7 +802,7 @@ void groupingVolumesForBrim(PrintObject* object, LayerPtrs& layers, int firstLay
     groupingVolumes(partsObjSliceByVolume, object->firstLayerObjGroupsMod(), scaled_resolution, firstLayerReplacedBy);
     applyNegtiveVolumes(object->model_object()->volumes, object->firstLayerObjSliceMod(), object->firstLayerObjGroupsMod(), scaled_resolution);
 
-    // BBS: the actual first layer slices stored in layers are re-sorted by volume group and will be used to generate brim
+    // the actual first layer slices stored in layers are re-sorted by volume group and will be used to generate brim
     reGroupingLayerPolygons(object->firstLayerObjGroupsMod(), layers.front()->lslices, scaled_resolution);
 }
 
@@ -818,7 +818,7 @@ void PrintObject::slice()
 {
     if (! this->set_started(posSlice))
         return;
-    //BBS: add flag to reload scene for shell rendering
+    // add flag to reload scene for shell rendering
     m_print->set_status(5, L("Slicing mesh"), PrintBase::SlicingStatus::RELOAD_SCENE);
     std::vector<coordf_t> layer_height_profile;
     this->update_layer_height_profile(*this->model_object(), m_slicing_params, layer_height_profile);
@@ -835,7 +835,7 @@ void PrintObject::slice()
     //FIXME is this the right place to do? It is done repeateadly at the UI and now here at the backend.
     std::string warning = fix_slicing_errors(this, m_layers, [this](){ m_print->throw_if_canceled(); }, firstLayerReplacedBy);
     m_print->throw_if_canceled();
-    //BBS: send warning message to slicing callback
+    // send warning message to slicing callback
     // This warning is inaccurate, because the empty layers may have been replaced, or the model has supports.
     //if (!warning.empty()) {
     //    BOOST_LOG_TRIVIAL(info) << warning;
@@ -846,7 +846,7 @@ void PrintObject::slice()
     // Detect and process holes that should be converted to polyholes
     this->_transform_hole_to_polyholes();
 
-    // BBS: the actual first layer slices stored in layers are re-sorted by volume group and will be used to generate brim
+    // the actual first layer slices stored in layers are re-sorted by volume group and will be used to generate brim
     groupingVolumesForBrim(this, m_layers, firstLayerReplacedBy);
 
     // Update bounding boxes, back up raw slices of complex models.
@@ -866,7 +866,7 @@ void PrintObject::slice()
     if (m_layers.empty())
         throw Slic3r::SlicingError(L("No layers were detected. You might want to repair your STL file(s) or check their size or thickness and retry.\n"));
 
-    // BBS
+    // PRUSA
     this->set_done(posSlice);
 }
 
@@ -882,7 +882,7 @@ static inline void apply_mm_segmentation(PrintObject &print_object, ThrowOnCance
             const auto  &layer_ranges   = print_object.shared_regions()->layer_ranges;
             double       z              = print_object.get_layer(int(range.begin()))->slice_z;
             auto         it_layer_range = layer_range_first(layer_ranges, z);
-            // BBS
+            // PRUSA
             const size_t num_extruders = print_object.print()->config().filament_diameter.size();
 
             struct ByExtruder {
@@ -1154,7 +1154,7 @@ void PrintObject::slice_volumes()
 
     // Clear old LayerRegions, allocate for new PrintRegions.
     for (Layer* layer : m_layers) {
-        //BBS: should delete all LayerRegionPtr to avoid memory leak
+        // should delete all LayerRegionPtr to avoid memory leak
         while (!layer->m_regions.empty()) {
             if (layer->m_regions.back())
                 delete layer->m_regions.back();
@@ -1173,7 +1173,7 @@ void PrintObject::slice_volumes()
             this->model_object()->volumes, m_shared_regions->layer_ranges, slice_zs, throw_on_cancel_callback);
     }
 
-    //BBS: "model_part" volumes are grouded according to their connections
+    // "model_part" volumes are grouded according to their connections
     //const auto           scaled_resolution = scaled<double>(print->config().resolution.value);
     //firstLayerObjSliceByVolume = findPartVolumes(objSliceByVolume, this->model_object()->volumes);
     //groupingVolumes(objSliceByVolumeParts, firstLayerObjSliceByGroups, scaled_resolution);
@@ -1207,7 +1207,7 @@ void PrintObject::slice_volumes()
 
     // Is any ModelVolume multi-material painted?
     if (const auto& volumes = this->model_object()->volumes;
-        m_print->config().filament_diameter.size() > 1 && // BBS
+        m_print->config().filament_diameter.size() > 1 && // PRUSA
         std::find_if(volumes.begin(), volumes.end(), [](const ModelVolume* v) { return !v->mmu_segmentation_facets.empty(); }) != volumes.end()) {
 
         // If XY Size compensation is also enabled, notify the user that XY Size compensation
@@ -1256,7 +1256,7 @@ void PrintObject::slice_volumes()
         // Uncompensated slices for the layers in case the Elephant foot compensation is applied.
         std::vector<ExPolygons> lslices_elfoot_uncompensated;
         lslices_elfoot_uncompensated.resize(elephant_foot_compensation_scaled > 0 ? std::min(m_config.elefant_foot_compensation_layers.value, (int)m_layers.size()) : 0);
-        //BBS: this part has been changed a lot to support seperated contour and hole size compensation
+        // this part has been changed a lot to support seperated contour and hole size compensation
 	    tbb::parallel_for(
 	        tbb::blocked_range<size_t>(0, m_layers.size()),
 			[this, xy_hole_scaled, xy_contour_scaled, elephant_foot_compensation_scaled, &lslices_elfoot_uncompensated](const tbb::blocked_range<size_t>& range) {
@@ -1312,14 +1312,14 @@ void PrintObject::slice_volumes()
                         float min_growth = std::min(xy_hole_scaled, xy_contour_scaled);
                         ExPolygons merged_poly_for_holes_growing;
                         if (max_growth > 0) {
-                            //BBS: merge polygons because region can cut "holes".
+                            // merge polygons because region can cut "holes".
                             //Then, cut them to give them again later to their region
                             merged_poly_for_holes_growing = layer->merged(float(SCALED_EPSILON));
                             merged_poly_for_holes_growing = _shrink_contour_holes(std::max(0.f, xy_contour_scaled),
                                                                                   std::max(0.f, xy_hole_scaled),
                                                                                   union_ex(merged_poly_for_holes_growing));
 
-                            // BBS: clipping regions, priority is given to the first regions.
+                            // clipping regions, priority is given to the first regions.
                             Polygons processed;
                             for (size_t region_id = 0; region_id < layer->regions().size(); ++region_id) {
                                 ExPolygons slices = to_expolygons(std::move(layer->m_regions[region_id]->slices.surfaces));
@@ -1327,7 +1327,7 @@ void PrintObject::slice_volumes()
                                     slices = intersection_ex(offset_ex(slices, max_growth), merged_poly_for_holes_growing);
                                 }
 
-                                //BBS: Trim by the slices of already processed regions.
+                                // Trim by the slices of already processed regions.
                                 if (region_id > 0)
                                     slices = diff_ex(to_polygons(std::move(slices)), processed);
                                 if (region_id + 1 < layer->regions().size())
@@ -1352,9 +1352,9 @@ void PrintObject::slice_volumes()
                                 trimming = _shrink_contour_holes(std::min(0.f, xy_contour_scaled),
                                                                  std::min(0.f, xy_hole_scaled),
                                                                  trimming);
-                            //BBS: trim surfaces
+                            // trim surfaces
                             for (size_t region_id = 0; region_id < layer->regions().size(); ++region_id) {
-                                // BBS: split trimming result by region
+                                // split trimming result by region
                                 ExPolygons contour_exp = to_expolygons(std::move(layer->regions()[region_id]->slices.surfaces));
 
                                 layer->regions()[region_id]->slices.set(intersection_ex(contour_exp, to_polygons(trimming)), stInternal);
@@ -1369,7 +1369,7 @@ void PrintObject::slice_volumes()
 	    	// The Elephant foot has been compensated, therefore the elefant_foot_compensation_layers layer's lslices are shrank with the Elephant foot compensation value.
 	    	// Store the uncompensated value there.
 	    	assert(m_layers.front()->id() == 0);
-            //BBS: sort the lslices_elfoot_uncompensated according to shortest path before saving
+            // sort the lslices_elfoot_uncompensated according to shortest path before saving
             //Otherwise the travel of the layer layer would be mess.
             for (int i = 0; i < lslices_elfoot_uncompensated.size(); i++) {
                 ExPolygons &expolygons_uncompensated = lslices_elfoot_uncompensated[i];
@@ -1508,14 +1508,14 @@ void PrintObject::apply_conical_overhang() {
     }
 }
 
-//BBS: this function is used to offset contour and holes of expolygons seperately by different value
+// this function is used to offset contour and holes of expolygons seperately by different value
 ExPolygons PrintObject::_shrink_contour_holes(double contour_delta, double hole_delta, const ExPolygons& polys) const
 {
     ExPolygons new_ex_polys;
     for (const ExPolygon& ex_poly : polys) {
         Polygons contours;
         Polygons holes;
-        //BBS: modify hole
+        // modify hole
         for (const Polygon& hole : ex_poly.holes) {
             if (hole_delta != 0) {
                 for (Polygon& newHole : offset(hole, -hole_delta)) {
@@ -1527,7 +1527,7 @@ ExPolygons PrintObject::_shrink_contour_holes(double contour_delta, double hole_
                 holes.back().make_counter_clockwise();
             }
         }
-        //BBS: modify contour
+        // modify contour
         if (contour_delta != 0) {
             Polygons new_contours = offset(ex_poly.contour, contour_delta);
             if (new_contours.size() == 0)

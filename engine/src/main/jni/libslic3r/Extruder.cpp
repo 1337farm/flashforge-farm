@@ -29,7 +29,7 @@ unsigned int Extruder::extruder_id() const
 
 double Extruder::extrude(double dE)
 {
-    // BBS
+    // PRUSA
     if (m_share_extruder) {
         if (m_config->use_relative_e_distances)
             m_share_E[extruder_id()] = 0.;
@@ -58,7 +58,7 @@ double Extruder::extrude(double dE)
    value supplied will overwrite the previous one if any. */
 double Extruder::retract(double length, double restart_extra)
 {
-    // BBS
+    // PRUSA
     if (m_share_extruder) {
         if (m_config->use_relative_e_distances)
             m_share_E[extruder_id()] = 0.;
@@ -87,7 +87,7 @@ double Extruder::retract(double length, double restart_extra)
 
 double Extruder::unretract()
 {
-    // BBS
+    // PRUSA
     if (m_share_extruder) {
         double dE = m_share_retracted[extruder_id()] + m_restart_extra;
         this->extrude(dE);
@@ -124,7 +124,7 @@ void Extruder::set_retracted(double retracted, double restart_extra)
 // Used filament volume in mm^3.
 double Extruder::extruded_volume() const
 {
-    // BBS
+    // PRUSA
     if (m_share_extruder) {
         // FIXME: need to count m_retracted for share extruder machine
         return this->used_filament() * this->filament_crossection();
@@ -136,7 +136,7 @@ double Extruder::extruded_volume() const
 // Used filament length in mm.
 double Extruder::used_filament() const
 {
-    // BBS
+    // PRUSA
     if (m_share_extruder) {
         // FIXME: need to count retracted length for share-extruder machine
         return m_absolute_E;

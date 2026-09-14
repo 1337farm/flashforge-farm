@@ -5,7 +5,7 @@
 
 namespace Slic3r {
 
-//BBS: linear move(G0 and G1) or arc move(G2 and G3).
+// linear move(G0 and G1) or arc move(G2 and G3).
 enum class EMovePathType : unsigned char
 {
     Noop_move,
@@ -15,12 +15,12 @@ enum class EMovePathType : unsigned char
     Count
 };
 
-//BBS
+//PRUSA
 struct PathFittingData{
     size_t start_point_index;
     size_t end_point_index;
     EMovePathType path_type;
-    // BBS: only valid when path_type is arc move
+    // only valid when path_type is arc move
     // Used to store detail information of arc segment
     ArcSegment arc_data;
 
@@ -40,9 +40,9 @@ struct PathFittingData{
 
 class ArcFitter {
 public:
-    //BBS: this function is used to check the point list and return which part can fit as arc, which part should be line
+    // this function is used to check the point list and return which part can fit as arc, which part should be line
     static void do_arc_fitting(const Points& points, std::vector<PathFittingData> &result, double tolerance);
-    //BBS: this function is used to check the point list and return which part can fit as arc, which part should be line.
+    // this function is used to check the point list and return which part can fit as arc, which part should be line.
     //By the way, it also use DP simplify to reduce point of straight part and only keep the start and end point of arc.
     static void do_arc_fitting_and_simplify(Points& points, std::vector<PathFittingData>& result, double tolerance);
 };

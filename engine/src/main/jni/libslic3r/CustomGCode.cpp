@@ -7,7 +7,7 @@ namespace Slic3r {
 
 namespace CustomGCode {
 
-//BBS: useless config and function
+// useless config and function
 #if 0
 // If loaded configuration has a "colorprint_heights" option (if it was imported from older Slicer), 
 // and if CustomGCode::Info.gcodes is empty (there is no color print data available in a new format

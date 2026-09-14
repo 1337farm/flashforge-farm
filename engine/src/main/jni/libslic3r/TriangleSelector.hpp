@@ -53,7 +53,7 @@ public:
         CIRCLE,
         SPHERE,
         POINTER,
-        // BBS
+        // PRUSA
         HEIGHT_RANGE,
         GAP_FILL,
     };
@@ -184,12 +184,12 @@ public:
         }
     };
 
-    // BBS
+    // PRUSA
     class HeightRange : public SinglePointCursor
     {
     public:
         HeightRange() = delete;
-        // BBS: set cursor_radius to 0.1 for high smooth edge
+        // set cursor_radius to 0.1 for high smooth edge
         explicit HeightRange(float z_world_, const Vec3f& source_, float height_, const Transform3d& trafo_, const ClippingPlane& clipping_plane_)
             : SinglePointCursor(Vec3f(0.f, 0.f, 0.f), source_, 1.f, trafo_, clipping_plane_), m_z_world(z_world_), m_height(height_) {}
         ~HeightRange() override = default;
@@ -322,7 +322,7 @@ public:
     void bucket_fill_select_triangles(const Vec3f         &hit,                        // point where to start
                                       int                  facet_start,                // facet of the original mesh (unsplit) that the hit point belongs to
                                       const ClippingPlane &clp,                        // Clipping plane to limit painting to not clipped facets only
-                                      float                seed_fill_angle,            // BBS: the maximal angle between two facets to be painted by the same color
+                                      float                seed_fill_angle,            // the maximal angle between two facets to be painted by the same color
                                       bool                 propagate,                  // if bucket fill is propagated to neighbor faces or if it fills the only facet of the modified mesh that the hit point belongs to.
                                       bool                 force_reselection = false); // force reselection of the triangle mesh even in cases that mouse is pointing on the selected triangle
 
@@ -336,7 +336,7 @@ public:
     // Get edges around the selected area by seed fill.
     std::vector<Vec2i32> get_seed_fill_contour() const;
 
-    // BBS
+    // PRUSA
     void get_facets(std::vector<indexed_triangle_set>& facets_per_type) const;
 
     // Set facet of the mesh to a given state. Only works for original triangles.
@@ -348,7 +348,7 @@ public:
     // Remove all unnecessary data.
     void garbage_collect();
 
-    // Orca: remap the state of triangles according to the state_map
+    
     void remap_triangle_state(const EnforcerBlockerStateMap& state_map);
 
 
@@ -449,7 +449,7 @@ protected:
         // Is this triangle valid or marked to be removed?
         bool m_valid : 1;
 
-        // Orca:
+        
         // IMPORTANT: `state` is intentionally placed after all other small members
         // to prevent compilers from packing it in a way that would create
         // data races during parallel processing. A write to `state` could
@@ -478,7 +478,7 @@ protected:
     const std::vector<Vec3i32> m_neighbors;
     const std::vector<Vec3f> m_face_normals;
 
-    // BBS
+    // PRUSA
     float m_edge_limit = 0.6f;
 
     // Number of invalid triangles (to trigger garbage collection).

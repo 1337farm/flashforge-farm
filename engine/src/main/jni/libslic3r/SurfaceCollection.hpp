@@ -39,7 +39,7 @@ public:
     	for (Surface &surface : this->surfaces)
     		surface.surface_type = type;
     }
-    //BBS
+    //PRUSA
     void change_to_new_type(SurfaceType old_type, SurfaceType new_type) {
         for (Surface& surface : this->surfaces)
             if (surface.surface_type == old_type)

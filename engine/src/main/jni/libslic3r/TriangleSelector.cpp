@@ -292,7 +292,7 @@ void TriangleSelector::select_patch(int facet_start, std::unique_ptr<Cursor> &&c
     // It is necessary to compare the internal radius in m_cursor! radius is in
     // world coords and does not change after scaling.
     if (m_old_cursor_radius_sqr != m_cursor->radius_sqr) {
-        // BBS: improve details for large cursor radius
+        // improve details for large cursor radius
         TriangleSelector::HeightRange* hr_cursor = dynamic_cast<TriangleSelector::HeightRange*>(m_cursor.get());
         if (hr_cursor == nullptr) {
             set_edge_limit(std::min(std::sqrt(m_cursor->radius_sqr) / 5.f, 0.05f));
@@ -306,7 +306,7 @@ void TriangleSelector::select_patch(int facet_start, std::unique_ptr<Cursor> &&c
 
     const float highlight_angle_limit = -cos(Geometry::deg2rad(highlight_by_angle_deg));
 
-    // BBS
+    // PRUSA
     std::vector<int> start_facets;
     HeightRange* hr_cursor = dynamic_cast<HeightRange*>(m_cursor.get());
     if (hr_cursor) {
@@ -525,7 +525,7 @@ void TriangleSelector::append_touching_edges(int itriangle, int vertexi, int ver
         process_subtriangle(touching.second, Partition::Second);
 }
 
-// BBS: add seed_fill_angle parameter
+// add seed_fill_angle parameter
 void TriangleSelector::bucket_fill_select_triangles(const Vec3f& hit, int facet_start, const ClippingPlane &clp, float seed_fill_angle, bool propagate, bool force_reselection)
 {
     int start_facet_idx = select_unsplit_triangle(hit, facet_start);
@@ -1145,7 +1145,7 @@ bool TriangleSelector::Circle::is_edge_inside_cursor(const Triangle &tr, const s
     return false;
 }
 
-// BBS
+// PRUSA
 bool TriangleSelector::HeightRange::is_pointer_in_triangle(const Vec3f& p1_, const Vec3f& p2_, const Vec3f& p3_) const
 {
     return false;
@@ -1492,7 +1492,7 @@ indexed_triangle_set TriangleSelector::get_facets(EnforcerBlockerType state) con
     return out;
 }
 
-// BBS
+// PRUSA
 void TriangleSelector::get_facets(std::vector<indexed_triangle_set>& facets_per_type) const
 {
     facets_per_type.clear();
@@ -1821,7 +1821,7 @@ void TriangleSelector::deserialize(const TriangleSplittingData &data,
             // Only valid if not is_split. Value of the second nibble was subtracted by 3, so it is added back.
             auto state = is_split ? EnforcerBlockerType::NONE : EnforcerBlockerType((code & 0b1100) == 0b1100 ? next_nibble() + 3 : code >> 2);
 
-            // BBS
+            // PRUSA
             if (state == to_delete_filament)
                 state = replace_filament;
             else if (to_delete_filament != EnforcerBlockerType::NONE && state != EnforcerBlockerType::NONE) {
@@ -2246,7 +2246,7 @@ bool TriangleSelector::Capsule2D::is_edge_inside_cursor(const Triangle &tr, cons
     return false;
 }
 
-// ORCA: Helper to extract used states from serialized data
+// Helper to extract used states from serialized data
 std::vector<EnforcerBlockerType> TriangleSelector::extract_used_facet_states(const TriangleSplittingData &data)
 {
     std::vector<EnforcerBlockerType> out;

@@ -2,10 +2,10 @@
 #define _libslic3r_h_
 
 #include "libslic3r_version.h"
-#define SLIC3R_APP_FULL_NAME "Orca Slicer"
-#define GCODEVIEWER_APP_NAME "OrcaSlicer G-code Viewer"
-#define GCODEVIEWER_APP_KEY  "OrcaSlicerGcodeViewer"
-#define GCODEVIEWER_BUILD_ID std::string("OrcaSlicer G-code Viewer-") + std::string(SLIC3R_VERSION) + std::string("-RC")
+#define SLIC3R_APP_FULL_NAME "PrusaSlicer"
+#define GCODEVIEWER_APP_NAME "PrusaSlicer G-code Viewer"
+#define GCODEVIEWER_APP_KEY  "PrusaSlicerGcodeViewer"
+#define GCODEVIEWER_BUILD_ID std::string("PrusaSlicer G-code Viewer-") + std::string(SLIC3R_VERSION) + std::string("-RC")
 
 // this needs to be included early for MSVC (listing it in Build.PL is not enough)
 #include <memory>
@@ -27,7 +27,7 @@
 
 #ifdef _WIN32
 // On MSVC, std::deque degenerates to a list of pointers, which defeats its purpose of reducing allocator load and memory fragmentation.
-// https://github.com/microsoft/STL/issues/147#issuecomment-1090148740
+// github.com/microsoft/STL/issues/147#issuecomment-1090148740
 // Thus it is recommended to use boost::container::deque instead.
 #include <boost/container/deque.hpp>
 #endif // _WIN32
@@ -56,22 +56,22 @@ static constexpr double EPSILON = 1e-4;
 // int32_t fits an interval of (-2147.48mm, +2147.48mm)
 // with int64_t we don't have to worry anymore about the size of the int.
 
-// Orca todo: might be better to use 1e-5 for all, namometer resolution is not needed for 3D printing
+//  todo: might be better to use 1e-5 for all, namometer resolution is not needed for 3D printing
 static constexpr double SCALING_FACTOR_INTERNAL = 0.000001;
 static constexpr double SCALING_FACTOR_INTERNAL_LARGE_PRINTER = 0.00001;
 static constexpr double LARGE_BED_THRESHOLD = 2147;
 
-// Orca: maximum number of extruders is 64. For SEMM printers, it defines maximum filament number.
+// : maximum number of extruders is 64. For SEMM printers, it defines maximum filament number.
 static constexpr size_t MAXIMUM_EXTRUDER_NUMBER = 64;
 
-// Orca: maximum line width is 5 times the nozzle diameter
+// : maximum line width is 5 times the nozzle diameter
 static constexpr float MAX_LINE_WIDTH_MULTIPLIER = 5;
 
 extern double SCALING_FACTOR;
 static constexpr double PI = 3.141592653589793238;
 #define POLY_SIDE_COUNT 24 // for brim ear circle
 // When extruding a closed loop, the loop is interrupted and shortened a bit to reduce the seam.
-// SoftFever: replaced by seam_gap now
+// replaced by seam_gap now
 // static constexpr double LOOP_CLIPPING_LENGTH_OVER_NOZZLE_DIAMETER = 0.15;
 static constexpr double RESOLUTION = 0.0125;
 #define                 SCALED_RESOLUTION (RESOLUTION / SCALING_FACTOR)
@@ -99,7 +99,7 @@ static constexpr double WIPE_TOWER_MARGIN = 1.;
 #define UNUSED(x) (void)(x)
 #endif /* UNUSED */
 
-//BBS: some global const config which user can not change, but developer can
+// some global const config which user can not change, but developer can
 static constexpr bool g_config_support_sharp_tails = true;
 static constexpr bool g_config_remove_small_overhangs = true;
 static constexpr float g_config_tree_support_collision_resolution = 0.2;
@@ -130,7 +130,7 @@ enum Axis {
 	Z,
 	E,
 	F,
-    //BBS: add I, J, P axis
+    // add I, J, P axis
     I,
     J,
     P,
@@ -250,7 +250,7 @@ ForwardIt lower_bound_by_predicate(ForwardIt first, ForwardIt last, LowerThanKey
     return first;
 }
 
-// from https://en.cppreference.com/w/cpp/algorithm/lower_bound
+// from en.cppreference.com/w/cpp/algorithm/lower_bound
 template<class ForwardIt, class T, class Compare=std::less<>>
 ForwardIt binary_find(ForwardIt first, ForwardIt last, const T& value, Compare comp={})
 {
@@ -262,7 +262,7 @@ ForwardIt binary_find(ForwardIt first, ForwardIt last, const T& value, Compare c
     return first != last && !comp(value, *first) ? first : last;
 }
 
-// from https://en.cppreference.com/w/cpp/algorithm/lower_bound
+// from en.cppreference.com/w/cpp/algorithm/lower_bound
 template<class ForwardIt, class LowerThanKeyPredicate, class EqualToKeyPredicate>
 ForwardIt binary_find_by_predicate(ForwardIt first, ForwardIt last, LowerThanKeyPredicate lower_thank_key, EqualToKeyPredicate equal_to_key)
 {
@@ -415,7 +415,7 @@ template<typename I>
 inline IntegerOnly<I, I> fast_round_up(double a)
 {
     // Why does Java Math.round(0.49999999999999994) return 1?
-    // https://stackoverflow.com/questions/9902968/why-does-math-round0-49999999999999994-return-1
+    // stackoverflow.com/questions/9902968/why-does-math-round0-49999999999999994-return-1
     return a == 0.49999999999999994 ? I(0) : I(floor(a + 0.5));
 }
 

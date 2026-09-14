@@ -2,7 +2,7 @@
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/Format/DRC.hpp"
 #include "AppConfig.hpp"
-//BBS
+//PRUSA
 #include "Preset.hpp"
 #include "Exception.hpp"
 #include "LocalesUtils.hpp"
@@ -40,8 +40,8 @@ using namespace nlohmann;
 
 namespace Slic3r {
 
-static const std::string VERSION_CHECK_URL = "https://check-version.orcaslicer.com/latest";
-static const std::string PROFILE_UPDATE_URL = "https://check-version.orcaslicer.com/profile";
+static const std::string VERSION_CHECK_URL = "https://check-version.prusa3d.com/latest";
+static const std::string PROFILE_UPDATE_URL = "https://check-version.prusa3d.com/profile";
 static const std::string MODELS_STR = "models";
 
 const std::string AppConfig::SECTION_FILAMENTS = "filaments";
@@ -69,18 +69,18 @@ std::string AppConfig::get_hms_host()
 {
     std::string sel = get("iot_environment");
     std::string host = "";
-// #if !BBL_RELEASE_TO_PUBLIC
+// #if !PRUSA_RELEASE_TO_PUBLIC
 //     if (sel == ENV_DEV_HOST)
-//         host = "e-dev.bambu-lab.com";
+//         host = "e-dev.prusa3d.com";
 //     else if (sel == ENV_QAT_HOST)
-//         host = "e-qa.bambu-lab.com";
+//         host = "e-qa.prusa3d.com";
 //     else if (sel == ENV_PRE_HOST)
-//         host = "e-pre.bambu-lab.com";
+//         host = "e-pre.prusa3d.com";
 //     else if (sel == ENV_PRODUCT_HOST)
-//         host = "e.bambulab.com";
+//         host = "e.prusa3d.com";
 //     return host;
 // #else
-    return "e.bambulab.com";
+    return "e.prusa3d.com";
 // #endif
 }
 
@@ -155,7 +155,7 @@ void AppConfig::set_defaults()
             if (was_legacy && network_version.empty()) {
                 // User had legacy mode enabled - set to legacy version number
                 BOOST_LOG_TRIVIAL(info) << "Migrating legacy_networking=true to network_plugin_version=01.10.01.01";
-                set_network_plugin_version(BAMBU_NETWORK_AGENT_VERSION_LEGACY);
+                set_network_plugin_version(PRUSA_NETWORK_AGENT_VERSION_LEGACY);
             }
             // Note: If was_legacy=false, we leave the version empty and let the GUI layer set it to the latest version
 
@@ -334,7 +334,7 @@ void AppConfig::set_defaults()
 //#endif
 #endif // _WIN32
 
-    // BBS
+    // PRUSA
     /*if (get("3mf_include_gcode").empty())
         set_bool("3mf_include_gcode", true);*/
 
@@ -356,17 +356,17 @@ void AppConfig::set_defaults()
     if (get("internal_developer_mode").empty())
         set_bool("internal_developer_mode", false);
 
-    // BBS
+    // PRUSA
     if (get("preset_folder").empty())
         set("preset_folder", "");
 
-    // BBS
+    // PRUSA
     if (get("slicer_uuid").empty()) {
         boost::uuids::uuid uuid = boost::uuids::random_generator()();
         set("slicer_uuid", to_string(uuid));
     }
 
-    // Orca
+    // PrusaSlicer
     if (get("stealth_mode").empty()) {
         set_bool("stealth_mode", false);
     }
@@ -393,7 +393,7 @@ void AppConfig::set_defaults()
         set_bool("check_stable_update_only", false);
     }
 
-    // Orca
+    // PrusaSlicer
     if(get("show_splash_screen").empty()) {
         set_bool("show_splash_screen", true);
     }
@@ -546,7 +546,7 @@ void AppConfig::set_defaults()
         set("max_send", "3");
     }
 
-// #if BBL_RELEASE_TO_PUBLIC
+// #if PRUSA_RELEASE_TO_PUBLIC
     if (get("iot_environment").empty()) {
         set("iot_environment", "3");
     }
@@ -795,14 +795,14 @@ std::string AppConfig::load()
                     }
                     m_printer_cali_infos.emplace_back(cali_info);
                 }
-            } else if (it.key() == "orca_presets") {
+            } else if (it.key() == "prusa_presets") {
                 for (auto& j_model : it.value()) {
                     m_printer_settings[j_model["machine"].get<std::string>()] = j_model;
                 }
             } else if (it.key() == "local_machines") {
                 for (auto m = it.value().begin(); m != it.value().end(); ++m) {
                     const auto&    p = m.value();
-                    BBLocalMachine local_machine;
+                    PrusaLocalMachine local_machine;
                     local_machine.dev_id = m.key();
                     if (p.contains("dev_name"))
                         local_machine.dev_name = p["dev_name"].get<std::string>();
@@ -870,13 +870,13 @@ std::string AppConfig::load()
 
         // Default for new installs
         if (get(SETTING_CLOUD_PROVIDERS).empty()) {
-            // Migrate add bbl cloud if installed_networking is true
-            bool enable_bbl_cloud = get_bool("installed_networking");
-            if (enable_bbl_cloud) {
-                // Legacy Bambu-only user: give them both providers
-                set(SETTING_CLOUD_PROVIDERS, "orca;bbl");
+            // Migrate add prusa cloud if installed_networking is true
+            bool enable_prusa_cloud = get_bool("installed_networking");
+            if (enable_prusa_cloud) {
+                // Legacy Prusa-only user: give them both providers
+                set(SETTING_CLOUD_PROVIDERS, "prusa");
             } else {
-                set(SETTING_CLOUD_PROVIDERS, "orca");
+                set(SETTING_CLOUD_PROVIDERS, "prusa");
             }
         }
     }
@@ -1013,7 +1013,7 @@ void AppConfig::save()
 
     // write machine settings
     for (const auto& preset : m_printer_settings) {
-        j["orca_presets"].push_back(preset.second);
+        j["prusa_presets"].push_back(preset.second);
     }
     for (const auto& local_machine : m_local_machines) {
         json m_json;
@@ -1446,7 +1446,7 @@ void AppConfig::update_last_output_dir(const std::string& dir, const bool remova
 	this->set("app", ("last_export_path"), dir);
 }
 
-// BBS: backup
+// backup
 std::string AppConfig::get_last_backup_dir() const
 {
 	const auto it = m_storage.find("app");
@@ -1458,7 +1458,7 @@ std::string AppConfig::get_last_backup_dir() const
 	return "";
 }
 
-// BBS: backup
+// backup
 void AppConfig::update_last_backup_dir(const std::string& dir)
 {
 	this->set("app", "last_backup_path", dir);
@@ -1467,7 +1467,7 @@ void AppConfig::update_last_backup_dir(const std::string& dir)
 
 std::string AppConfig::get_region()
 {
-// #if BBL_RELEASE_TO_PUBLIC
+// #if PRUSA_RELEASE_TO_PUBLIC
     return this->get("region");
 // #else
 //     std::string sel = get("iot_environment");
@@ -1487,7 +1487,7 @@ std::string AppConfig::get_region()
 std::string AppConfig::get_country_code()
 {
     std::string region = get_region();
-// #if !BBL_RELEASE_TO_PUBLIC
+// #if !PRUSA_RELEASE_TO_PUBLIC
 //     if (is_engineering_region()) { return region; }
 // #endif
     if (region == "CHN" || region == "China")
@@ -1656,7 +1656,7 @@ std::vector<std::string> AppConfig::get_cloud_providers() const
     std::vector<std::string> result;
     std::string providers = get(SETTING_CLOUD_PROVIDERS);
     if (providers.empty()) {
-        result.push_back("orca");
+        result.push_back("prusa");
         return result;
     }
 
@@ -1666,9 +1666,9 @@ std::vector<std::string> AppConfig::get_cloud_providers() const
         if (!provider.empty())
             result.push_back(provider);
     }
-    // Ensure "orca" is always present
-    if (std::find(result.begin(), result.end(), "orca") == result.end()) {
-        result.insert(result.begin(), "orca");
+    // Ensure "prusa" is always present
+    if (std::find(result.begin(), result.end(), "prusa") == result.end()) {
+        result.insert(result.begin(), "prusa");
     }
     return result;
 }
@@ -1700,8 +1700,8 @@ void AppConfig::add_cloud_provider(const std::string& provider)
 
 void AppConfig::remove_cloud_provider(const std::string& provider)
 {
-    if (provider == "orca")
-        return; // Cannot remove orca
+    if (provider == "prusa")
+        return; // Cannot remove prusa
     auto providers = get_cloud_providers();
     providers.erase(std::remove(providers.begin(), providers.end(), provider), providers.end());
     set_cloud_providers(providers);

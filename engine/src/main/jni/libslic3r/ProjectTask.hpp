@@ -14,10 +14,10 @@ namespace fs = boost::filesystem;
 
 namespace Slic3r {
 
-class BBLProject;
-class BBLProfile;
-class BBLTask;
-class BBLModelTask;
+class PrusaProject;
+class PrusaProfile;
+class PrusaTask;
+class PrusaModelTask;
 
 
 enum MachineBedType {
@@ -99,16 +99,16 @@ public:
     }
 };
 
-class BBLSliceInfo {
+class PrusaSliceInfo {
 public:
-    BBLSliceInfo(BBLProfile* profile = nullptr)
+    PrusaSliceInfo(PrusaProfile* profile = nullptr)
     {
         profile_ = profile;
         prediction = 0;
         weight = 0.0f;
     }
 
-    BBLSliceInfo(const BBLSliceInfo& obj) {
+    PrusaSliceInfo(const PrusaSliceInfo& obj) {
         this->index = obj.index;
         this->title = obj.title;
         this->thumbnail_dir = obj.thumbnail_dir;
@@ -136,7 +136,7 @@ public:
     std::string     config_url;
     float           weight;
     int             prediction;
-    BBLProfile*     profile_;
+    PrusaProfile*     profile_;
 };
 
 enum TaskUserOptions {
@@ -147,10 +147,10 @@ enum TaskUserOptions {
     OPTIONS_RECORD_TIMELAPSE = 4
 };
 
-class BBLModelTask {
+class PrusaModelTask {
 public:
-    BBLModelTask();
-    ~BBLModelTask() {}
+    PrusaModelTask();
+    ~PrusaModelTask() {}
 
     int                         job_id;
     int                         design_id;
@@ -162,7 +162,7 @@ public:
     std::string                 profile_name;
 };
 
-class BBLSubTask {
+class PrusaSubTask {
 public:
     enum SubTaskStatus {
         TASK_CREATED = 0,
@@ -174,9 +174,9 @@ public:
         TASK_UNKNOWN = 6
     };
 
-    BBLSubTask(BBLTask* task = nullptr);
+    PrusaSubTask(PrusaTask* task = nullptr);
 
-    BBLSubTask(const BBLSubTask& obj) {
+    PrusaSubTask(const PrusaSubTask& obj) {
         task_id             = obj.task_id;
         parent_id           = obj.parent_id;
         task_model_id       = obj.task_model_id;
@@ -222,7 +222,7 @@ public:
     // task of plate info
     std::string     task_weight;        /* weight create by slicer */
     float           task_weightF;       /* weight in task */
-    BBLSliceInfo    slice_info;         /* slice info of subtask */
+    PrusaSliceInfo    slice_info;         /* slice info of subtask */
     std::string     task_partplate_idx; /* partplate_idx, start at 1, 2, etc. */
 
     SubTaskStatus   task_status;
@@ -231,7 +231,7 @@ public:
     std::string     printing_status;    /* task status, update by machine */
     std::string     task_url;           /* post task to this url */
     std::string     task_url_md5;       /* md5 of task file */
-    BBLTask*        parent_task_;
+    PrusaTask*        parent_task_;
     std::string     parent_id;
 
     int             job_id;
@@ -239,20 +239,20 @@ public:
     std::string     origin_profile_name;
 
     int parse_content_json(std::string json_str);
-    static BBLSubTask::SubTaskStatus parse_status(std::string status);
-    static BBLSubTask::SubTaskStatus parse_user_service_task_status(int status);
+    static PrusaSubTask::SubTaskStatus parse_status(std::string status);
+    static PrusaSubTask::SubTaskStatus parse_user_service_task_status(int status);
 };
 
-typedef std::function<void(BBLModelTask* subtask)> OnGetSubTaskFn;
+typedef std::function<void(PrusaModelTask* subtask)> OnGetSubTaskFn;
 
-class BBLTask {
+class PrusaTask {
 public:
     enum TaskStatus {
         TASK_ACTIVE = 0,
         TASK_INACTIVE = 1,
     };
 
-    BBLTask(BBLProfile* profile = nullptr);
+    PrusaTask(PrusaProfile* profile = nullptr);
 
     /* properties */
     std::string                 task_id;
@@ -263,12 +263,12 @@ public:
     std::string                 task_url;           /* cloud task url */
     std::string                 task_url_md5;       /* md5 of cloud task url file */
     std::wstring                task_dst_url;       /* put task to dest url in machine */
-    BBLProfile*                 profile_;
+    PrusaProfile*                 profile_;
     std::string                 task_project_id;
     std::string                 task_model_id;
     std::string                 task_profile_id;
-    std::vector<BBLSubTask*>    subtasks;
-    std::map<std::string, BBLSliceInfo*> slice_info; /* slice info of subtasks, key: plate idx, 1, 2, 3, etc... */
+    std::vector<PrusaSubTask*>    subtasks;
+    std::map<std::string, PrusaSliceInfo*> slice_info; /* slice info of subtasks, key: plate idx, 1, 2, 3, etc... */
 
     std::string task_status_str() {
         if (task_status == TaskStatus::TASK_ACTIVE) {
@@ -285,12 +285,12 @@ public:
     int parse_content_json(std::string json);
 };
 
-class BBLProfile {
+class PrusaProfile {
 public:
-    BBLProfile(BBLProject* project = nullptr);
-    ~BBLProfile() {}
+    PrusaProfile(PrusaProject* project = nullptr);
+    ~PrusaProfile() {}
 
-    std::vector<BBLTask*>   tasks;
+    std::vector<PrusaTask*>   tasks;
     std::string             profile_id;
     std::string             profile_name;
     std::string             profile_content;
@@ -301,18 +301,18 @@ public:
     std::string             url;                /* 3mf url */
     std::string             md5;                /* 3mf md5 */
     std::string             filename;           /* 3mf filename */
-    BBLProject*             project_;
-    std::map<std::string, BBLSliceInfo*>    slice_info; /* key: plate_idx, start at 1, 2, 3, etc. */
-    BBLSliceInfo* get_slice_info(std::string plate_idx);
+    PrusaProject*             project_;
+    std::map<std::string, PrusaSliceInfo*>    slice_info; /* key: plate_idx, start at 1, 2, 3, etc. */
+    PrusaSliceInfo* get_slice_info(std::string plate_idx);
 };
 
-class BBLProject {
+class PrusaProject {
 public:
-    BBLProject() {
+    PrusaProject() {
         /* give a default project name */
         project_name = "Untitled";
     }
-    BBLProject(std::string name) {
+    PrusaProject(std::string name) {
         project_name = name;
     }
 
@@ -330,7 +330,7 @@ public:
     std::string     project_country_code;
 
 
-    std::vector<BBLProfile*>   profiles;
+    std::vector<PrusaProfile*>   profiles;
 
     /* deprecated apis */
     void set_name(std::string name) { project_name = name; }

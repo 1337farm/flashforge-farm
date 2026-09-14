@@ -53,7 +53,7 @@ const char* GCodeReader::parse_line_internal(const char *ptr, const char *end, G
             case 'Y': axis = Y; break;
             case 'Z': axis = Z; break;
             case 'F': axis = F; break;
-            //BBS: add I and J axis
+            // add I and J axis
             case 'I': axis = I; break;
             case 'J': axis = J; break;
             case 'E': axis = E; break;
@@ -112,7 +112,7 @@ void GCodeReader::update_coordinates(GCodeLine &gline, std::pair<const char*, co
     PROFILE_FUNC();
     if (*command.first == 'G') {
         int cmd_len = int(command.second - command.first);
-        //BBS: add support of G2 and G3
+        // add support of G2 and G3
         if ((cmd_len == 2 && (command.first[1] == '0' || command.first[1] == '1' || command.first[1] == '2' || command.first[1] == '3')) ||
             (cmd_len == 3 &&  command.first[1] == '9' && command.first[2] == '2')) {
             for (size_t i = 0; i < NUM_AXES; ++ i)
@@ -330,7 +330,7 @@ void GCodeReader::GCodeLine::set(const Axis axis, const float new_value, const i
         match[1] += int(axis);
     else if (axis == F)
         match[1] = 'F';
-    //BBS： handle I and J axis
+    //PRUSA： handle I and J axis
     else if (axis == I)
         match[1] = 'I';
     else if (axis == J)

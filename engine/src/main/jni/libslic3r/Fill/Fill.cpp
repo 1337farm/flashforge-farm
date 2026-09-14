@@ -227,7 +227,7 @@ struct SurfaceFillParams
     coordf_t    	overlap = 0.;
     // Angle as provided by the region config, in radians.
     float       	angle = 0.f;
-    // Orca: fixed_angle
+    // fixed_angle
     bool        fixed_angle = false;
     // Is bridging used for this fill? Bridging parameters may be used even if this->flow.bridge() is not set.
     bool 			bridge;
@@ -340,7 +340,7 @@ struct SurfaceFill {
 	Surface 			surface;
 	ExPolygons       	expolygons;
 	SurfaceFillParams	params;
-    // BBS
+    // PRUSA
     std::vector<size_t> region_id_group;
     ExPolygons          no_overlap_expolygons;
 };
@@ -602,7 +602,7 @@ void split_solid_surface(size_t layer_id, const SurfaceFill &fill, ExPolygons &n
         fill.params.pattern == ipRectilinear || fill.params.pattern == ipMonotonic ||
         fill.params.pattern == ipMonotonicLine || fill.params.pattern == ipAlignedRectilinear;
 
-    // ORCA: For non-line patterns, split by a geometric "core" so only thin areas get rerouted.
+    // For non-line patterns, split by a geometric "core" so only thin areas get rerouted.
     if (!line_based_pattern) {
         const coord_t scaled_spacing = scaled<coord_t>(fill.params.spacing);
 
@@ -922,7 +922,7 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                     params.extruder = region_config.bottom_surface_filament_id;
                 else if (params.extrusion_role == erSolidInfill)
                     params.extruder = region_config.internal_solid_filament_id;
-                // Orca: apply fill multiline only for sparse infill
+                // Apply fill multiline only for sparse infill
                 params.multiline = params.extrusion_role == erInternalInfill ? int(region_config.fill_multiline) : 1;
 
                 // Pass through gyroid_optimized only when the effective pattern is Gyroid,
@@ -942,7 +942,7 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                 }
                 params.bridge_angle = float(surface.bridge_angle);
 
-                // ORCA: Align infill angle to model
+                // Align infill angle to model
                 float align_offset = 0.f;
                 if (region_config.align_infill_direction_to_model) {
                     auto m = layer.object()->trafo().matrix();
@@ -954,7 +954,7 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
 		        params.bridge = is_bridge || Fill::use_bridge_flow(params.pattern);
                 const bool is_thick_bridge = surface.is_bridge() && (surface.is_internal_bridge() ? object_config.thick_internal_bridges : object_config.thick_bridges);
 				params.flow   = params.bridge ?
-					//Orca: enable thick bridge based on config
+					// Enable thick bridge based on config
 					layerm.bridging_flow(extrusion_role, is_thick_bridge) :
 					layerm.flow(extrusion_role, (surface.thickness == -1) ? layer.height : surface.thickness);
 
@@ -1035,12 +1035,12 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
 	        			fill.surface = surface;
             		    fill.surface.bridge_angle = params->bridge_angle;
 	        			fill.expolygons.emplace_back(std::move(fill.surface.expolygon));
-						//BBS
+						//PRUSA
 						fill.region_id_group.push_back(region_id);
 						fill.no_overlap_expolygons = layerm.fill_no_overlap_expolygons;
 					} else {
 						fill.expolygons.emplace_back(surface.expolygon);
-						//BBS
+						//PRUSA
 						auto t = find(fill.region_id_group.begin(), fill.region_id_group.end(), region_id);
 						if (t == fill.region_id_group.end()) {
 							fill.region_id_group.push_back(region_id);
@@ -1149,7 +1149,7 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
 		}
     }
 
-	// BBS: detect narrow internal solid infill area and use ipConcentricInternal pattern instead
+	// detect narrow internal solid infill area and use ipConcentricInternal pattern instead
 	if (layer.object()->config().detect_narrow_internal_solid_infill) {
 		size_t surface_fills_size = surface_fills.size();
 		for (size_t i = 0; i < surface_fills_size; i++) {
@@ -1161,14 +1161,14 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
             split_solid_surface(layer.id(), surface_fills[i], normal_infill, narrow_infill);
 
 			if (narrow_infill.empty()) {
-				// BBS: has no narrow expolygon
+				// has no narrow expolygon
 				continue;
 			} else if (normal_infill.empty()) {
-				// BBS: all expolygons are narrow, directly change the fill pattern
+				// all expolygons are narrow, directly change the fill pattern
 				surface_fills[i].params.pattern = ipConcentricInternal;
 			}
 			else {
-				// BBS: some expolygons are narrow, spilit surface_fills[i] and rearrange the expolygons
+				// some expolygons are narrow, spilit surface_fills[i] and rearrange the expolygons
 				params = surface_fills[i].params;
 				params.pattern = ipConcentricInternal;
 				surface_fills.emplace_back(params);
@@ -1177,9 +1177,9 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
 				surface_fills.back().surface.thickness = surface_fills[i].surface.thickness;
                 surface_fills.back().region_id_group       = surface_fills[i].region_id_group;
                 surface_fills.back().no_overlap_expolygons = surface_fills[i].no_overlap_expolygons;
-			    // BBS: move the narrow expolygons to new surface_fills.back();
+			    // move the narrow expolygons to new surface_fills.back();
 			    surface_fills.back().expolygons = std::move(narrow_infill);
-			    // BBS: delete the narrow expolygons from old surface_fills
+			    // delete the narrow expolygons from old surface_fills
                 surface_fills[i].expolygons = std::move(normal_infill);
 			}
 		}
@@ -1293,7 +1293,7 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
         params.infill_overhang_angle   = surface_fill.params.infill_overhang_angle;
         params.gyroid_optimized          = surface_fill.params.gyroid_optimized;
 
-		// BBS
+		// PRUSA
 		params.flow = surface_fill.params.flow;
 		params.extrusion_role = surface_fill.params.extrusion_role;
 		params.using_internal_flow = using_internal_flow;
@@ -1343,7 +1343,7 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
                 params.density = f->print_object_config->internal_bridge_density.get_abs_value(1.0);
                 params.dont_adjust = true;
             }
-            // Orca: Elephant foot compensation for solid layers above bottommost by infill density manipulation.
+            // Elephant foot compensation for solid layers above bottommost by infill density manipulation.
             float elefant_density = f->print_object_config->elefant_foot_layers_density.get_abs_value(1.0);
             if (!is_approx(elefant_density, 1.0f) && surface_fill.surface.is_solid_infill()) {
                 size_t elefant_layers = f->print_object_config->elefant_foot_compensation_layers.value;
@@ -1588,7 +1588,7 @@ void Layer::make_ironing()
 			if (ironing_params.extruder != -1) {
 				//TODO just_infill is currently not used.
 				ironing_params.just_infill 	= false;
-				// ORCA: Get filament-specific overrides if configured, otherwise use process values
+				// Get filament-specific overrides if configured, otherwise use process values
 				size_t extruder_idx = ironing_params.extruder - 1;
 				ironing_params.line_spacing = (!config.filament_ironing_spacing.is_nil(extruder_idx)
 					? config.filament_ironing_spacing.get_at(extruder_idx)
@@ -1697,7 +1697,7 @@ void Layer::make_ironing()
 				polys = union_safety_offset(polys);
 			}
 			// Trim the top surfaces with half the nozzle diameter.
-            // BBS: ironing inset
+            // ironing inset
             double ironing_areas_offset = ironing_params.inset == 0 ? float(scale_(0.5 * nozzle_dmr)) : scale_(ironing_params.inset);
 			ironing_areas = intersection_ex(polys, offset(this->lslices, - ironing_areas_offset));
 		}

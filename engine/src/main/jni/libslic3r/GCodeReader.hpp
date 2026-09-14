@@ -50,7 +50,7 @@ public:
             return sqrt(x*x + y*y);
         }
         bool cmd_is(const char *cmd_test)          const { return cmd_is(m_raw, cmd_test); }
-        //BBS: modify to support G2 and G3
+        // modify to support G2 and G3
         bool extruding(const GCodeReader &reader)  const { return (this->cmd_is("G1") || this->cmd_is("G2") || this->cmd_is("G3")) && this->dist_E(reader) > 0; }
         bool retracting(const GCodeReader &reader) const { return (this->cmd_is("G1") || this->cmd_is("G2") || this->cmd_is("G3")) && this->dist_E(reader) < 0; }
         bool travel()     const { return (this->cmd_is("G1") || this->cmd_is("G2") || this->cmd_is("G3")) && ! this->has(E); }
@@ -61,7 +61,7 @@ public:
         bool  has_z() const { return this->has(Z); }
         bool  has_e() const { return this->has(E); }
         bool  has_f() const { return this->has(F); }
-        // BBS: add I J P axis
+        // add I J P axis
         bool  has_i() const { return this->has(I); }
         bool  has_j() const { return this->has(J); }
         bool  has_p() const { return this->has(P); }
@@ -72,7 +72,7 @@ public:
         float z() const { return m_axis[Z]; }
         float e() const { return m_axis[E]; }
         float f() const { return m_axis[F]; }
-        // BBS: add I J P axis
+        // add I J P axis
         float i() const { return m_axis[I]; }
         float j() const { return m_axis[J]; }
         float p() const { return m_axis[P]; }
@@ -160,7 +160,7 @@ public:
     float  e() const { return m_position[E]; }
     float& f()       { return m_position[F]; }
     float  f() const { return m_position[F]; }
-    // BBS: add I J axis
+    // add I J axis
     float& i()       { return m_position[I]; }
     float  i() const { return m_position[I]; }
     float& j()       { return m_position[J]; }

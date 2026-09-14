@@ -10,7 +10,7 @@ namespace Slic3r {
 const int g_min_flush_volume_from_support = 700;
 const int g_flush_volume_to_support = 230;
 
-const int g_max_flush_volume = 20000; //Orca: increase limit to 20k vs 900 in upstream BBS code.
+const int g_max_flush_volume = 20000; // Increase limit to 20k vs 900 in upstream PRUSA code.
                                       // Retain a clamp to guard against extreme values entered in the UI
 
 static float to_radians(float degree)
@@ -29,7 +29,7 @@ static float calc_triangle_3rd_edge(float edge_a, float edge_b, float degree_ab)
     return std::sqrt(edge_a * edge_a + edge_b * edge_b - 2 * edge_a * edge_b * std::cos(to_radians(degree_ab)));
 }
 
-static float DeltaHS_BBS(float h1, float s1, float v1, float h2, float s2, float v2)
+static float DeltaHS_PRUSA(float h1, float s1, float v1, float h2, float s2, float v2)
 {
     float h1_rad = to_radians(h1);
     float h2_rad = to_radians(h2);
@@ -75,7 +75,7 @@ int FlushVolCalculator::calc_flush_vol_rgb(unsigned char src_r, unsigned char sr
     // Calculate color distance in HSV color space
     Slic3r::Utils::RGB2HSV(src_r_f, src_g_f, src_b_f, &from_hsv_h, &from_hsv_s, &from_hsv_v);
     Slic3r::Utils::RGB2HSV(dst_r_f, dst_g_f, dst_b_f, &to_hsv_h, &to_hsv_s, &to_hsv_v);
-    float hs_dist = DeltaHS_BBS(from_hsv_h, from_hsv_s, from_hsv_v, to_hsv_h, to_hsv_s, to_hsv_v);
+    float hs_dist = DeltaHS_PRUSA(from_hsv_h, from_hsv_s, from_hsv_v, to_hsv_h, to_hsv_s, to_hsv_v);
 
     // 1. Color difference is more obvious if the dest color has high luminance
     // 2. Color difference is more obvious if the source color has low luminance
@@ -102,7 +102,7 @@ int FlushVolCalculator::calc_flush_vol_rgb(unsigned char src_r, unsigned char sr
 int FlushVolCalculator::calc_flush_vol(unsigned char src_a, unsigned char src_r, unsigned char src_g, unsigned char src_b,
     unsigned char dst_a, unsigned char dst_r, unsigned char dst_g, unsigned char dst_b)
 {
-    // BBS: Transparent materials are treated as white materials
+    // Transparent materials are treated as white materials
     if (src_a == 0) {
         src_r = src_g = src_b = 255;
     }

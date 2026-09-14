@@ -34,7 +34,7 @@ struct ImageColorscale:Image<unsigned char>
 // TODO (if needed): implement transformation of rgb images into grayscale...
 bool decode_png(IStream &stream, ImageGreyscale &out_img);
 
-//BBS: decode png for other format
+// decode png for other format
 bool decode_colored_png(IStream &in_buf, ImageColorscale &out_img);
 
 // TODO (if needed)

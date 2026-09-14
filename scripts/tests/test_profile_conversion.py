@@ -2,7 +2,7 @@
 """Profile-conversion tooling tests.
 
 Proves the one-way foreign-slicer -> PrusaSlicer 3.0 converter:
-  - key renames (orca -> prusa)
+  - key renames (legacy -> prusa)
   - removed-key dropping
   - enum value remaps
   - type_changed transforms (support_type)
@@ -37,11 +37,11 @@ def test_map_artifact_present():
     doc = load_map()
     assert doc["schema"] == "dialect_profile_key_map"
     assert doc["target_dialect"] == "prusaslicer3"
-    assert set(doc["dialects"]) >= {"orca", "bambu", "prusaslicer", "slic3r", "superslicer"}
-    orca = doc["dialects"]["orca"]
-    assert orca["wall_loops"]["key"] == "perimeters"
-    assert orca["single_extruder_multi_material"]["kind"] == "removed"
-    assert "values" in orca["gap_fill_target"]
+    assert set(doc["dialects"]) >= {"legacy", "compat", "prusaslicer", "slic3r", "superslicer"}
+    legacy = doc["dialects"]["legacy"]
+    assert legacy["wall_loops"]["key"] == "perimeters"
+    assert legacy["single_extruder_multi_material"]["kind"] == "removed"
+    assert "values" in legacy["gap_fill_target"]
 
 
 def test_jvalue_to_str():
@@ -57,44 +57,44 @@ def _table(dialect):
 
 def test_rename():
     s = cvt.ConvertStats()
-    out = cvt.convert_entry("wall_loops", "3", _table("orca"), "orca", {}, s)
+    out = cvt.convert_entry("wall_loops", "3", _table("legacy"), "legacy", {}, s)
     assert out == [("perimeters", "3")]
     assert s.renamed == 1
 
 
 def test_removed():
     s = cvt.ConvertStats()
-    out = cvt.convert_entry("single_extruder_multi_material", "1", _table("orca"), "orca", {}, s)
+    out = cvt.convert_entry("single_extruder_multi_material", "1", _table("legacy"), "legacy", {}, s)
     assert out == []
     assert s.removed == 1
 
 
 def test_enum_remap():
     s = cvt.ConvertStats()
-    out = cvt.convert_entry("gap_fill_target", "everywhere", _table("orca"), "orca", {}, s)
+    out = cvt.convert_entry("gap_fill_target", "everywhere", _table("legacy"), "legacy", {}, s)
     assert out == [("gap_fill_enabled", "1")]
     assert s.value_remapped == 1
 
 
 def test_enum_remap_wall_sequence():
-    out = cvt.convert_entry("wall_sequence", "inner wall/outer wall", _table("orca"), "orca", {},
+    out = cvt.convert_entry("wall_sequence", "inner wall/outer wall", _table("legacy"), "legacy", {},
                             cvt.ConvertStats())
     assert out == [("external_perimeters_first", "0")]
 
 
 def test_transform_support_type():
     s = cvt.ConvertStats()
-    out = cvt.convert_entry("support_type", "tree(auto)", _table("orca"), "orca", {}, s)
+    out = cvt.convert_entry("support_type", "tree(auto)", _table("legacy"), "legacy", {}, s)
     assert out == [("support_style", "organic")]
     assert s.transformed == 1
 
 
 def test_gcode_rewrite():
-    table = _table("orca")
+    table = _table("legacy")
     gcode = load_map()["gcode_placeholder_renames"]
     out = cvt.convert_entry(
         "start_gcode", "M104 S[nozzle_temperature_initial_layer]",
-        table, "orca", gcode, cvt.ConvertStats())
+        table, "legacy", gcode, cvt.ConvertStats())
     assert out == [("start_gcode", "M104 S{first_layer_temperature[0]}")]
 
 
@@ -105,8 +105,8 @@ def test_inheritance_resolution():
         catalog[p.stem] = obj
         if isinstance(obj.get("name"), str):
             catalog[obj["name"]] = obj
-    child = cvt.read_json_profile(FIXTURES / "orca_sample.json")
-    flat = cvt.collect_flat(child, catalog, "orca")
+    child = cvt.read_json_profile(FIXTURES / "legacy_sample.json")
+    flat = cvt.collect_flat(child, catalog, "legacy")
     assert flat["wall_loops"] == "3"              # parent=2 overridden by child=3
     assert flat["sparse_infill_density"] == "15%"  # parent-inherited key survives
 
@@ -117,7 +117,7 @@ def test_full_convert_and_emit():
         "single_extruder_multi_material": "1", "support_type": "tree(auto)",
         "nozzle_diameter": "0.4", "ironing_type": "topmost surface",
     }
-    out, s = cvt.convert(flat, _table("orca"), "orca", load_map()["gcode_placeholder_renames"])
+    out, s = cvt.convert(flat, _table("legacy"), "legacy", load_map()["gcode_placeholder_renames"])
     assert out["perimeters"] == "3"
     assert out["spiral_vase"] == "0"
     assert out["gap_fill_enabled"] == "1"
@@ -140,23 +140,23 @@ def test_cli_directory_conversion(tmp_path):
         capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     produced = {p.name for p in out_dir.glob("*.ini")}
-    assert {"orca_sample.ini", "base_profile.ini", "superslicer_sample.ini"} <= produced
+    assert {"legacy_sample.ini", "base_profile.ini", "superslicer_sample.ini"} <= produced
 
-    orca_out = (out_dir / "orca_sample.ini").read_text()
-    assert "perimeters = 3" in orca_out             # rename + inheritance override
-    assert "gap_fill_enabled = 1" in orca_out       # enum remap
-    assert "support_style = organic" in orca_out    # type_changed transform
-    assert "single_extruder_multi_material" not in orca_out   # removed
-    assert "{first_layer_temperature[0]}" in orca_out         # gcode rewrite
+    legacy_out = (out_dir / "legacy_sample.ini").read_text()
+    assert "perimeters = 3" in legacy_out             # rename + inheritance override
+    assert "gap_fill_enabled = 1" in legacy_out       # enum remap
+    assert "support_style = organic" in legacy_out    # type_changed transform
+    assert "single_extruder_multi_material" not in legacy_out   # removed
+    assert "{first_layer_temperature[0]}" in legacy_out         # gcode rewrite
 
     ss_out = (out_dir / "superslicer_sample.ini").read_text()
     assert "perimeters = 4" in ss_out      # legacy INI key passes through
     assert "support_material = 1" in ss_out
 
 
-def test_orca_stored_ini_migration(tmp_path):
-    # The app's own stored configs are Orca-keyed INI (ConfigObject.serialize()).
-    # One-time migration converts them through the `orca` dialect even though
+def test_legacy_stored_ini_migration(tmp_path):
+    # The app's own stored configs are legacy-keyed INI (ConfigObject.serialize()).
+    # One-time migration converts them through the `legacy` dialect even though
     # the file is INI, not JSON (format and dialect are independent).
     src = tmp_path / "stored.ini"
     src.write_text(
@@ -168,7 +168,7 @@ def test_orca_stored_ini_migration(tmp_path):
     out = tmp_path / "out.ini"
     r = subprocess.run(
         [PYTHON, str(SCRIPTS / "convert_to_prusa.py"),
-         str(src), "--dialect", "orca", "--out", str(out), "--map", str(MAP)],
+         str(src), "--dialect", "legacy", "--out", str(out), "--map", str(MAP)],
         capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     text = out.read_text()

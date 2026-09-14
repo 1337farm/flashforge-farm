@@ -16,7 +16,7 @@
 #include "Semver.hpp"
 #include "ProjectTask.hpp"
 
-//BBS: change system directories
+// change system directories
 #define PRESET_SYSTEM_DIR      "system"
 #define PRESET_USER_DIR        "user"
 #define PRESET_FILAMENT_NAME    "filament"
@@ -29,58 +29,58 @@
 #define PRESET_TEMPLATE_DIR "Template"
 #define PRESET_CUSTOM_VENDOR "Custom"
 
-// Orca: bundle import directories
+
 #define PRESET_LOCAL_DIR          "_local"
 #define PRESET_SUBSCRIBED_DIR     "_subscribed"
 #define PRESET_BUNDLE_METADATA    "bundle_metadata.json"
 
-//BBS: iot preset type strings
+// iot preset type strings
 #define PRESET_IOT_PRINTER_TYPE     "printer"
 #define PRESET_IOT_FILAMENT_TYPE    "filament"
 #define PRESET_IOT_PRINT_TYPE       "print"
 
 
-//BBS: add json support
-#define BBL_JSON_KEY_VERSION        "version"
-#define BBL_JSON_KEY_IS_CUSTOM      "is_custom_defined"
-#define BBL_JSON_KEY_URL            "url"
-#define BBL_JSON_KEY_NAME           "name"
-#define BBL_JSON_KEY_DESCRIPTION    "description"
-#define BBL_JSON_KEY_FORCE_UPDATE   "force_update"
-#define BBL_JSON_KEY_MACHINE_MODEL_LIST     "machine_model_list"
-#define BBL_JSON_KEY_PROCESS_LIST   "process_list"
-#define BBL_JSON_KEY_SUB_PATH       "sub_path"
-#define BBL_JSON_KEY_FILAMENT_LIST  "filament_list"
-#define BBL_JSON_KEY_MACHINE_LIST   "machine_list"
-#define BBL_JSON_KEY_TYPE           "type"
-#define BBL_JSON_KEY_FROM           "from"
-#define BBL_JSON_KEY_SETTING_ID     "setting_id"
-#define BBL_JSON_KEY_BASE_ID        "base_id"
-#define BBL_JSON_KEY_USER_ID        "user_id"
-#define BBL_JSON_KEY_FILAMENT_ID    "filament_id"
+// add json support
+#define PRUSA_JSON_KEY_VERSION        "version"
+#define PRUSA_JSON_KEY_IS_CUSTOM      "is_custom_defined"
+#define PRUSA_JSON_KEY_URL            "url"
+#define PRUSA_JSON_KEY_NAME           "name"
+#define PRUSA_JSON_KEY_DESCRIPTION    "description"
+#define PRUSA_JSON_KEY_FORCE_UPDATE   "force_update"
+#define PRUSA_JSON_KEY_MACHINE_MODEL_LIST     "machine_model_list"
+#define PRUSA_JSON_KEY_PROCESS_LIST   "process_list"
+#define PRUSA_JSON_KEY_SUB_PATH       "sub_path"
+#define PRUSA_JSON_KEY_FILAMENT_LIST  "filament_list"
+#define PRUSA_JSON_KEY_MACHINE_LIST   "machine_list"
+#define PRUSA_JSON_KEY_TYPE           "type"
+#define PRUSA_JSON_KEY_FROM           "from"
+#define PRUSA_JSON_KEY_SETTING_ID     "setting_id"
+#define PRUSA_JSON_KEY_BASE_ID        "base_id"
+#define PRUSA_JSON_KEY_USER_ID        "user_id"
+#define PRUSA_JSON_KEY_FILAMENT_ID    "filament_id"
 #define UNKNOWN_FILAMENT_ID         "__unknown__"
-#define ORCA_JSON_KEY_UPDATE_TIME    "updated_time"
-#define ORCA_JSON_KEY_CREATED_TIME    "created_time"
-#define BBL_JSON_KEY_INHERITS       "inherits"
-#define BBL_JSON_KEY_INSTANTIATION  "instantiation"
-#define BBL_JSON_KEY_NOZZLE_DIAMETER            "nozzle_diameter"
-#define BBL_JSON_KEY_PRINTER_TECH                 "machine_tech"
-#define BBL_JSON_KEY_FAMILY                     "family"
-#define BBL_JSON_KEY_BED_MODEL                  "bed_model"
-#define BBL_JSON_KEY_BED_TEXTURE                "bed_texture"
-#define BBL_JSON_KEY_IMAGE_BED_TYPE             "image_bed_type"
-#define BBL_JSON_KEY_BOTTOM_TEXTURE_END_NAME    "bottom_texture_end_name"
-#define BBL_JSON_KEY_USE_DOUBLE_EXTRUDER_DEFAULT_TEXTURE  "use_double_extruder_default_texture"
-#define BBL_JSON_KEY_BOTTOM_TEXTURE_RECT        "bottom_texture_rect"
-#define BBL_JSON_KEY_MIDDLE_TEXTURE_RECT        "middle_texture_rect"
+#define PRUSA_JSON_KEY_UPDATE_TIME    "updated_time"
+#define PRUSA_JSON_KEY_CREATED_TIME    "created_time"
+#define PRUSA_JSON_KEY_INHERITS       "inherits"
+#define PRUSA_JSON_KEY_INSTANTIATION  "instantiation"
+#define PRUSA_JSON_KEY_NOZZLE_DIAMETER            "nozzle_diameter"
+#define PRUSA_JSON_KEY_PRINTER_TECH                 "machine_tech"
+#define PRUSA_JSON_KEY_FAMILY                     "family"
+#define PRUSA_JSON_KEY_BED_MODEL                  "bed_model"
+#define PRUSA_JSON_KEY_BED_TEXTURE                "bed_texture"
+#define PRUSA_JSON_KEY_IMAGE_BED_TYPE             "image_bed_type"
+#define PRUSA_JSON_KEY_BOTTOM_TEXTURE_END_NAME    "bottom_texture_end_name"
+#define PRUSA_JSON_KEY_USE_DOUBLE_EXTRUDER_DEFAULT_TEXTURE  "use_double_extruder_default_texture"
+#define PRUSA_JSON_KEY_BOTTOM_TEXTURE_RECT        "bottom_texture_rect"
+#define PRUSA_JSON_KEY_MIDDLE_TEXTURE_RECT        "middle_texture_rect"
 
-#define BBL_JSON_KEY_HOTEND_MODEL               "hotend_model"
-#define BBL_JSON_KEY_DEFAULT_MATERIALS          "default_materials"
-#define BBL_JSON_KEY_NOT_SUPPORT_BED_TYPE       "not_support_bed_type"
-#define BBL_JSON_KEY_MODEL_ID                   "model_id"
+#define PRUSA_JSON_KEY_HOTEND_MODEL               "hotend_model"
+#define PRUSA_JSON_KEY_DEFAULT_MATERIALS          "default_materials"
+#define PRUSA_JSON_KEY_NOT_SUPPORT_BED_TYPE       "not_support_bed_type"
+#define PRUSA_JSON_KEY_MODEL_ID                   "model_id"
 
-// Orca extension
-#define ORCA_JSON_KEY_RENAMED_FROM              "renamed_from"
+// Prusa extension
+#define PRUSA_JSON_KEY_RENAMED_FROM              "renamed_from"
 
 
 static constexpr const char* GENERIC_PREFIX = "Generic ";
@@ -98,9 +98,9 @@ enum ConfigFileType
     CONFIG_FILE_TYPE_CONFIG_BUNDLE,
 };
 
-//BBS: add a function to load the version from xxx.json
+// add a function to load the version from xxx.json
 extern Semver get_version_from_json(std::string file_path);
-//BBS: add a function to load the key-values from xxx.json
+// add a function to load the key-values from xxx.json
 extern int get_values_from_json(std::string file_path, std::vector<std::string>& keys, std::map<std::string, std::string>& key_values);
 
 extern ConfigFileType guess_config_file_type(const boost::property_tree::ptree &tree);
@@ -126,7 +126,7 @@ public:
         PrinterModel() {}
         std::string                 id;
         std::string                 name;
-        //BBS: this is internal id for the printer. Currently only used for searching in database
+        // this is internal id for the printer. Currently only used for searching in database
         std::string                 model_id;
         PrinterTechnology           technology;
         std::string                 family;
@@ -205,9 +205,9 @@ public:
         // This type is here to support PresetConfigSubstitutions for physical printers, however it does not belong to the Preset class,
         // PhysicalPrinter class is used instead.
         TYPE_PHYSICAL_PRINTER,
-        // BBS: plate config
+        // plate config
         TYPE_PLATE,
-        // BBS: model config
+        // model config
         TYPE_MODEL,
     };
 
@@ -230,7 +230,7 @@ public:
     // Is this preset compatible with the currently active printer?
     bool                is_compatible = true;
 
-    //BBS: add type for project-embedded
+    // add type for project-embedded
     bool                is_project_embedded = false;
     ConfigSubstitutions *loading_substitutions{nullptr};
     bool                is_user() const { return ! this->is_default && ! this->is_system && ! this->is_project_embedded && ! this->is_from_bundle(); }
@@ -259,20 +259,20 @@ public:
     // and to match the "inherits" field of user profiles with updated system profiles.
     std::vector<std::string> renamed_from;
 
-    // Orca: maintain a list of printer models that are excluded from this preset, designed for filaments without compatible_printer defined
-    // (hence they are visible to all printer models by default) in Orca Filament Library. However, we might have speciliazed filament for
+    
+    // (hence they are visible to all printer models by default) in Prusa Filament Library. However, we might have speciliazed filament for
     // certain printer models defined in the vendor profile as well, in this case we want to hide this generic preset for these printer models.
     std::set<std::string> m_excluded_from;
 
-    // Orca: flag to indicate if this preset is from Orca Filament Library
-    bool m_from_orca_filament_lib = false;
+    
+    bool m_from_prusa_filament_lib = false;
 
-    // Orca: bundle tracking - imported preset bundles. Bundle ID: UUID (OrcaCloud) or name+timestamp (external).
+    
     // Presence of bundle_id is the source of truth for "came from a bundle".
     std::string         bundle_id;
     bool                is_from_bundle() const { return ! bundle_id.empty(); }
 
-    //BBS
+    //PRUSA
     Semver              version;         // version of preset
     std::string         ini_str;         // ini string of preset
     std::string         setting_id;      // setting id in cloud database
@@ -292,7 +292,7 @@ public:
     void                save_info(std::string file = "");
     void                remove_files(bool cloud_already_deleted = false);
 
-    //BBS: add logic for only difference save
+    // add logic for only difference save
     //if parent_config is null, save all keys, otherwise, only save difference
     void                save(DynamicPrintConfig* parent_config);
     void                reload(Preset const & parent);
@@ -392,7 +392,7 @@ public:
     // Report configuration fields, which are misplaced into a wrong group, remove them from the config.
     static std::string                      remove_invalid_keys(DynamicPrintConfig &config, const DynamicPrintConfig &default_config);
 
-    // BBS: move constructor to public
+    // move constructor to public
     Preset(Type type, const std::string &name, bool is_default = false) : type(type), is_default(is_default), name(name) {}
 
 protected:
@@ -446,7 +446,7 @@ struct PresetConfigSubstitutions {
     enum class Source {
         UserFile,
         ConfigBundle,
-        //BBS: add cloud and project type
+        // add cloud and project type
         UserCloud,
         ProjectFile,
     };
@@ -471,9 +471,9 @@ public:
     typedef std::deque<Preset>::iterator Iterator;
     typedef std::deque<Preset>::const_iterator ConstIterator;
     typedef std::function<void(Preset* preset, std::string sync_info)> SyncFunc;
-    //BBS get m_presets begin
+    //PRUSA get m_presets begin
     Iterator        lbegin() { return m_presets.begin(); }
-    //BBS: validate_preset
+    // validate_preset
     bool            validate_preset(const std::string &name, std::string &inherit);
 
     Iterator        begin() { return m_presets.begin() + m_num_default_presets; }
@@ -483,11 +483,11 @@ public:
     ConstIterator   end() const { return m_presets.cend(); }
     ConstIterator   cend() const { return m_presets.cend(); }
 
-    //BBS
+    //PRUSA
     Iterator        erase(Iterator it) { return m_presets.erase(it); }
     SyncFunc        sync_func{ nullptr };
     void            set_sync_func(SyncFunc func) { sync_func = func; }
-    //BBS: mutex
+    // mutex
     void            lock() { m_mutex.lock(); }
     void            unlock() { m_mutex.unlock(); }
 
@@ -506,23 +506,23 @@ public:
     // Load ini files of the particular type from the provided directory path.
     void            load_presets(const std::string &dir_path, const std::string &subdir, PresetsConfigSubstitutions& substitutions, ForwardCompatibilitySubstitutionRule rule, std::function<void(Preset&)> preset_loaded_fn = nullptr, const PresetOrigin &load_origin = PresetOrigin());
 
-    //BBS: update user presets directory
+    // update user presets directory
     void            update_user_presets_directory(const std::string& dir_path, const std::string& type);
     void            save_user_presets(const std::string& dir_path, const std::string& type, std::map<std::string, std::string>& need_to_delete_list);
     bool            load_user_preset(std::string name, std::map<std::string, std::string> preset_values, PresetsConfigSubstitutions& substitutions, ForwardCompatibilitySubstitutionRule rule, const PresetOrigin &load_origin = PresetOrigin(PresetOrigin::Kind::User));
     void            update_after_user_presets_loaded();
-    //BBS: get user presets
+    // get user presets
     int  get_user_presets(PresetBundle *preset_bundle, std::vector<Preset> &result_presets);
     void set_sync_info_and_save(std::string name, std::string setting_id, std::string syncinfo, long long update_time);
     bool need_sync(std::string name, std::string setting_id, long long update_time);
 
-    //BBS: add function to generate differed preset for save
+    // add function to generate differed preset for save
     //the pointer should be freed by the caller
     Preset* get_preset_differed_for_save(Preset& preset);
-    //BBS:get the differencen values to update
+    // get the differencen values to update
     int get_differed_values_to_update(Preset& preset, std::map<std::string, std::string>& key_values);
 
-    //BBS: add project embedded presets logic
+    // add project embedded presets logic
     void load_project_embedded_presets(std::vector<Preset*>& project_presets, const std::string& type, PresetsConfigSubstitutions& substitutions, ForwardCompatibilitySubstitutionRule rule);
     std::vector<Preset*> get_project_embedded_presets();
     bool reset_project_embedded_presets();
@@ -575,7 +575,7 @@ public:
     // Save the preset under a new name. If the name is different from the old one,
     // a new preset is stored into the list of presets.
     // All presets are marked as not modified and the new preset is activated.
-    //BBS: add project embedded preset logic
+    // add project embedded preset logic
     void            save_current_preset(const std::string &new_name, bool detach = false, bool save_to_project = false, Preset* _curr_preset = nullptr);
 
     // Delete the current preset, activate the first visible preset.
@@ -597,7 +597,7 @@ public:
     Preset&         select_preset(size_t idx);
     // Return the selected preset, without the user modifications applied.
     Preset&         get_selected_preset() {
-        //BBS fix crash when m_idx_selected == -1, give a default value
+        //PRUSA fix crash when m_idx_selected == -1, give a default value
         if ((m_idx_selected < 0) || (m_idx_selected >= m_presets.size())) {
             select_preset(first_visible_idx());
         }
@@ -667,7 +667,7 @@ public:
     {
         return const_cast<PresetCollection*>(this)->find_preset(name, first_visible_if_not_found);
     }
-    // Orca: find preset, if not found, keep searching in the renamed history. This is function should only be used when find
+    
     // system(parent) presets for custom preset.
     Preset* find_preset2(const std::string& name, bool auto_match = true);
     const Preset* find_preset2(const std::string& name, bool auto_match = true) const
@@ -786,7 +786,7 @@ protected:
     // Copy constructor and copy operators are not to be used from outside PresetBundle,
     // as the Profile::vendor points to an instance of VendorProfile stored at parent PresetBundle!
     PresetCollection(const PresetCollection &other) = default;
-    //BBS: add operator= logic insteadof default
+    // add operator= logic insteadof default
     PresetCollection& operator=(const PresetCollection &other);
     // After copying a collection with the default operators above, call this function
     // to adjust Profile::vendor pointers.
@@ -805,7 +805,7 @@ protected:
     // Update m_map_system_profile_renamed from loaded system profiles.
     void 			update_map_system_profile_renamed();
 
-    // Orca: update m_excluded_from loaded system profiles.
+    
     void 			update_library_profile_excluded_from();
 
 
@@ -836,7 +836,7 @@ private:
     // to be handled differently.
     // If a preset does not exist, an iterator is returned indicating where to insert a preset with the same name.
     // `name` must already be canonical — callers canonicalize via find_preset / canonical_preset_name.
-    std::deque<Preset>::iterator find_preset_internal(const std::string &name, bool from_orca_lib_only = false)
+    std::deque<Preset>::iterator find_preset_internal(const std::string &name, bool from_prusa_lib_only = false)
     {
         auto it = Slic3r::lower_bound_by_predicate(m_presets.begin() + m_num_default_presets, m_presets.end(),
             [&name, this](const auto& l) {
@@ -851,7 +851,7 @@ private:
         if (it == m_presets.end() || it->name != name) {
             // Preset has not been not found in the sorted list of non-default presets. Try the defaults.
             for (size_t i = 0; i < m_num_default_presets; ++ i)
-                if (m_presets[i].name == name && (!from_orca_lib_only || m_presets[i].m_from_orca_filament_lib)) {
+                if (m_presets[i].name == name && (!from_prusa_lib_only || m_presets[i].m_from_prusa_filament_lib)) {
                     it = m_presets.begin() + i;
                     break;
                 }
@@ -873,7 +873,7 @@ private:
 public:
     static bool                     is_dirty(const Preset *edited, const Preset *reference);
     static std::vector<std::string> dirty_options(const Preset *edited, const Preset *reference, const bool deep_compare = false);
-    //BBS: add function for dirty_options_without_option_list
+    // add function for dirty_options_without_option_list
     static std::vector<std::string> dirty_options_without_option_list(const Preset *edited, const Preset *reference, const std::set<std::string>& option_ignore_list, const bool deep_compare = false);
 private:
     // Type of this PresetCollection: TYPE_PRINT, TYPE_FILAMENT or TYPE_PRINTER.
@@ -904,10 +904,10 @@ private:
     // to access select_preset_by_name_strict() and the default & copy constructors.
     friend class PresetBundle;
 
-    //BBS: mutex
+    // mutex
     std::recursive_mutex          m_mutex;
 
-    // Orca: used for validation only
+    
     int m_errors = 0;
 };
 
@@ -973,7 +973,7 @@ public:
 
     void                update_preset_names_in_config();
 
-    //BBS: change to json format
+    // change to json format
     //void                save() { this->config.save(this->file); }
     void                save(DynamicPrintConfig* parent_config) { this->config.save_to_json(this->file, std::string("Physical_Printer"), std::string("User"), std::string(SLIC3R_VERSION)); }
     void                save(const std::string& file_name_from, const std::string& file_name_to);

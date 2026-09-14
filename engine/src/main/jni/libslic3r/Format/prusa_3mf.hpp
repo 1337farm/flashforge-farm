@@ -1,5 +1,5 @@
-#ifndef BBS_3MF_hpp_
-#define BBS_3MF_hpp_
+#ifndef PRUSA_3MF_hpp_
+#define PRUSA_3MF_hpp_
 
 #include "../GCode/ThumbnailData.hpp"
 #include "libslic3r/ProjectTask.hpp"
@@ -30,13 +30,13 @@ struct ThumbnailData;
 #define EMBEDDED_FILAMENT_FILE_FORMAT      "Metadata/filament_settings_%1%.config"
 #define EMBEDDED_PRINTER_FILE_FORMAT      "Metadata/machine_settings_%1%.config"
 
-#define BBL_DESIGNER_MODEL_TITLE_TAG     "Title"
-#define BBL_DESIGNER_PROFILE_ID_TAG      "DesignProfileId"
-#define BBL_DESIGNER_PROFILE_TITLE_TAG   "ProfileTitle"
-#define BBL_DESIGNER_MODEL_ID_TAG        "DesignModelId"
+#define PRUSA_DESIGNER_MODEL_TITLE_TAG     "Title"
+#define PRUSA_DESIGNER_PROFILE_ID_TAG      "DesignProfileId"
+#define PRUSA_DESIGNER_PROFILE_TITLE_TAG   "ProfileTitle"
+#define PRUSA_DESIGNER_MODEL_ID_TAG        "DesignModelId"
 
 
-//BBS: define assistant struct to store temporary variable during exporting 3mf
+// define assistant struct to store temporary variable during exporting 3mf
 class PackingTemporaryData
 {
 public:
@@ -48,7 +48,7 @@ public:
 };
 
 
-//BBS: define plate data list related structures
+// define plate data list related structures
 struct PlateData
 {
     PlateData(int plate_id, std::set<std::pair<int, int>> &obj_to_inst_list, bool lock_state) : plate_index(plate_id), locked(lock_state)
@@ -121,7 +121,7 @@ struct PlateData
     bool locked;
 };
 
-// BBS: encrypt
+// encrypt
 enum class SaveStrategy
 {
     Default = 0,
@@ -216,7 +216,7 @@ const int IMPORT_LOAD_CONFIG            = 11;
 const int IMPORT_LOAD_MODEL_OBJECTS     = 12;
 const int IMPORT_STAGE_MAX              = 13;
 
-//BBS export 3mf progress
+//PRUSA export 3mf progress
 typedef std::function<void(int export_stage, int current, int total, bool& cancel)> Export3mfProgressFn;
 typedef std::function<void(int import_stage, int current, int total, bool& cancel)> Import3mfProgressFn;
 
@@ -240,31 +240,31 @@ struct StoreParams
     SaveStrategy strategy = SaveStrategy::Zip64;
     Export3mfProgressFn proFn = nullptr;
     std::vector<PlateBBoxData*> id_bboxes;
-    BBLProject* project = nullptr;
-    BBLProfile* profile = nullptr;
+    PrusaProject* project = nullptr;
+    PrusaProfile* profile = nullptr;
 
     StoreParams() {}
 };
 
 
-//BBS: add plate data list related logic
+// add plate data list related logic
 // add restore logic
 // Load the content of a 3mf file into the given model and preset bundle.
-extern bool load_bbs_3mf(const char* path, DynamicPrintConfig* config, ConfigSubstitutionContext* config_substitutions, Model* model, PlateDataPtrs* plate_data_list, std::vector<Preset*>* project_presets,
-        bool* is_bbl_3mf, bool* is_orca_3mf, Semver* file_version, Import3mfProgressFn proFn = nullptr, LoadStrategy strategy = LoadStrategy::Default, BBLProject *project = nullptr, int plate_id = 0);
+extern bool load_prusa_3mf(const char* path, DynamicPrintConfig* config, ConfigSubstitutionContext* config_substitutions, Model* model, PlateDataPtrs* plate_data_list, std::vector<Preset*>* project_presets,
+        bool* is_prusa_3mf, bool* is_legacy_3mf, Semver* file_version, Import3mfProgressFn proFn = nullptr, LoadStrategy strategy = LoadStrategy::Default, PrusaProject *project = nullptr, int plate_id = 0);
 
-extern std::string bbs_3mf_get_thumbnail(const char * path);
+extern std::string prusa_3mf_get_thumbnail(const char * path);
 
 extern bool load_gcode_3mf_from_stream(std::istream & data, DynamicPrintConfig* config, Model* model, PlateDataPtrs* plate_data_list,
        Semver* file_version);
 
 
-//BBS: add plate data list related logic
+// add plate data list related logic
 // add backup logic
 // Save the given model and the config data contained in the given Print into a 3mf file.
 // The model could be modified during the export process if meshes are not repaired or have no shared vertices
 /*
-extern bool store_bbs_3mf(const char* path,
+extern bool store_prusa_3mf(const char* path,
                           Model* model,
                           PlateDataPtrs& plate_data_list,
                           std::vector<Preset*>& project_presets,
@@ -277,7 +277,7 @@ extern bool store_bbs_3mf(const char* path,
                           bool silence = true);
 */
 
-extern bool store_bbs_3mf(StoreParams& store_params);
+extern bool store_prusa_3mf(StoreParams& store_params);
 
 extern void release_PlateData_list(PlateDataPtrs& plate_data_list);
 
@@ -313,4 +313,4 @@ public:
 
 } // namespace Slic3r
 
-#endif /* BBS_3MF_hpp_ */
+#endif /* PRUSA_3MF_hpp_ */

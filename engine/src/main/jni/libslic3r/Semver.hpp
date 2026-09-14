@@ -151,7 +151,7 @@ public:
 
 	// Conversion
 	std::string to_string() const {
-		//BBS: version format
+		// version format
 		std::string res;
 		int patch_1 = ver.patch/100;
 		int patch_2 = ver.patch%100;
@@ -162,7 +162,7 @@ public:
 		return res;
 	}
 	std::string to_string_sf() const {
-		//BBS: version format
+		// version format
 		std::string res;
 		res = (boost::format("%1%.%2%.%3%") % ver.major % ver.minor % ver.patch).str();
 

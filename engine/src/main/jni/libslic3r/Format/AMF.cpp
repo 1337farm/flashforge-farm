@@ -261,7 +261,7 @@ struct AMFParserContext
     DynamicPrintConfig      *m_config { nullptr };
     // Config substitution rules and collected config substitution log.
     ConfigSubstitutionContext *m_config_substitutions { nullptr };
-    //BBS: add units logic
+    // add units logic
     bool                     m_use_inches { false };
 
 private:
@@ -276,7 +276,7 @@ void AMFParserContext::startElement(const char *name, const char **atts)
         // An AMF file must start with an <amf> tag.
         node_type_new = NODE_TYPE_AMF;
         if (strcmp(name, "amf") != 0) this->stop();
-        // BBS: add units logic
+        // add units logic
         const char *units = get_attribute(atts, "unit");
         if (units && (strcmp(units, "inch") == 0)) { m_use_inches = true; }
         break;
@@ -883,7 +883,7 @@ void AMFParserContext::endDocument()
 }
 
 // Load an AMF file into a provided model.
-//BBS: add inches check logic
+// add inches check logic
 bool load_amf_file(const char *path, DynamicPrintConfig *config, ConfigSubstitutionContext *config_substitutions, Model *model, bool *use_inches)
 {
     if ((path == nullptr) || (model == nullptr))
@@ -946,7 +946,7 @@ bool load_amf_file(const char *path, DynamicPrintConfig *config, ConfigSubstitut
     return result;
 }
 
-//BBS: add inches logic
+// add inches logic
 bool extract_model_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, DynamicPrintConfig* config, ConfigSubstitutionContext* config_substitutions, Model* model, bool* use_inches)
 {
     if (stat.m_uncomp_size == 0)
@@ -1093,7 +1093,7 @@ bool load_amf_archive(const char* path, DynamicPrintConfig* config, ConfigSubsti
 
 // Load an AMF file into a provided model.
 // If config is not a null pointer, updates it if the amf file/archive contains config data
-//BBS: refine the amf logic
+// refine the amf logic
 bool load_amf(const char *path, DynamicPrintConfig *config, ConfigSubstitutionContext *config_substitutions, Model *model, bool* use_inches)
 {
     CNumericLocalesSetter locales_setter; // use "C" locales and point as a decimal separator
@@ -1336,7 +1336,7 @@ bool load_amf(const char *path, DynamicPrintConfig *config, ConfigSubstitutionCo
             code_tree.put("<xmlattr>.color"     , code.color    );
             code_tree.put("<xmlattr>.extra"     , code.extra    );
 
-            //BBS
+            //PRUSA
             std::string gcode = //code.type == CustomGCode::ColorChange ? config->opt_string("color_change_gcode")    :
                                 code.type == CustomGCode::PausePrint  ? config->opt_string("machine_pause_gcode")     :
                                 code.type == CustomGCode::Template    ? config->opt_string("template_custom_gcode")   :

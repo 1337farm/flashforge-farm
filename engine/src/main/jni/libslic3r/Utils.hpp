@@ -107,11 +107,11 @@ void set_resources_dir(const std::string &path);
 // Return a full path to the resources directory.
 const std::string& resources_dir();
 
-//BBS: add temp dir
+// add temp dir
 void set_temporary_dir(const std::string &path);
 const std::string& temporary_dir();
 
-//BBS: convert 0.1.3.4 version format to 00.01.03.04 format, like AA.BB.CC.DD
+// convert 0.1.3.4 version format to 00.01.03.04 format, like AA.BB.CC.DD
 inline std::string convert_to_full_version(std::string short_version)
 {
     std::string result = "";
@@ -184,7 +184,7 @@ void set_data_dir(const std::string &path);
 // Return a full path to the GUI resource files.
 const std::string& data_dir();
 
-// BBL: true: succeed create or dir exists; false: fail to create
+// PRUSA: true: succeed create or dir exists; false: fail to create
 bool makedir(const std::string path);
 
 // Format an output path for debugging purposes.
@@ -238,7 +238,7 @@ extern bool           copy_framework(const std::string &from, const std::string 
 extern CopyFileResult check_copy(const std::string& origin, const std::string& copy);
 
 // Ignore system and hidden files, which may be created by the DropBox synchronisation process.
-// https://github.com/prusa3d/PrusaSlicer/issues/1298
+// github.com/prusa3d/PrusaSlicer/issues/1298
 extern bool is_plain_file(const boost::filesystem::directory_entry &path);
 extern bool is_ini_file(const boost::filesystem::directory_entry &path);
 extern bool is_idx_file(const boost::filesystem::directory_entry &path);
@@ -247,21 +247,15 @@ extern bool is_img_file(const std::string& path);
 extern bool is_gallery_file(const boost::filesystem::directory_entry& path, char const* type);
 extern bool is_gallery_file(const std::string& path, char const* type);
 extern bool is_shapes_dir(const std::string& dir);
-//BBS: add json support
+// add json support
 extern bool is_json_file(const std::string& path);
 
-// Orca: custom protocal support utils
-inline bool is_orca_open(const std::string& url) { return boost::starts_with(url, "orcaslicer://open"); }
+// Custom protocol support utils
 inline bool is_prusaslicer_open(const std::string& url) { return boost::starts_with(url, "prusaslicer://open"); }
-inline bool is_bambustudio_open(const std::string& url) { return boost::starts_with(url, "bambustudio://open") || boost::starts_with(url, "bambustudioopen://"); }
 inline bool is_cura_open(const std::string& url) { return boost::starts_with(url, "cura://open"); }
-inline bool is_supported_open_protocol(const std::string& url) { return is_orca_open(url) || is_prusaslicer_open(url) || is_bambustudio_open(url) || is_cura_open(url); }
+inline bool is_supported_open_protocol(const std::string& url) { return is_prusaslicer_open(url) || is_cura_open(url); }
 inline bool is_printables_link(const std::string& url) {
     const std::regex url_regex("(http|https)://printables.com", std::regex_constants::icase);
-    return std::regex_match(url, url_regex);
-}
-inline bool is_makerworld_link(const std::string& url) {
-    const std::regex url_regex("(http|https)://makerworld.com", std::regex_constants::icase);
     return std::regex_match(url, url_regex);
 }
 inline bool is_thingiverse_link(const std::string& url) {
@@ -299,11 +293,11 @@ std::string header_gcodeviewer_generated();
 
 // getpid platform wrapper
 extern unsigned get_current_pid();
-// BBS: backup & restore
+// backup & restore
 std::string get_process_name(int pid);
 
 // Compute the next highest power of 2 of 32-bit v
-// http://graphics.stanford.edu/~seander/bithacks.html
+// graphics.stanford.edu/~seander/bithacks.html
 inline uint16_t next_highest_power_of_2(uint16_t v)
 {
     if (v != 0)
@@ -439,7 +433,7 @@ extern std::string xml_unescape(std::string text);
 
 #if defined __GNUC__ && __GNUC__ < 5 && !defined __clang__
 // Older GCCs don't have std::is_trivially_copyable
-// cf. https://gcc.gnu.org/onlinedocs/gcc-4.9.4/libstdc++/manual/manual/status.html#status.iso.2011
+// cf. gcc.gnu.org/onlinedocs/gcc-4.9.4/libstdc++/manual/manual/status.html#status.iso.2011
 // #warning "GCC version < 5, faking std::is_trivially_copyable"
 template<typename T> struct IsTriviallyCopyable { static constexpr bool value = true; };
 #else
@@ -561,7 +555,7 @@ inline std::string get_time_dhms(float time_in_secs)
     return buffer;
 }
 
-inline std::string get_bbl_time_dhms(float time_in_secs)
+inline std::string get_prusa_time_dhms(float time_in_secs)
 {
     int days = (int)(time_in_secs / 86400.0f);
     time_in_secs -= (float)days * 86400.0f;
@@ -635,7 +629,7 @@ inline std::string get_time_hms(float time_in_secs)
     return buffer;
 }
 
-inline std::string get_bbl_monitor_time_dhm(float time_in_secs)
+inline std::string get_prusa_monitor_time_dhm(float time_in_secs)
 {
     int days = (int)(time_in_secs / 86400.0f);
     time_in_secs -= (float)days * 86400.0f;
@@ -657,7 +651,7 @@ inline std::string get_bbl_monitor_time_dhm(float time_in_secs)
     return buffer;
 }
 
-inline std::string get_bbl_monitor_end_time_dhm(float time_in_secs)
+inline std::string get_prusa_monitor_end_time_dhm(float time_in_secs)
 {
     if (time_in_secs == 0.0f)
         return {};
@@ -672,7 +666,7 @@ inline std::string get_bbl_monitor_end_time_dhm(float time_in_secs)
     return stream.str();
 }
 
-inline std::string get_bbl_remain_time_dhms(float time_in_secs)
+inline std::string get_prusa_remain_time_dhms(float time_in_secs)
 {
     int days = (int) (time_in_secs / 86400.0f);
     time_in_secs -= (float) days * 86400.0f;
@@ -694,7 +688,7 @@ inline std::string get_bbl_remain_time_dhms(float time_in_secs)
     return buffer;
 }
 
-bool bbl_calc_md5(std::string &filename, std::string &md5_out);
+bool prusa_calc_md5(std::string &filename, std::string &md5_out);
 
 inline std::string filter_characters(const std::string& str, const std::string& filterChars)
 {
@@ -723,7 +717,7 @@ bool install_vendor_bundles_from_resources(const std::vector<std::string>& bundl
                                            const std::string& resource_subdir = "profiles",
                                            const std::string& data_subdir     = "system");
 
-// Orca: Since 1.7.9 Boost deprecated save_string_file and load_string_file, copy and modified from boost 1.7.8
+// : Since 1.7.9 Boost deprecated save_string_file and load_string_file, copy and modified from boost 1.7.8
 void save_string_file(const boost::filesystem::path& p, const std::string& str);
 void load_string_file(const boost::filesystem::path& p, std::string& str);
 

@@ -208,7 +208,7 @@ int main(int argc, char** argv) {
     // Positional: [model.stl] [filaments]; explicit: --3mf <file> (mirrors the
     // JNI model_read_from_file path), --stl <file>, and --scope 'key=value'
     // (repeatable) which injects a per-OBJECT config entry the same way a
-    // Bambu 3MF's model metadata does (DynamicPrintConfig::set_deserialize).
+    // legacy 3MF's model metadata does (DynamicPrintConfig::set_deserialize).
     std::string stl_path;
     std::string mf3_path;
     std::vector<std::pair<std::string, std::string>> scope_entries;
@@ -297,7 +297,7 @@ int main(int argc, char** argv) {
             log_marker("synthetic box object added: %zu volume(s)", obj->volumes.size());
         }
 
-        // Inject per-object config entries the way a Bambu 3MF's model
+        // Inject per-object config entries the way a legacy 3MF's model
         // metadata does (DynamicPrintConfig::set_deserialize, enabling the
         // same substitutions the JNI uses inside Model::read_from_file).
         if (!scope_entries.empty() && model.objects.empty()) {

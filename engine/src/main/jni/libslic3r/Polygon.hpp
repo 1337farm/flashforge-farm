@@ -88,7 +88,7 @@ public:
     Point point_projection(const Point &point) const;
     std::vector<float> parameter_by_length() const;
     
-    //BBS
+    //PRUSA
     Polygon transform(const Transform3d& trafo) const;
 
     using iterator = Points::iterator;

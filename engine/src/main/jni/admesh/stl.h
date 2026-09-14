@@ -155,7 +155,7 @@ struct stl_file {
 	stl_stats     					stats;
 };
 
-// BBS: per-face property used by the BBS/Orca 3MF format (e.g. small overhang / hole tagging).
+// BBS: per-face property used by the BBS/3MF format (e.g. small overhang / hole tagging).
 typedef enum {
     eNormal,              // normal face
     eSmallOverhang,       // small overhang

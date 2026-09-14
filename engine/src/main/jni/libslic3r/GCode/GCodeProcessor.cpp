@@ -107,13 +107,13 @@ const std::string GCodeProcessor::Flush_End_Tag = " FLUSH_END";
 const std::string GCodeProcessor::VFlush_Start_Tag = " VFLUSH_START";
 const std::string GCodeProcessor::VFlush_End_Tag  = " VFLUSH_END";
 
-//Orca: External device purge tag
+// External device purge tag
 const std::string GCodeProcessor::External_Purge_Tag = " EXTERNAL_PURGE";
 
 const float GCodeProcessor::Wipe_Width = 0.05f;
 const float GCodeProcessor::Wipe_Height = 0.05f;
 
-bool GCodeProcessor::s_IsBBLPrinter = true;
+bool GCodeProcessor::s_IsPrusaPrinter = true;
 
 static void set_option_value(ConfigOptionFloats& option, size_t id, float value)
 {
@@ -279,7 +279,7 @@ void GCodeProcessor::TimeMachine::State::reset()
     safe_feedrate = 0.0f;
     axis_feedrate = { 0.0f, 0.0f, 0.0f, 0.0f };
     abs_axis_feedrate = { 0.0f, 0.0f, 0.0f, 0.0f };
-    //BBS
+    //PRUSA
     enter_direction = { 0.0f, 0.0f, 0.0f };
     exit_direction = { 0.0f, 0.0f, 0.0f };
 }
@@ -424,7 +424,7 @@ void GCodeProcessor::TimeMachine::calculate_time(GCodeProcessorResult& result, P
         time += double(block_time);
         result.moves[block.move_id].time[static_cast<size_t>(mode)] = block_time;
         gcode_time.cache += block_time;
-        //BBS
+        //PRUSA
         if (block.flags.prepare_stage)
             prepare_time += block_time;
 
@@ -455,12 +455,12 @@ void GCodeProcessor::TimeMachine::calculate_time(GCodeProcessorResult& result, P
                 if ((position - prev_move.position).norm() > EPSILON &&
                     (position - curr_move.position).norm() > EPSILON) {
                     const float delta_extruder = interpolate ? lerp(prev_move.delta_extruder, curr_move.delta_extruder, t) : curr_move.delta_extruder;
-                    const float feedrate = curr_move.feedrate; //  ORCA: set feedrate to the gcode feed rate to prevent visualiser from
+                    const float feedrate = curr_move.feedrate; // set feedrate to the gcode feed rate to prevent visualiser from
                                                                 // displaying erroneous speed transition when actual speed/actual flow views are NOT selected.
                                                                 // interpolate ? lerp(prev_move.feedrate, curr_move.feedrate, t) : curr_move.feedrate;
                     const float width = interpolate ? lerp(prev_move.width, curr_move.width, t) : curr_move.width;
                     const float height = interpolate ? lerp(prev_move.height, curr_move.height, t) : curr_move.height;
-                    // ORCA: Fix issue with flow rate changes being visualized incorrectly
+                    // Fix issue with flow rate changes being visualized incorrectly
                     const float mm3_per_mm = curr_move.mm3_per_mm;
                     const float fan_speed = interpolate ? lerp(prev_move.fan_speed, curr_move.fan_speed, t) : curr_move.fan_speed;
                     const float temperature = interpolate ? lerp(prev_move.temperature, curr_move.temperature, t) : curr_move.temperature;
@@ -486,12 +486,12 @@ void GCodeProcessor::TimeMachine::calculate_time(GCodeProcessorResult& result, P
                 if ((position - prev_move.position).norm() > EPSILON &&
                     (position - curr_move.position).norm() > EPSILON) {
                     const float delta_extruder = interpolate ? lerp(prev_move.delta_extruder, curr_move.delta_extruder, t) : curr_move.delta_extruder;
-                    const float feedrate = curr_move.feedrate; //  ORCA: set feedrate to the gcode feed rate to prevent visualiser from
+                    const float feedrate = curr_move.feedrate; // set feedrate to the gcode feed rate to prevent visualiser from
                                                                 // displaying erroneous speed transition when actual speed/actual flow views are NOT selected.
                                                                 // interpolate ? lerp(prev_move.feedrate, curr_move.feedrate, t) : curr_move.feedrate;
                     const float width = interpolate ? lerp(prev_move.width, curr_move.width, t) : curr_move.width;
                     const float height = interpolate ? lerp(prev_move.height, curr_move.height, t) : curr_move.height;
-                    // ORCA: Fix issue with flow rate changes being visualized incorrectly
+                    // Fix issue with flow rate changes being visualized incorrectly
                     const float mm3_per_mm = curr_move.mm3_per_mm;
                     const float fan_speed = interpolate ? lerp(prev_move.fan_speed, curr_move.fan_speed, t) : curr_move.fan_speed;
                     const float temperature = interpolate ? lerp(prev_move.temperature, curr_move.temperature, t) : curr_move.temperature;
@@ -766,7 +766,7 @@ public:
                       std::function<std::string(unsigned int, const std::vector<float>&)> line_inserter,
                       std::function<std::string(const std::string&)>                      line_replacer)
     {
-        // Orca: find start pos by seaching G28/G29/PRINT_START/START_PRINT commands
+        // Find start pos by seaching G28/G29/PRINT_START/START_PRINT commands
         auto is_start_pos = [](const std::string& curr_cmd) {
             return boost::iequals(curr_cmd, "G28") || boost::iequals(curr_cmd, "G29") || boost::iequals(curr_cmd, "PRINT_START") ||
                    boost::iequals(curr_cmd, "START_PRINT");
@@ -1039,8 +1039,8 @@ void GCodeProcessor::run_post_process()
                     PrintEstimatedStatistics::ETimeMode mode    = static_cast<PrintEstimatedStatistics::ETimeMode>(i);
                     if (mode == PrintEstimatedStatistics::ETimeMode::Normal || machine.enabled) {
                         char buf[128];
-                        if (!s_IsBBLPrinter)
-                            // Orca: compatibility with klipper_estimator
+                        if (!s_IsPrusaPrinter)
+                            // Compatibility with klipper_estimator
                             sprintf(buf, "; estimated printing time (%s mode) = %s\n",
                                     (mode == PrintEstimatedStatistics::ETimeMode::Normal) ? "normal" : "silent",
                                     get_time_dhms(machine.time).c_str());
@@ -1064,7 +1064,7 @@ void GCodeProcessor::run_post_process()
                     }
                 }
             }
-            // Orca: write total layer number, this is used by Bambu printers only as of now
+            // Write total layer number, this is used by Prusa printers only as of now
             else if (line == reserved_tag(ETags::Total_Layer_Number_Placeholder)) {
                 char buf[128];
                 sprintf(buf, "; total layer number: %u\n", m_layer_id);
@@ -1230,7 +1230,7 @@ void GCodeProcessor::run_post_process()
         }
     };
 
-    // Orca: track the current layer during the post-processing pass so that preheat M104s emitted
+    // Track the current layer during the post-processing pass so that preheat M104s emitted
     // for tool changes on the first layer use the correct first-layer temperature. The member
     // m_layer_id is populated during the analysis pass and ends at the total layer count, so it
     // cannot be used here — it would always select the "other layers" temperature for multi-layer
@@ -1257,7 +1257,7 @@ void GCodeProcessor::run_post_process()
                     warning += gcode_line;
                     warning += "Generated M104 lines may be incorrect.";
                     BOOST_LOG_TRIVIAL(error) << warning;
-                    // Orca todo
+                    // TODO
                     if (m_print != nullptr)
                         m_print->active_step_add_warning(PrintStateBase::WarningLevel::CRITICAL, warning);
                 }
@@ -1265,14 +1265,14 @@ void GCodeProcessor::run_post_process()
                     backtrace, cmd,
                     // line inserter
                     [tool_number, this, &current_layer_id](unsigned int id, const std::vector<float>& time_diffs) {
-                        // Orca: use the locally-tracked layer index (current_layer_id) rather than
+                        // Use the locally-tracked layer index (current_layer_id) rather than
                         // the stale m_layer_id from the analysis pass. current_layer_id == 0 means
                         // we haven't reached the first ;LAYER_CHANGE marker yet (e.g. tool change
                         // inside start gcode); == 1 means we are inside the first printed layer.
                         // Both cases should use the first-layer nozzle temperature.
                         const int temperature = int(current_layer_id > 1 ? m_filament_nozzle_temp[tool_number] :
                                                                          m_filament_nozzle_temp_first_layer[tool_number]);
-                        // Orca: M104.1 for XL printers, I can't find the documentation for this so I copied the C++ comments from
+                        // M104.1 for XL printers, I can't find the documentation for this so I copied the C++ comments from
                         // Prusa-Firmware-Buddy here
                         /**
                         * M104.1: Early Set Hotend Temperature (preheat, and with stealth mode support)
@@ -1363,9 +1363,9 @@ void GCodeProcessor::run_post_process()
                 if (eol) {
                     ++line_id;
                     const unsigned int internal_g1_lines_counter = export_line.update(gcode_line, line_id, g1_lines_counter);
-                    // Orca: track the current layer for preheat temperature selection.
+                    // Track the current layer for preheat temperature selection.
                     // The line is ";" + reserved_tag(Layer_Change) + EOL; match it independent of
-                    // BBL vs. compatible flavor (which differ in the tag text).
+                    // PRUSA vs. compatible flavor (which differ in the tag text).
                     if (gcode_line.size() > 1 && gcode_line.front() == ';') {
                         std::string_view tag_line(gcode_line);
                         // strip trailing CR/LF
@@ -1580,18 +1580,18 @@ void GCodeProcessor::UsedFilaments::process_caches(GCodeProcessor* processor)
 }
 
 void GCodeProcessorResult::reset() {
-    //BBS: add mutex for protection of gcode result
+    // add mutex for protection of gcode result
     lock();
 
     moves.clear();
     lines_ends.clear();
     printable_area = Pointfs();
-    //BBS: add bed exclude area
+    // add bed exclude area
     bed_exclude_area = Pointfs();
     wrapping_exclude_area = Pointfs();
-    //BBS: add toolpath_outside
+    // add toolpath_outside
     toolpath_outside = false;
-    //BBS: add label_object_enabled
+    // add label_object_enabled
     label_object_enabled = false;
     long_retraction_when_cut = false;
     timelapse_warning_code = 0;
@@ -1613,20 +1613,18 @@ void GCodeProcessorResult::reset() {
     filament_change_count_map.clear();
     warnings.clear();
 
-    //BBS: add mutex for protection of gcode result
+    // add mutex for protection of gcode result
     unlock();
-    //BBS: add logs
+    // add logs
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(" %1%: this=%2% reset finished")%__LINE__%this;
 }
 
 const std::vector<std::pair<GCodeProcessor::EProducer, std::string>> GCodeProcessor::Producers = {
-    //BBS: OrcaSlicer is also "bambu". Otherwise the time estimation didn't work.
-    //FIXME: Workaround and should be handled when do removing-bambu
-    { EProducer::OrcaSlicer, SLIC3R_APP_NAME },
-    { EProducer::OrcaSlicer, "generated by OrcaSlicer" },
-    { EProducer::OrcaSlicer, "generated by BambuStudio" },
-    { EProducer::OrcaSlicer, "BambuStudio" }
-    //{ EProducer::Slic3rPE,    "generated by Slic3r Bambu Edition" },
+    // PrusaSlicer gcode carries its producer tag; required for time estimation.
+    { EProducer::PrusaSlicer, SLIC3R_APP_NAME },
+    { EProducer::PrusaSlicer, "generated by PrusaSlicer" },
+    { EProducer::PrusaSlicer, "generated by PrusaSlicer" },
+    { EProducer::PrusaSlicer, "PrusaSlicer" }
     //{ EProducer::Slic3r,      "generated by Slic3r" },
     //{ EProducer::SuperSlicer, "generated by SuperSlicer" },
     //{ EProducer::Cura,        "Cura_SteamEngine" },
@@ -1643,7 +1641,7 @@ bool GCodeProcessor::contains_reserved_tag(const std::string& gcode, std::string
     bool ret = false;
 
     GCodeReader parser;
-    auto& _tags = s_IsBBLPrinter ? Reserved_Tags : Reserved_Tags_compatible;
+    auto& _tags = s_IsPrusaPrinter ? Reserved_Tags : Reserved_Tags_compatible;
     parser.parse_buffer(gcode, [&ret, &found_tag, _tags](GCodeReader& parser, const GCodeReader::GCodeLine& line) {
         std::string comment = line.raw();
         if (comment.length() > 2 && comment.front() == ';') {
@@ -1671,7 +1669,7 @@ bool GCodeProcessor::contains_reserved_tags(const std::string& gcode, unsigned i
     CNumericLocalesSetter locales_setter;
 
     GCodeReader parser;
-    auto& _tags = s_IsBBLPrinter ? Reserved_Tags : Reserved_Tags_compatible;
+    auto& _tags = s_IsPrusaPrinter ? Reserved_Tags : Reserved_Tags_compatible;
     parser.parse_buffer(gcode, [&ret, &found_tag, max_count, _tags](GCodeReader& parser, const GCodeReader::GCodeLine& line) {
         std::string comment = line.raw();
         if (comment.length() > 2 && comment.front() == ';') {
@@ -1752,14 +1750,14 @@ void GCodeProcessor::register_commands()
         {"M205", [this](const GCodeReader::GCodeLine& line) { process_M205(line); }}, // Advanced settings
         {"M221", [this](const GCodeReader::GCodeLine& line) { process_M221(line); }}, // Set extrude factor override percentage
 
-        {"M400", [this](const GCodeReader::GCodeLine& line) { process_M400(line); }}, // BBS delay
+        {"M400", [this](const GCodeReader::GCodeLine& line) { process_M400(line); }}, // PRUSA delay
         {"M401", [this](const GCodeReader::GCodeLine& line) { process_M401(line); }}, // Repetier: Store x, y and z position
         {"M402", [this](const GCodeReader::GCodeLine& line) { process_M402(line); }}, // Repetier: Go to stored position
         {"M566", [this](const GCodeReader::GCodeLine& line) { process_M566(line); }}, // Set allowable instantaneous speed change
         {"M702", [this](const GCodeReader::GCodeLine& line) { process_M702(line); }}, // Unload the current filament into the MK3 MMU2 unit at the end of print.
         {"M1020", [this](const GCodeReader::GCodeLine& line) { process_M1020(line); }}, // Select Tool
 
-// ORCA: Add Pressure Advance visualization support
+// Add Pressure Advance visualization support
         {"M900", [this](const GCodeReader::GCodeLine& line) { process_M900(line); }}, // Marlin: Set pressure advance
         {"M572", [this](const GCodeReader::GCodeLine& line) { process_M572(line); }}, // RepRapFirmware/Duet: Set pressure advance
 
@@ -1964,7 +1962,7 @@ void GCodeProcessor::apply_config(const PrintConfig& config)
     size_t filament_count = config.filament_diameter.values.size();
     m_result.filaments_count = filament_count;
 
-    // Orca:
+    //
     m_is_XL_printer = is_XL_printer(config);
     m_preheat_time = config.preheat_time;
     m_preheat_steps = config.preheat_steps;
@@ -2091,7 +2089,7 @@ void GCodeProcessor::apply_config(const DynamicPrintConfig& config)
 {
     m_parser.apply_config(config);
 
-    //BBS
+    //PRUSA
     const ConfigOptionFloatsNullable* nozzle_volume = config.option<ConfigOptionFloatsNullable>("nozzle_volume");
     if (nozzle_volume != nullptr) {
         m_nozzle_volume.resize(nozzle_volume->size(), 0);
@@ -2123,7 +2121,7 @@ void GCodeProcessor::apply_config(const DynamicPrintConfig& config)
     if (printable_area != nullptr)
         m_result.printable_area = make_counter_clockwise(printable_area->values);
 
-    //BBS: add bed_exclude_area
+    // add bed_exclude_area
     const ConfigOptionPoints* bed_exclude_area = config.option<ConfigOptionPoints>("bed_exclude_area");
     if (bed_exclude_area != nullptr)
         m_result.bed_exclude_area = bed_exclude_area->values;
@@ -2144,7 +2142,7 @@ void GCodeProcessor::apply_config(const DynamicPrintConfig& config)
     if (printer_settings_id != nullptr)
         m_result.settings_ids.printer = printer_settings_id->value;
 
-    // BBS
+    // PRUSA
     m_result.filaments_count = config.option<ConfigOptionFloats>("filament_diameter")->values.size();
 
     const ConfigOptionFloats* filament_diameters = config.option<ConfigOptionFloats>("filament_diameter");
@@ -2195,7 +2193,7 @@ void GCodeProcessor::apply_config(const DynamicPrintConfig& config)
         std::transform(m_filament_maps.begin(), m_filament_maps.end(), m_filament_maps.begin(), [](int value) {return value - 1; });
     }
 
-    //BBS
+    //PRUSA
     const ConfigOptionFloats* filament_costs = config.option<ConfigOptionFloats>("filament_cost");
     if (filament_costs != nullptr) {
         m_result.filament_costs.clear();
@@ -2207,7 +2205,7 @@ void GCodeProcessor::apply_config(const DynamicPrintConfig& config)
         m_result.filament_costs.emplace_back(DEFAULT_FILAMENT_COST);
     }
 
-    //BBS
+    //PRUSA
     const ConfigOptionInts* filament_vitrification_temperature = config.option<ConfigOptionInts>("temperature_vitrification");
     if (filament_vitrification_temperature != nullptr) {
         m_result.filament_vitrification_temperature.clear();
@@ -2225,7 +2223,7 @@ void GCodeProcessor::apply_config(const DynamicPrintConfig& config)
     const ConfigOptionPoints* extruder_offset = config.option<ConfigOptionPoints>("extruder_offset");
     const ConfigOptionBool* single_extruder_multi_material = config.option<ConfigOptionBool>("single_extruder_multi_material");
     if (extruder_offset != nullptr) {
-        //BBS: for single extruder multi material, only use the offset of first extruder
+        // for single extruder multi material, only use the offset of first extruder
         if (single_extruder_multi_material != nullptr && single_extruder_multi_material->getBool()) {
             Vec2f offset = extruder_offset->values[0].cast<float>();
             m_extruder_offsets.resize(m_result.filaments_count);
@@ -2248,7 +2246,7 @@ void GCodeProcessor::apply_config(const DynamicPrintConfig& config)
         }
     }
 
-    // BBS
+    // PRUSA
     const ConfigOptionStrings* filament_colour = config.option<ConfigOptionStrings>("filament_colour");
     if (filament_colour != nullptr && filament_colour->values.size() == m_result.extruder_colors.size()) {
         for (size_t i = 0; i < m_result.extruder_colors.size(); ++i) {
@@ -2546,12 +2544,12 @@ void GCodeProcessor::process_file(const std::string& filename, std::function<voi
         });
         m_parser.reset();
 
-        // if the gcode was produced by OrcaSlicer,
+        // if the gcode was produced by a slicer family,
         // extract the config from it
-        if (m_producer == EProducer::OrcaSlicer || m_producer == EProducer::Slic3rPE || m_producer == EProducer::Slic3r) {
+        if (m_producer == EProducer::PrusaSlicer || m_producer == EProducer::Slic3rPE || m_producer == EProducer::Slic3r) {
             DynamicPrintConfig config;
             config.apply(FullPrintConfig::defaults());
-            // Silently substitute unknown values by new ones for loading configurations from OrcaSlicer's own G-code.
+            // Silently substitute unknown values by new ones for loading configurations from slicer-family G-code.
             // Showing substitution log or errors may make sense, but we are not really reading many values from the G-code config,
             // thus a probability of incorrect substitution is low and the G-code viewer is a consumer-only anyways.
             config.load_from_gcode_file(filename, ForwardCompatibilitySubstitutionRule::EnableSilent);
@@ -2559,8 +2557,8 @@ void GCodeProcessor::process_file(const std::string& filename, std::function<voi
             // Get the correct printer vendor based on the `printer_model` field
             auto printer_model_opt = config.opt<ConfigOptionString>("printer_model");
             if (printer_model_opt && !printer_model_opt->value.empty()) {
-                // TODO: Orca hack, proper vendor check?
-                GCodeProcessor::s_IsBBLPrinter = boost::starts_with(printer_model_opt->value, "Bambu Lab");
+                // TODO: vendor check?
+                GCodeProcessor::s_IsPrusaPrinter = boost::starts_with(printer_model_opt->value, "Prusa");
             }
 
             ConfigOptionStrings *filament_color = config.opt<ConfigOptionStrings>("filament_colour");
@@ -2644,7 +2642,7 @@ void GCodeProcessor::finalize(bool post_process)
     if (post_process){
         run_post_process();
     }
-    //BBS: update slice warning
+    // update slice warning
     update_slice_warnings();
 }
 
@@ -2824,7 +2822,7 @@ void GCodeProcessor::process_gcode_line(const GCodeReader::GCodeLine& line, bool
             process_SET_VELOCITY_LIMIT(line);
             return;
         }
-// ORCA: Add Pressure Advance visualization support
+// Add Pressure Advance visualization support
         if (boost::iequals(cmd, "SET_PRESSURE_ADVANCE"))
         {
             process_SET_PRESSURE_ADVANCE(line);
@@ -2892,7 +2890,7 @@ int GCodeProcessor::get_gcode_last_filament(const std::string& gcode_str)
     return out_filament;
 }
 
-//BBS: get last z position from gcode
+// get last z position from gcode
 bool GCodeProcessor::get_last_z_from_gcode(const std::string& gcode_str, double& z)
 {
     int str_size = gcode_str.size();
@@ -3095,13 +3093,13 @@ void GCodeProcessor::process_tags(const std::string_view comment, bool producers
         return;
     }
 
-    //BBS: flush start tag
+    // flush start tag
     if (boost::starts_with(comment, GCodeProcessor::Flush_Start_Tag)) {
         m_flushing = true;
         return;
     }
 
-    //BBS: flush end tag
+    // flush end tag
     if (boost::starts_with(comment, GCodeProcessor::Flush_End_Tag)) {
         m_flushing = false;
         return;
@@ -3117,7 +3115,7 @@ void GCodeProcessor::process_tags(const std::string_view comment, bool producers
         return;
     }
 
-    // Orca: Integrate filament consumption for purging performed to an external device and controlled via macros
+    // Integrate filament consumption for purging performed to an external device and controlled via macros
     // (eg. Happy Hare) in the filament consumption stats.
     if (boost::starts_with(comment, GCodeProcessor::External_Purge_Tag)) {
         std::regex numberRegex(R"(\d+\.\d+)");
@@ -3136,7 +3134,7 @@ void GCodeProcessor::process_tags(const std::string_view comment, bool producers
         return;
     }
 
-    if (!producers_enabled || m_producer == EProducer::OrcaSlicer) {
+    if (!producers_enabled || m_producer == EProducer::PrusaSlicer) {
         // height tag
         if (boost::starts_with(comment, reserved_tag(ETags::Height))) {
             if (!parse_number(comment.substr(reserved_tag(ETags::Height).size()), m_forced_height))
@@ -3149,7 +3147,7 @@ void GCodeProcessor::process_tags(const std::string_view comment, bool producers
                 BOOST_LOG_TRIVIAL(error) << "GCodeProcessor encountered an invalid value for Width (" << comment << ").";
             return;
         }
-        // Orca: manual tool change tag
+        // Manual tool change tag
         if (m_manual_filament_change && boost::starts_with(comment, reserved_tag(ETags::Manual_Tool_Change))) {
             std::string_view tool_change_cmd = comment.substr(reserved_tag(ETags::Manual_Tool_Change).length());
             if (boost::starts_with(tool_change_cmd, "T")) {
@@ -3262,7 +3260,7 @@ bool GCodeProcessor::process_producers_tags(const std::string_view comment)
     case EProducer::Slic3rPE:
     case EProducer::Slic3r:
     case EProducer::SuperSlicer:
-    case EProducer::OrcaSlicer: { return process_bambuslicer_tags(comment); }
+    case EProducer::PrusaSlicer: { return process_prusaslicer_tags(comment); }
     case EProducer::Cura:        { return process_cura_tags(comment); }
     case EProducer::Simplify3D:  { return process_simplify3d_tags(comment); }
     case EProducer::CraftWare:   { return process_craftware_tags(comment); }
@@ -3272,7 +3270,7 @@ bool GCodeProcessor::process_producers_tags(const std::string_view comment)
     }
 }
 
-bool GCodeProcessor::process_bambuslicer_tags(const std::string_view comment)
+bool GCodeProcessor::process_prusaslicer_tags(const std::string_view comment)
 {
     return false;
 }
@@ -3917,7 +3915,7 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4>& axes
             minimum_travel_feedrate(static_cast<PrintEstimatedStatistics::ETimeMode>(i), m_feedrate) :
             minimum_feedrate(static_cast<PrintEstimatedStatistics::ETimeMode>(i), m_feedrate);
 
-        //BBS: calculeta enter and exit direction
+        // calculeta enter and exit direction
         curr.enter_direction = { static_cast<float>(delta_pos[X]), static_cast<float>(delta_pos[Y]), static_cast<float>(delta_pos[Z]) };
         float norm = curr.enter_direction.norm();
         if (!is_extrusion_only_move(delta_pos))
@@ -3926,7 +3924,7 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4>& axes
 
         TimeBlock block;
         block.move_type = type;
-        //BBS: don't calculate travel time into extrusion path, except travel inside start and end gcode.
+        // don't calculate travel time into extrusion path, except travel inside start and end gcode.
         block.role = (type != EMoveType::Travel || m_extrusion_role == erCustom) ? m_extrusion_role : erNone;
         block.distance = distance;
         block.g1_line_id = m_g1_line_id;
@@ -3935,7 +3933,7 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4>& axes
         block.layer_id = std::max<unsigned int>(1, m_layer_id);
         block.flags.prepare_stage = m_processing_start_custom_gcode;
 
-        //BBS: limite the cruise according to centripetal acceleration
+        // limite the cruise according to centripetal acceleration
         //Only need to handle when both prev and curr segment has movement in x-y plane
         if ((prev.exit_direction(0) != 0.0f || prev.exit_direction(1) != 0.0f) &&
             (curr.enter_direction(0) != 0.0f || curr.enter_direction(1) != 0.0f)) {
@@ -3946,11 +3944,11 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4>& axes
             v2(2, 0) = 0.0f;
             v2.normalize();
             float norm_diff = (v2 - v1).norm();
-            //BBS: don't need to consider limitation of centripetal acceleration
+            // don't need to consider limitation of centripetal acceleration
             //when angle changing is larger than 28.96 degree or two lines are almost collinear.
             //Attention!!! these two value must be same with MC side.
             if (norm_diff < 0.5f && norm_diff > 0.00001f) {
-                //BBS: calculate angle
+                // calculate angle
                 float dot = v1(0) * v2(0) + v1(1) * v2(1);
                 float cross = v1(0) * v2(1) - v1(1) * v2(0);
                 float angle = float(atan2(double(cross), double(dot)));
@@ -3974,7 +3972,7 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4>& axes
                 if (axis_max_feedrate != 0.0f) min_feedrate_factor = std::min<float>(min_feedrate_factor, axis_max_feedrate / curr.abs_axis_feedrate[a]);
             }
         }
-        //BBS: update curr.feedrate
+        // update curr.feedrate
         curr.feedrate *= min_feedrate_factor;
         block.feedrate_profile.cruise = curr.feedrate;
 
@@ -3992,7 +3990,7 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4>& axes
                 get_retract_acceleration(static_cast<PrintEstimatedStatistics::ETimeMode>(i)) :
                 get_acceleration(static_cast<PrintEstimatedStatistics::ETimeMode>(i)));
 
-        //BBS
+        //PRUSA
         for (unsigned char a = X; a <= E; ++a) {
             float axis_max_acceleration = get_axis_max_acceleration(static_cast<PrintEstimatedStatistics::ETimeMode>(i), static_cast<Axis>(a));
             if (acceleration * std::abs(delta_pos[a]) * inv_distance > axis_max_acceleration)
@@ -4121,7 +4119,7 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4>& axes
     if (m_seams_detector.is_active()) {
         // check for seam starting vertex
         if (type == EMoveType::Extrude && m_extrusion_role == erExternalPerimeter) {
-            //BBS: m_result.moves.back().position has plate offset, must minus plate offset before calculate the real seam position
+            // m_result.moves.back().position has plate offset, must minus plate offset before calculate the real seam position
             const Vec3f new_pos = m_result.moves.back().position - m_extruder_offsets[filament_id] - plate_offset;
             if (!m_seams_detector.has_first_vertex()) {
                 m_seams_detector.set_first_vertex(new_pos);
@@ -4140,7 +4138,7 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4>& axes
             };
 
             const Vec3f curr_pos(m_end_position[X], m_end_position[Y], m_end_position[Z]);
-            //BBS: m_result.moves.back().position has plate offset, must minus plate offset before calculate the real seam position
+            // m_result.moves.back().position has plate offset, must minus plate offset before calculate the real seam position
             const Vec3f new_pos = m_result.moves.back().position - m_extruder_offsets[filament_id] - plate_offset;
             const std::optional<Vec3f> first_vertex = m_seams_detector.get_first_vertex();
             // the threshold value = 0.0625f == 0.25 * 0.25 is arbitrary, we may find some smarter condition later
@@ -4231,7 +4229,7 @@ void GCodeProcessor::process_VG1(const GCodeReader::GCodeLine& line)
         return;
 
     EMoveType type = move_type(delta_pos);
-    // BBS: now we only support virtual flush
+    // now we only support virtual flush
     if (EMoveType::Unretract == type && m_virtual_flushing) {
         int extruder_id = get_extruder_id();
         float volume_flushed_filament = area_filament_cross_section * delta_pos[E];
@@ -4277,7 +4275,7 @@ void GCodeProcessor::process_VG1(const GCodeReader::GCodeLine& line)
             minimum_travel_feedrate(static_cast<PrintEstimatedStatistics::ETimeMode>(i), m_feedrate) :
             minimum_feedrate(static_cast<PrintEstimatedStatistics::ETimeMode>(i), m_feedrate);
 
-        //BBS: calculeta enter and exit direction
+        // calculeta enter and exit direction
         curr.enter_direction = { static_cast<float>(delta_pos[X]), static_cast<float>(delta_pos[Y]), static_cast<float>(delta_pos[Z]) };
         float norm = curr.enter_direction.norm();
         if (!is_extrusion_only_move(delta_pos))
@@ -4286,14 +4284,14 @@ void GCodeProcessor::process_VG1(const GCodeReader::GCodeLine& line)
 
         TimeBlock block;
         block.move_type = type;
-        //BBS: don't calculate travel time into extrusion path, except travel inside start and end gcode.
+        // don't calculate travel time into extrusion path, except travel inside start and end gcode.
         block.role = (type != EMoveType::Travel || m_extrusion_role == erCustom) ? m_extrusion_role : erNone;
         block.distance = distance;
         block.g1_line_id = m_g1_line_id;
         block.layer_id = std::max<unsigned int>(1, m_layer_id);
         block.flags.prepare_stage = m_processing_start_custom_gcode;
 
-        //BBS: limite the cruise according to centripetal acceleration
+        // limite the cruise according to centripetal acceleration
         //Only need to handle when both prev and curr segment has movement in x-y plane
         if ((prev.exit_direction(0) != 0.0f || prev.exit_direction(1) != 0.0f) &&
             (curr.enter_direction(0) != 0.0f || curr.enter_direction(1) != 0.0f)) {
@@ -4304,11 +4302,11 @@ void GCodeProcessor::process_VG1(const GCodeReader::GCodeLine& line)
             v2(2, 0) = 0.0f;
             v2.normalize();
             float norm_diff = (v2 - v1).norm();
-            //BBS: don't need to consider limitation of centripetal acceleration
+            // don't need to consider limitation of centripetal acceleration
             //when angle changing is larger than 28.96 degree or two lines are almost collinear.
             //Attention!!! these two value must be same with MC side.
             if (norm_diff < 0.5f && norm_diff > 0.00001f) {
-                //BBS: calculate angle
+                // calculate angle
                 float dot = v1(0) * v2(0) + v1(1) * v2(1);
                 float cross = v1(0) * v2(1) - v1(1) * v2(0);
                 float angle = float(atan2(double(cross), double(dot)));
@@ -4332,7 +4330,7 @@ void GCodeProcessor::process_VG1(const GCodeReader::GCodeLine& line)
                 if (axis_max_feedrate != 0.0f) min_feedrate_factor = std::min<float>(min_feedrate_factor, axis_max_feedrate / curr.abs_axis_feedrate[a]);
             }
         }
-        //BBS: update curr.feedrate
+        // update curr.feedrate
         curr.feedrate *= min_feedrate_factor;
         block.feedrate_profile.cruise = curr.feedrate;
 
@@ -4350,7 +4348,7 @@ void GCodeProcessor::process_VG1(const GCodeReader::GCodeLine& line)
                 get_retract_acceleration(static_cast<PrintEstimatedStatistics::ETimeMode>(i)) :
                 get_acceleration(static_cast<PrintEstimatedStatistics::ETimeMode>(i)));
 
-        //BBS
+        //PRUSA
         for (unsigned char a = X; a <= E; ++a) {
             float axis_max_acceleration = get_axis_max_acceleration(static_cast<PrintEstimatedStatistics::ETimeMode>(i), static_cast<Axis>(a));
             if (acceleration * std::abs(delta_pos[a]) * inv_distance > axis_max_acceleration)
@@ -4773,7 +4771,7 @@ void GCodeProcessor::process_G2_G3(const GCodeReader::GCodeLine& line, bool cloc
     }
 }
 
-//BBS
+//PRUSA
 void GCodeProcessor::process_G4(const GCodeReader::GCodeLine& line)
 {
     float value_s = 0.0;
@@ -4784,13 +4782,13 @@ void GCodeProcessor::process_G4(const GCodeReader::GCodeLine& line)
     }
 }
 
-//BBS
+//PRUSA
 void GCodeProcessor::process_G29(const GCodeReader::GCodeLine& line)
 {
-    //BBS: hardcode 260 seconds for G29
-    //Todo: use a machine related setting when we have second kind of BBL printer
+    // hardcode 260 seconds for G29
+    //Todo: use a machine related setting when we have second kind of PRUSA printer
     const float value_s = 260.0;
-    if (s_IsBBLPrinter){
+    if (s_IsPrusaPrinter){
         if(m_measure_g29_time)
             simulate_st_synchronize(value_s);
     }
@@ -4945,7 +4943,7 @@ void GCodeProcessor::process_VM104(const GCodeReader::GCodeLine& line)
 
 void GCodeProcessor::process_M106(const GCodeReader::GCodeLine& line)
 {
-    //BBS: for Bambu machine ,we both use M106 P1 and M106 to indicate the part cooling fan
+    // for Prusa machine, we both use M106 P1 and M106 to indicate the part cooling fan
     //So we must not ignore M106 P1
     if (!line.has('P') || (line.has('P') && line.p() == 1.0f)) {
         // The absence of P means the print cooling fan, so ignore anything else.
@@ -4957,7 +4955,7 @@ void GCodeProcessor::process_M106(const GCodeReader::GCodeLine& line)
     }
 }
 
-// ORCA: Add Pressure Advance visualization support
+// Add Pressure Advance visualization support
 void GCodeProcessor::process_M900(const GCodeReader::GCodeLine &line)
 {
     float pa_value = m_pressure_advance;
@@ -5080,7 +5078,7 @@ void GCodeProcessor::process_M191(const GCodeReader::GCodeLine& line)
 {
     float chamber_temp = 0;
     const float wait_chamber_temp_time = 720.0;
-    // BBS: when chamber_temp>40,caculate time required for heating
+    // when chamber_temp>40,caculate time required for heating
     if (line.has_value('S', chamber_temp) && chamber_temp > 40)
         simulate_st_synchronize(wait_chamber_temp_time);
 }
@@ -5408,7 +5406,7 @@ void GCodeProcessor::process_T(const std::string_view command)
     //TODO: multi switch
     if (command.length() > 1) {
         if (eid < 0 || eid > 254) {
-            //BBS: T255, T1000 and T1100 is used as special command for BBL machine and does not cost time. return directly
+            // T255, T1000 and T1100 is used as special command for PRUSA machine and does not cost time. return directly
             if ((m_flavor == gcfMarlinLegacy || m_flavor == gcfMarlinFirmware) && (command == "Tx" || command == "Tc" || command == "T?" ||
                  eid == 1000 || eid == 1100 || eid == 255))
                 return;
@@ -5579,7 +5577,7 @@ void GCodeProcessor::store_move_vertex(EMoveType type, EMovePathType path_type, 
         m_extrusion_role,
         static_cast<unsigned char>(filament_id),
         m_cp_color.current,
-        //BBS: add plate's offset to the rendering vertices
+        // add plate's offset to the rendering vertices
         Vec3f(m_end_position[X] + m_x_offset, m_end_position[Y] + m_y_offset, m_processing_start_custom_gcode ? m_first_layer_height : m_end_position[Z]- m_z_offset) + m_extruder_offsets[filament_id],
         static_cast<float>(m_end_position[E] - m_start_position[E]),
         m_feedrate,
@@ -5590,11 +5588,11 @@ void GCodeProcessor::store_move_vertex(EMoveType type, EMovePathType path_type, 
         m_travel_dist,
         m_fan_speed,
         m_extruder_temps[filament_id],
-// ORCA: Add Pressure Advance visualization support
+// Add Pressure Advance visualization support
         m_pressure_advance,
-        // ORCA: Add Acceleration visualization support
+        // Add Acceleration visualization support
         move_acceleration,
-        // ORCA: Add Jerk visualization support
+        // Add Jerk visualization support
         move_jerk,
         { 0.0f, 0.0f }, // time
         static_cast<float>(m_layer_id), //layer_duration: set later
@@ -5643,7 +5641,7 @@ float GCodeProcessor::minimum_travel_feedrate(PrintEstimatedStatistics::ETimeMod
 }
 
 // Machine limit arrays hold 2 values: [0]=Normal, [1]=Stealth. Index by mode only.
-// BambuStudio used extruder_id*2+mode to support per-nozzle limits, but OrcaSlicer
+// PrusaSlicer uses extruder_id*2+mode to support per-nozzle limits
 // never ported that system (filament_map_2 / get_config_idx_for_filament), so the
 // extruder_id offset was always wrong: uninitialized extruder (255) or extruder > 0
 // would overshoot the array and fall back to values.back() (stealth limits).
@@ -5792,13 +5790,13 @@ void GCodeProcessor::set_travel_acceleration(PrintEstimatedStatistics::ETimeMode
 
 float GCodeProcessor::get_filament_load_time(size_t extruder_id)
 {
-    //BBS: change load time to machine config and all extruder has same value
+    // change load time to machine config and all extruder has same value
     return m_time_processor.extruder_unloaded ? 0.0f : m_time_processor.filament_load_times;
 }
 
 float GCodeProcessor::get_filament_unload_time(size_t extruder_id)
 {
-    //BBS: change unload time to machine config and all extruder has same value
+    // change unload time to machine config and all extruder has same value
     return m_time_processor.extruder_unloaded ? 0.0f : m_time_processor.filament_unload_times;
 }
 
@@ -5808,7 +5806,7 @@ float GCodeProcessor::get_extruder_change_time(size_t extruder_id)
     return m_time_processor.machine_tool_change_time;
 }
 
-//BBS
+//PRUSA
 int GCodeProcessor::get_filament_vitrification_temperature(size_t extrude_id)
 {
     if (extrude_id < m_result.filament_vitrification_temperature.size())
@@ -5845,7 +5843,7 @@ void GCodeProcessor::process_filaments(CustomGCode::Type code)
         m_used_filaments.process_model_cache(this);
         m_used_filaments.process_support_cache(this);
         m_used_filaments.process_total_volume_cache(this);
-        //BBS: reset remaining filament
+        // reset remaining filament
         size_t last_extruder_id = get_extruder_id();
         m_remaining_volume[last_extruder_id] = m_nozzle_volume[last_extruder_id];
     }
@@ -5957,7 +5955,7 @@ double GCodeProcessor::extract_absolute_position_on_axis(Axis axis, const GCodeR
         return m_start_position[axis];
 }
 
-//BBS: ugly code...
+// ugly code...
 void GCodeProcessor::update_slice_warnings()
 {
     m_result.warnings.clear();
@@ -5990,7 +5988,7 @@ void GCodeProcessor::update_slice_warnings()
         m_result.warnings.push_back(warning);
     }
 
-    //bbs:HRC checker
+    // HRC checker
     warning.params.clear();
     warning.level=1;
 
@@ -6008,7 +6006,7 @@ void GCodeProcessor::update_slice_warnings()
         if (used_filaments[idx] < m_result.required_nozzle_HRC.size())
             filament_hrc = m_result.required_nozzle_HRC[used_filaments[idx]];
 
-        // m_filament_maps is only populated from the BBS "filament_map" option; for single-extruder
+        // m_filament_maps is only populated from the PRUSA "filament_map" option; for single-extruder
         // configs that don't set it the vector is empty, so default to extruder 0 and bounds-check.
         int filament_extruder_id = used_filaments[idx] < m_filament_maps.size() ? m_filament_maps[used_filaments[idx]] : 0;
         int extruder_hrc = (filament_extruder_id >= 0 && filament_extruder_id < (int) nozzle_hrc_lists.size())
@@ -6027,7 +6025,7 @@ void GCodeProcessor::update_slice_warnings()
         m_result.warnings.push_back(warning);
     }
 
-    // bbs:HRC checker
+    // HRC checker
     warning.params.clear();
     warning.level = 1;
     if (!m_result.support_traditional_timelapse) {

@@ -8,7 +8,7 @@
 
 namespace Slic3r
 {
-    // BBS
+    // PRUSA
     enum NozzleType
     {
         ntUndefine = 0,

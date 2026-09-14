@@ -15,7 +15,7 @@ public:
     virtual ~Extruder() {}
 
     void   reset() {
-        // BBS
+        // PRUSA
         if (m_share_extruder) {
             m_share_E = std::vector<double>(MAXIMUM_EXTRUDER_NUMBER, 0);
             m_share_retracted = std::vector<double>(MAXIMUM_EXTRUDER_NUMBER, 0);
@@ -92,7 +92,7 @@ private:
     double       m_restart_extra;
     double       m_e_per_mm3;
 
-    // BBS.
+    // PRUSA.
     // Create shared E and retraction data for single extruder multi-material machine
     bool          m_share_extruder;
     static std::vector<double> m_share_E;

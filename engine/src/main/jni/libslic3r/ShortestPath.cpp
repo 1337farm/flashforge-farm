@@ -16,7 +16,7 @@
 
 namespace Slic3r {
 
-// Orca: Some support entities may contain empty nested paths, which cannot be reordered safely.
+// : Some support entities may contain empty nested paths, which cannot be reordered safely.
 static bool extrusion_entity_has_endpoints(const ExtrusionEntity *entity)
 {
     auto paths_have_endpoints = [](const ExtrusionPaths &paths) {
@@ -84,7 +84,7 @@ std::vector<std::pair<size_t, bool>> chain_segments_closest_point(std::vector<En
 // Solving a Traveling Salesman Problem (TSP) with the modification, that the sites are not always points, but points and segments.
 // Solving using a greedy algorithm, where a shortest edge is added to the solution if it does not produce a bifurcation or a cycle.
 // Return index and "reversed" flag.
-// https://en.wikipedia.org/wiki/Multi-fragment_algorithm
+// en.wikipedia.org/wiki/Multi-fragment_algorithm
 // The algorithm builds a tour for the traveling salesman one edge at a time and thus maintains multiple tour fragments, each of which 
 // is a simple path in the complete graph of cities. At each stage, the algorithm selects the edge of minimal cost that either creates 
 // a new fragment, extends one of the existing paths or creates a cycle of length equal to the number of cities.
@@ -1060,7 +1060,7 @@ void chain_and_reorder_extrusion_entities(std::vector<ExtrusionEntity*> &entitie
 
 void chain_and_reorder_extrusion_entities(std::vector<ExtrusionEntity*> &entities, const Point *start_near)
 {
-    // Orca: Reordering queries first_point() / last_point(); drop entities that cannot provide valid endpoints.
+    // : Reordering queries first_point() / last_point(); drop entities that cannot provide valid endpoints.
     entities.erase(std::remove_if(entities.begin(), entities.end(), [](ExtrusionEntity *entity) {
         return !extrusion_entity_has_endpoints(entity);
     }),
@@ -2011,7 +2011,7 @@ ClipperLib::PolyNodes chain_clipper_polynodes(const Points &points, const Clippe
 	return chain_path_items(points, items);
 }
 
-// BBS
+// PRUSA
 std::vector<const PrintInstance*> chain_print_object_instances(const std::vector<const PrintObject*>& print_objects, const Point* start_near)
 {
 	// Order objects using a nearest neighbor search.

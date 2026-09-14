@@ -34,13 +34,13 @@ class ModelObject;
 class Print;
 class PrintObject;
 class SupportLayer;
-// BBS
+// PRUSA
 class TreeSupportData;
 class TreeSupport;
 class ExtrusionLayers;
 
 #define MAX_OUTER_NOZZLE_DIAMETER   4
-// BBS: move from PrintObjectSlice.cpp
+// move from PrintObjectSlice.cpp
 struct VolumeSlices
 {
     ObjectID                volume_id;
@@ -93,7 +93,7 @@ enum PrintStep {
 enum PrintObjectStep {
     posSlice, posPerimeters,posEstimateCurledExtrusions, posPrepareInfill,
     posInfill, posIroning, posContouring, posSupportMaterial, posSimplifyPath, posSimplifySupportPath,
-    // BBS
+    // PRUSA
     posDetectOverhangsForLift,
     posSimplifyWall, posSimplifyInfill,
     posCount,
@@ -159,7 +159,7 @@ public:
     T * const *             begin() const { return m_data->data(); }
     T * const *             end()   const { return m_data->data() + m_data->size(); }
     const T*                front() const { return m_data->front(); }
-    // BBS
+    // PRUSA
     const T*                back()  const { return m_data->back(); }
     size_t                  size()  const { return m_data->size(); }
     bool                    empty() const { return m_data->empty(); }
@@ -200,14 +200,14 @@ struct PrintInstance
     
     BoundingBoxf3   get_bounding_box() const;
     Polygon get_convex_hull_2d();
-    // SoftFever
+    // PrusaSlicer
     // 
     // instance id
     size_t               id;
-    // Orca: unique id used by marlin/rrf cancel object feature
+    
     size_t               unique_id;
 
-    //BBS: instance_shift is too large because of multi-plate, apply without plate offset.
+    // instance_shift is too large because of multi-plate, apply without plate offset.
     Point shift_without_plate_offset() const;
 };
 
@@ -352,7 +352,7 @@ public:
     // Centering offset of the sliced mesh from the scaled and rotated mesh of the model.
     const Point& 			     center_offset() const  { return m_center_offset; }
 
-    // BBS
+    // PRUSA
     void generate_support_preview();
     const std::vector<VolumeSlices>& firstLayerObjSlice() const { return firstLayerObjSliceByVolume; }
     std::vector<VolumeSlices>& firstLayerObjSliceMod() { return firstLayerObjSliceByVolume; }
@@ -365,7 +365,7 @@ public:
             && ! this->has_raft();
     }
 
-    // BBS
+    // PRUSA
     const ExtrusionEntityCollection& object_skirt() const {
         return m_skirt;
     }
@@ -385,7 +385,7 @@ public:
     const Layer*	get_layer_at_printz(coordf_t print_z, coordf_t epsilon) const;
     Layer*			get_layer_at_printz(coordf_t print_z, coordf_t epsilon);
     int             get_layer_idx_get_printz(coordf_t print_z, coordf_t epsilon);
-    // BBS
+    // PRUSA
     const Layer*    get_layer_at_bottomz(coordf_t bottom_z, coordf_t epsilon) const;
     Layer*          get_layer_at_bottomz(coordf_t bottom_z, coordf_t epsilon);
 
@@ -395,7 +395,7 @@ public:
     // print_z: top of the layer; slice_z: center of the layer.
     Layer*          add_layer(int id, coordf_t height, coordf_t print_z, coordf_t slice_z);
 
-    // BBS
+    // PRUSA
     SupportLayer* add_tree_support_layer(int id, coordf_t height, coordf_t print_z, coordf_t slice_z);
     std::shared_ptr<TreeSupportData> alloc_tree_support_preview_cache();
     void clear_tree_support_preview_cache() { m_tree_support_preview_cache.reset(); }
@@ -417,7 +417,7 @@ public:
     // The slicing parameters are dependent on various configuration values
     // (layer height, first layer height, raft settings, print nozzle diameter etc).
     const SlicingParameters&    slicing_parameters() const { return m_slicing_params; }
-    // Orca: XYZ shrinkage compensation has introduced the const Vec3d &object_shrinkage_compensation parameter to the function below
+    
     static SlicingParameters    slicing_parameters(const DynamicPrintConfig &full_config, const ModelObject &model_object, float object_max_z, const Vec3d &object_shrinkage_compensation);
 
     size_t                      num_printing_regions() const throw() { return m_shared_regions->all_regions.size(); }
@@ -448,7 +448,7 @@ public:
     // Helpers to project custom facets on slices
     void project_and_append_custom_facets(bool seam, EnforcerBlockerType type, std::vector<Polygons>& expolys, std::vector<std::pair<Vec3f,Vec3f>>* vertical_points=nullptr) const;
 
-    //BBS
+    //PRUSA
     BoundingBox get_first_layer_bbox(float& area, float& layer_height, std::string& name);
     void         get_certain_layers(float start, float end, std::vector<LayerPtrs> &out, std::vector<BoundingBox> &boundingbox_objects);
     Points       get_instances_shift_without_plate_offset() const;
@@ -458,13 +458,13 @@ public:
     void         copy_layers_from_shared_object();
     void         copy_layers_overhang_from_shared_object();
 
-    // BBS: Boundingbox of the first layer
+    // Boundingbox of the first layer
     BoundingBox                 firstLayerObjectBrimBoundingBox;
 
-    // BBS: returns 1-based indices of extruders used to print the first layer wall of objects
+    // returns 1-based indices of extruders used to print the first layer wall of objects
     std::vector<int>            object_first_layer_wall_extruders;
 
-    // SoftFever
+    // PrusaSlicer
     size_t get_id() const { return m_id; }
     void set_id(size_t id) { m_id = id; }
 
@@ -514,9 +514,9 @@ private:
     std::vector<std::set<int>> detect_extruder_geometric_unprintables() const;
 
     void slice_volumes();
-    //BBS
+    //PRUSA
     ExPolygons _shrink_contour_holes(double contour_delta, double hole_delta, const ExPolygons& polys) const;
-    // BBS
+    // PRUSA
     void detect_overhangs_for_lift();
     void clear_overhangs_for_lift();
 
@@ -535,7 +535,7 @@ private:
         const std::vector<std::pair<const Surface*, float>>& surfaces_w_bottom_z) const;
     FillLightning::GeneratorPtr prepare_lightning_infill_data();
 
-    // BBS
+    // PRUSA
     SupportNecessaryType is_support_necessary();
 
     // XYZ in scaled coordinates
@@ -557,7 +557,7 @@ private:
     SlicingParameters                       m_slicing_params;
     LayerPtrs                               m_layers;
     SupportLayerPtrs                        m_support_layers;
-    // BBS
+    // PRUSA
     std::shared_ptr<TreeSupportData>        m_tree_support_preview_cache;
 
     // this is set to true when LayerRegion->slices is split in top/internal/bottom
@@ -570,20 +570,20 @@ private:
     std::vector < VolumeSlices >            firstLayerObjSliceByVolume;
     std::vector<groupedVolumeSlices>        firstLayerObjSliceByGroups;
 
-    // BBS: per object skirt
+    // per object skirt
     ExtrusionEntityCollection               m_skirt;
 
     PrintObject*                            m_shared_object{ nullptr };
 
     
-    // SoftFever
+    // PrusaSlicer
     // 
     // object id
     size_t               m_id;
     void apply_conical_overhang();
 
  public:
-    //BBS: When printing multi-material objects, this settings will make slicer to clip the overlapping object parts one by the other.
+    // When printing multi-material objects, this settings will make slicer to clip the overlapping object parts one by the other.
     //(2nd part will be clipped by the 1st, 3rd part will be clipped by the 1st and 2nd etc).
     // This was a per-object setting and now we default enable it.
     static bool clip_multipart_objects;
@@ -926,7 +926,7 @@ public:
     bool                has_infinite_skirt() const;
     bool                has_skirt() const;
     bool                has_brim() const;
-    //BBS
+    //PRUSA
     bool                has_auto_brim() const    {
         return std::any_of(m_objects.begin(), m_objects.end(), [](PrintObject* object) { return object->config().brim_type == btAutoBrim; });
     }
@@ -958,7 +958,7 @@ public:
             [object_id](const PrintObject *obj) { return obj->id() == object_id; });
         return (it == m_objects.end()) ? nullptr : *it;
     }
-    //BBS: Function to get m_brimMap;
+    // Function to get m_brimMap;
     std::map<ObjectID, ExtrusionEntityCollection>&
         get_brimMap() { return m_brimMap; }
 
@@ -1038,16 +1038,16 @@ public:
     const PrintRegion&          get_print_region(size_t idx) const  { return *m_print_regions[idx]; }
     const ToolOrdering&         get_tool_ordering() const { return m_wipe_tower_data.tool_ordering; }
 
-    //BBS: plate's origin related functions
+    // plate's origin related functions
     void set_plate_origin(Vec3d origin) { m_origin = origin; }
     const Vec3d get_plate_origin() const { return m_origin; }
-    //BBS: export gcode from previous gcode file from 3mf
+    // export gcode from previous gcode file from 3mf
     void set_gcode_file_ready();
     void set_gcode_file_invalidated();
     void export_gcode_from_previous_file(const std::string& file, GCodeProcessorResult* result, ThumbnailsGeneratorCallback thumbnail_cb = nullptr);
-    //BBS: add modify_count logic
+    // add modify_count logic
     int get_modified_count() const {return m_modified_count;}
-    //BBS: add status for whether support used
+    // add status for whether support used
     bool is_support_used() const {return m_support_used;}
     std::string get_conflict_string() const
     {
@@ -1059,17 +1059,17 @@ public:
         return result;
     }
 
-    //BBS
+    //PRUSA
     static StringObjectException sequential_print_clearance_valid(const Print &print, Polygons *polygons = nullptr, std::vector<std::pair<Polygon, float>>* height_polygons = nullptr);
     ConflictResultOpt            get_conflict_result() const { return m_conflict_result; }
 
     // Return 4 wipe tower corners in the world coordinates (shifted and rotated), including the wipe tower brim.
     Points first_layer_wipe_tower_corners(bool check_wipe_tower_existance=true) const;
 
-    //SoftFever
-    bool &is_BBL_printer() { return m_isBBLPrinter; }
-    const bool is_BBL_printer() const { return m_isBBLPrinter; }
-    WipeTowerType wipe_tower_type() const { return is_BBL_printer() ? WipeTowerType::Type1 : m_config.wipe_tower_type.value; }
+    //PrusaSlicer
+    bool &is_prusa_printer() { return m_isPrusaPrinter; }
+    const bool is_prusa_printer() const { return m_isPrusaPrinter; }
+    WipeTowerType wipe_tower_type() const { return is_prusa_printer() ? WipeTowerType::Type1 : m_config.wipe_tower_type.value; }
     CalibMode& calib_mode() { return m_calib_params.mode; }
     const CalibMode calib_mode() const { return m_calib_params.mode; }
     void set_calib_params(const Calib_Params& params);
@@ -1107,7 +1107,7 @@ public:
         return std::all_of(this->objects().begin(), this->objects().end(), [&](PrintObject* obj) { return obj->height() < scale_(this->config().nozzle_height.value); });
     }
     
-    // Orca: Implement prusa's filament shrink compensation approach
+    
     // Returns if all used filaments have same shrinkage compensations.
      bool has_same_shrinkage_compensations() const;
     // Returns scaling for each axis representing shrinkage compensations in each axis.
@@ -1120,7 +1120,7 @@ protected:
     bool                invalidate_step(PrintStep step);
 
 private:
-    //BBS
+    //PRUSA
     static StringObjectException check_multi_filament_valid(const Print &print);
 
     bool                has_tpu_filament() const;
@@ -1139,12 +1139,12 @@ private:
     PrintObjectPtrs                         m_objects;
     PrintRegionPtrs                         m_print_regions;
     
-    //SoftFever
-    bool m_isBBLPrinter;
+    //PrusaSlicer
+    bool m_isPrusaPrinter;
 
     // Ordered collections of extrusion paths to build skirt loops and brim.
     ExtrusionEntityCollection               m_skirt;
-    // BBS: collecting extrusion paths to build brim by objs
+    // collecting extrusion paths to build brim by objs
     std::map<ObjectID, ExtrusionEntityCollection>         m_brimMap;
     std::map<ObjectID, ExtrusionEntityCollection>         m_supportBrimMap;
     // Convex hull of the 1st layer extrusions.
@@ -1169,18 +1169,18 @@ private:
     std::vector<unsigned int> m_slice_used_filaments;
     std::vector<unsigned int> m_slice_used_filaments_first_layer;
 
-    //BBS: plate's origin
+    // plate's origin
     Vec3d   m_origin;
-    //BBS: modified_count
+    // modified_count
     int     m_modified_count {0};
-    //BBS
+    //PRUSA
     ConflictResultOpt m_conflict_result;
     FakeWipeTower     m_fake_wipe_tower;
     bool              m_has_auto_filament_map_result{false};
     
     std::vector<std::set<int>> m_geometric_unprintable_filaments;
 
-    //SoftFever: calibration
+    // calibration
     Calib_Params m_calib_params;
 
     bool m_need_check_multi_filaments_compatibility{true};
@@ -1191,8 +1191,8 @@ private:
     friend class PrintObject;
 
 public:
-    //BBS: this was a print config and now seems to be useless so we move it to here
-    // ORCA: parameter below is now back to being a user option (min_skirt_length)
+    // this was a print config and now seems to be useless so we move it to here
+    // parameter below is now back to being a user option (min_skirt_length)
     //static float min_skirt_length;
 };
 

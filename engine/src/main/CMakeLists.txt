@@ -782,6 +782,17 @@ target_include_directories(slic3r PRIVATE
         ${PRUSA_SRC}/src/slic3r-jthread/include
         ${PRUSA_SRC}/src/libpgcode/include
         ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../build/headers/eigen/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../build/headers/spdlog/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../build/headers/fmt/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../build/headers/cereal/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../build/headers/nlohmann_json/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../build/headers/sol2/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../build/headers/expected/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../build/headers/magic_enum/include
+        ${PRUSA_GEN}
+        src/main/jni
+        ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/eigen/include
         ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/spdlog/include
         ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/fmt/include
@@ -892,3 +903,6 @@ target_link_libraries(slic3r PRIVATE
         boost_wserialization
         ${OCCT_LIBS}
 )
+
+# libslic3r_core provides implementations of upstream Domain+/Ken- tree
+# (compiled inside the fetched 3.0 checkout).

@@ -491,13 +491,11 @@ add_library(slic3r
         src/main/jni/semver/semver.c
 
         # Upstream 3.0 bundled admesh (2.x copy deleted; same TU set).
-        # Upstream 3.0 bundled admesh (2.x copy deleted; same TU set).
         ${PRUSA_SRC}/bundled_deps/admesh/admesh/connect.cpp
         ${PRUSA_SRC}/bundled_deps/admesh/admesh/normals.cpp
         ${PRUSA_SRC}/bundled_deps/admesh/admesh/shared.cpp
         ${PRUSA_SRC}/bundled_deps/admesh/admesh/stl_io.cpp
         ${PRUSA_SRC}/bundled_deps/admesh/admesh/stlinit.cpp
-        ${PRUSA_SRC}/bundled_deps/admesh/admesh/util.cpp
         ${PRUSA_SRC}/bundled_deps/admesh/admesh/util.cpp
 
         # Upstream 3.0 TU for CNumericLocalesSetter (used by admesh).
@@ -776,6 +774,40 @@ add_library(slic3r
 target_compile_definitions(slic3r PUBLIC -DUSE_TBB -DTBB_USE_CAPTURED_EXCEPTION=0 -DLIBNEST2D_GEOMETRIES_libslic3r
         -DLIBNEST2D_OPTIMIZER_nlopt -DLIBNEST2D_THREADING_tbb -DLIBNEST2D_STATIC -DENABLE_OPENGL_ES -DSLIC3R_OPENGL_ES
         -DUSE_CPP11_REGEX)
+
+# Bring in the fetched 3.0 headers' source-only implementation unit: symbol
+# definitions for Domain::Model/ModelObject/ModelVolume et al are compiled in
+# upstream `libslic3r`, not as headers, so our app needs the actual TU set.
+# We add it unconditionally; CMake dedupes duplicate source entries by path.
+file(GLOB SLIC3R_IMPL_CPP ${PRUSA_SRC}/src/libslic3r/src/libslic3r/*.cpp)
+add_library(libslic3r_core STATIC ${SLIC3R_IMPL_CPP})
+target_include_directories(libslic3r_core PRIVATE
+    ${PRUSA_SRC}/src/libslic3r/include
+    ${PRUSA_SRC}/src/libslic3r/src
+    ${PRUSA_SRC}/bundled_deps
+    ${PRUSA_SRC}/src/slic3r-domain/include
+    ${PRUSA_SRC}/src/slic3r-base/include
+    ${PRUSA_SRC}/src/slic3r-biz-algorithms/include
+    ${PRUSA_SRC}/src/slic3r-biz-arrange/include
+    ${PRUSA_SRC}/src/slic3r-shared/include
+    ${PRUSA_SRC}/src/slic3r-biz-cgal-algorithms/include
+    ${PRUSA_SRC}/src/slic3r-biz-parser/include
+    ${PRUSA_SRC}/src/slic3r-gcode-reader/include
+    ${PRUSA_SRC}/src/slic3r-jthread/include
+    ${PRUSA_SRC}/src/libpgcode/include
+    ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/eigen/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/spdlog/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/fmt/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/cereal/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/nlohmann_json/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/sol2/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/expected/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/magic_enum/include)
+target_link_libraries(libslic3r_core PUBLIC ${PRUSA_SRC}/bundled_deps/admesh
+                                        ${PRUSA_SRC}/bundled_deps/localesutils)
+
+target_link_libraries(slic3r PRIVATE libslic3r_core)
 
 target_include_directories(slic3r PRIVATE
         src/main/jni

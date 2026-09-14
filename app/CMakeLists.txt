@@ -78,6 +78,7 @@ target_include_directories(farm PRIVATE
         ${ENGINE_JNI}                       # render/, expat/, clipper/, cereal/, ...
         ${PRUSA_SRC}/src/libslic3r/include  # ISSUE-210: 3.0 core headers (vendored libslic3r/ deleted)
         ${PRUSA_SRC}/src/libslic3r/src
+        ${PRUSA_SRC}/bundled_deps
         ${ENGINE_INCLUDE_SUBDIRS}               # flattened sys-style includes (<expat.h>, <nlopt.h>, ...)
         ${ENGINE_JNI}/render                # flat render headers: GLModel.hpp, GLShader.hpp, bed_utils.hpp
         ${ENGINE_JNI}/libvgcode/include     # vgcode flat include: Viewer.hpp

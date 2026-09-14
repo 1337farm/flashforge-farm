@@ -755,6 +755,7 @@ target_include_directories(slic3r PRIVATE
         src/main/jni
         ${PRUSA_SRC}/src/libslic3r/include
         ${PRUSA_SRC}/src/libslic3r/src
+        ${PRUSA_SRC}/bundled_deps
         src/main/jni/openvdb
         src/main/jni/mpfr
         src/main/jni/zlib

@@ -441,28 +441,16 @@ def main():
             "to clean up pre-consolidation pile-ups"
         )
 
-    # coEnums copy guard: ConfigOptionEnumsGenericTempl<true> and <false> are
-    # distinct C++ classes sharing the coEnums tag, so set() must not
-    # dynamic_cast across variants (nullptr->values faults at +8; 2026-09-07
-    # farm-slice SIGSEGV, fault 0x8, in Templ<false>::set <- apply_only <-
-    # Print::apply). dynamic_cast is ALSO unusable across the libfarm.so/
-    # libslic3r.so DSO boundary: each compiles its own typeinfo for the
-    # template, so a cast returns nullptr even for identical typeid names
-    # (device slice crash 2026-09-09). Enforce the RTTI-free copy via the
-    # shared ConfigOptionInts base, and reject any template-typed dynamic_cast
-    # in this method.
-    cfg = (REPO / "engine/src/main/jni/libslic3r/Config.hpp").read_text()
-    if "static_cast<const ConfigOptionInts*>(rhs)" not in cfg:
+    # No vendored 2.x tree: engine/src/main/jni/libslic3r/ (Config.hpp,
+    # Config.cpp, PrintObject.cpp) was deleted in the 3.0 replace-in-place
+    # (#210); upstream 3.0 is fetched at build time, never vendored. The
+    # RTTI-free-copy / key-annotated-error / enum-diagnostics lessons below
+    # applied to patched vendored code — re-add equivalents against
+    # engine/prusa30/patches/ if a 3.0 regression ever needs them.
+    if (REPO / "engine/src/main/jni/libslic3r").exists():
         failures.append(
-            "ConfigOptionEnumsGenericTempl::set must copy via static_cast on "
-            "the shared ConfigOptionInts base (RTTI-free: cross-variant and "
-            "cross-DSO dynamic_cast both yield nullptr)"
-        )
-    if re.search(r"dynamic_cast<const ConfigOptionEnumsGenericTempl", cfg):
-        failures.append(
-            "ConfigOptionEnumsGenericTempl::set must not dynamic_cast to the "
-            "template type (duplicated typeinfo across DSOs returns nullptr "
-            "even for identical typeid names)"
+            "vendored 2.x tree must stay deleted (3.0 is fetched, not "
+            "vendored); re-adding engine/src/main/jni/libslic3r reopens #209"
         )
 
     # Crash-log append guard: the Downloads document must accumulate across
@@ -476,16 +464,7 @@ def main():
             "per export replaces history instead of appending"
         )
 
-    # apply_only diagnostics guard: a bare "incompatible type" from deep in
-    # Print::apply names no key and previously never reached any log
-    # (2026-09-07 slice failure). apply_only must rethrow with the key.
-    conf = (REPO / "engine/src/main/jni/libslic3r/Config.cpp").read_text()
-    if "apply_only '" not in conf:
-        failures.append(
-            "ConfigBase::apply_only must rethrow set() failures with the key "
-            "name (\"apply_only '<key>': ...\"); keyless config errors are "
-            "undiagnosable"
-        )
+    # (apply_only key-annotation lesson retired with the vendored tree; see above.)
 
     # Slice-error logging guard: slice/config failures surface only in a
     # dialog today; they must also append to farm_crash.log via
@@ -496,28 +475,9 @@ def main():
             '"slice", ...) so slice errors reach farm_crash.log, not just a dialog'
         )
 
-    # Region-application diagnostics guard: apply_to_print_region_config does
-    # direct my_opt->set() outside apply_only, so it needs the same key
-    # annotation — it was the remaining keyless "incompatible type" site
-    # (2026-09-07 slice failure).
-    pobj = (REPO / "engine/src/main/jni/libslic3r/PrintObject.cpp").read_text()
-    if "apply_to_print_region_config '" not in pobj:
-        failures.append(
-            "apply_to_print_region_config must rethrow set() failures with "
-            "the key name; keyless region config errors are undiagnosable"
-        )
+    # (region key-annotation lesson retired with the vendored tree; see above.)
 
-    # Enum set() diagnostics guard: both enum set() implementations must
-    # append the dst/src C++ classes (config_type_pair_msg) to the
-    # incompatible-type error — the bare message plus a missing key made the
-    # 2026-09-07 slice failure unidentifiable (demangle offline with c++filt).
-    cfgh = (REPO / "engine/src/main/jni/libslic3r/Config.hpp").read_text()
-    if cfgh.count("config_type_pair_msg") < 3:
-        failures.append(
-            "Config.hpp must define config_type_pair_msg and use it in both "
-            "enum set() type-check throws, so config type mismatches name "
-            "both C++ classes"
-        )
+    # (enum diagnostics lesson retired with the vendored tree; see above.)
 
     # Crash-banner version guard: every farm_crash.log entry must stamp the
     # app version + git commit (BuildConfig), so a report is attributable to

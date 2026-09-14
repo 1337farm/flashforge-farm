@@ -17,6 +17,8 @@
 #   src/main/jni/           <- engine C++ source + headers (compiled from here;
 #                              the app resolves headers against this same tree,
 #                              so bridge and .so are always in ABI lockstep)
+#   build/prusaslicer-src/  <- ISSUE-210: fetched 3.0 core (libslic3r headers;
+#                              vendored src/main/jni/libslic3r/ deleted)
 #   src/main/jniImports/    <- staged dep headers (boost, oneTBB, gmp)
 #   src/main/occt/          <- staged OCCT headers
 #   output/<ABI>/libslic3r.so <- engine build output (imported below)
@@ -34,6 +36,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(ENGINE_ROOT ${CMAKE_SOURCE_DIR}/../engine)
 set(ENGINE_JNI ${ENGINE_ROOT}/src/main/jni)
+# ISSUE-210: fetched PrusaSlicer 3.0 tree (engine/prusa30/fetch_prusaslicer.sh,
+# PRUSA_REF pin; configured headless per prusa30-headless.yml:
+# cmake -S engine/build/prusaslicer-src -B build/prusa30 -DSLIC3R_GUI=OFF).
+set(PRUSA_SRC ${ENGINE_ROOT}/build/prusaslicer-src)
 set(ENGINE_OUTPUT ${ENGINE_ROOT}/output)
 set(SRC ${CMAKE_SOURCE_DIR}/src/main)
 set(JNI_IMPORTS ${ENGINE_ROOT}/src/main/jniImports)
@@ -69,7 +75,9 @@ file(GLOB ENGINE_INCLUDE_SUBDIRS "${ENGINE_JNI}/*/")
 # (and any sibling the engine excludes) so the flattened roots stay safe.
 list(FILTER ENGINE_INCLUDE_SUBDIRS EXCLUDE REGEX "/CGAL/?$")
 target_include_directories(farm PRIVATE
-        ${ENGINE_JNI}                       # libslic3r/, render/, expat/, clipper/, cereal/, ...
+        ${ENGINE_JNI}                       # render/, expat/, clipper/, cereal/, ...
+        ${PRUSA_SRC}/src/libslic3r/include  # ISSUE-210: 3.0 core headers (vendored libslic3r/ deleted)
+        ${PRUSA_SRC}/src/libslic3r/src
         ${ENGINE_INCLUDE_SUBDIRS}               # flattened sys-style includes (<expat.h>, <nlopt.h>, ...)
         ${ENGINE_JNI}/render                # flat render headers: GLModel.hpp, GLShader.hpp, bed_utils.hpp
         ${ENGINE_JNI}/libvgcode/include     # vgcode flat include: Viewer.hpp

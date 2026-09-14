@@ -31,9 +31,13 @@ SYSROOT="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 [ -d src/main/occt/include/$ABI ] || { echo "ERROR: OCCT headers not staged (run scripts/build-debug.sh --fetch-only)" >&2; exit 1; }
 
 # Include dirs exactly as the CI build-engine job sets them for the slic3r target.
+# ISSUE-210: vendored src/main/jni/libslic3r is deleted; 3.0 core headers come
+# from the fetched tree (engine/prusa30/fetch_prusaslicer.sh -> build/prusaslicer-src).
+PRUSA_SRC="${PRUSA_SRC:-$ROOT/engine/build/prusaslicer-src}"
 INC=(
   -Isrc/main/jni
-  -Isrc/main/jni/libslic3r
+  -I"$PRUSA_SRC/src/libslic3r/include"
+  -I"$PRUSA_SRC/src/libslic3r/src"
   -Isrc/main/jni/LibBGCode
   -Isrc/main/jni/eigen
   -Isrc/main/jni/libigl

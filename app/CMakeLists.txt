@@ -66,6 +66,10 @@ add_library(farm SHARED
         ${ENGINE_JNI}/render/GLModel.cpp
         ${ENGINE_JNI}/render/GLShader.cpp)
 
+add_library(farm_prusa30_jni SHARED
+        ${ENGINE_ROOT}/prusa30/jni_bridge/jni_farm_slice.cpp
+        ${ENGINE_ROOT}/prusa30/farm_driver.cpp)
+
 # Compile against the engine's own source tree (ABI-lockstep) + staged deps.
 # The engine keeps its src/main/jni tree as the single header source, so
 # generic angle-bracket includes used across the engine headers (e.g. <expat.h>,
@@ -80,6 +84,8 @@ list(FILTER ENGINE_INCLUDE_SUBDIRS EXCLUDE REGEX "/CGAL/?$")
 target_include_directories(farm PRIVATE
         ${ENGINE_JNI}                       # render/, expat/, clipper/, cereal/, ...
         ${PRUSA_SRC}/src/libslic3r/include  # ISSUE-210: 3.0 core headers (vendored libslic3r/ deleted)
+        ${ENGINE_ROOT}/prusa30
+        ${ENGINE_ROOT}/prusa30/jni_bridge)
         ${PRUSA_SRC}/src/libslic3r/src
         ${PRUSA_SRC}/bundled_deps/admesh
         ${PRUSA_SRC}/bundled_deps/localesutils
@@ -116,6 +122,27 @@ target_include_directories(farm PRIVATE
 )
 
 target_compile_options(farm PRIVATE -fsigned-char)
+target_compile_options(farm_prusa30_jni PRIVATE -fsigned-char)
+
+target_include_directories(farm_prusa30_jni PRIVATE
+        ${ENGINE_ROOT}/prusa30
+        ${ENGINE_ROOT}/prusa30/jni_bridge
+        ${PRUSA_SRC}/src/libslic3r/include
+        ${PRUSA_SRC}/src/libslic3r/src
+        ${PRUSA_SRC}/src/slic3r-domain/include
+        ${PRUSA_SRC}/src/slic3r-base/include
+        ${PRUSA_SRC}/src/slic3r-biz-algorithms/include
+        ${PRUSA_SRC}/src/slic3r-biz-arrange/include
+        ${PRUSA_SRC}/src/slic3r-shared/include
+        ${PRUSA_SRC}/src/slic3r-biz-cgal-algorithms/include
+        ${PRUSA_SRC}/src/slic3r-biz-parser/include
+        ${PRUSA_SRC}/src/slic3r-gcode-reader/include
+        ${PRUSA_SRC}/src/slic3r-jthread/include
+        ${PRUSA_SRC}/src/libpgcode/include
+        ${PRUSA_GEN}
+        ${JNI_IMPORTS}/boost/include
+        ${JNI_IMPORTS}/oneTBB/include
+)
 target_compile_definitions(farm PRIVATE
         -DUSE_TBB -DTBB_USE_CAPTURED_EXCEPTION=0 -DLIBNEST2D_GEOMETRIES_libslic3r
         -DLIBNEST2D_OPTIMIZER_nlopt -DLIBNEST2D_THREADING_tbb -DLIBNEST2D_STATIC
@@ -150,4 +177,9 @@ target_link_libraries(farm PRIVATE
         m
         dl
         ${UNWIND_ARCHIVE}
+)
+
+target_link_libraries(farm_prusa30_jni PRIVATE
+        slic3r
+        ${log-lib}
 )

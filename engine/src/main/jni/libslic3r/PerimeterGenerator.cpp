@@ -1691,7 +1691,7 @@ void PerimeterGenerator::process_classic()
     } // for each island
 }
 
-// void PerimeterGenerator::add_infill_contour_for_arachne( ExPolygons        infill_contour,
+void PerimeterGenerator::add_infill_contour_for_arachne( ExPolygons        infill_contour,
                                                          int                loops,
                                                          coord_t            ext_perimeter_spacing,
                                                          coord_t            perimeter_spacing,

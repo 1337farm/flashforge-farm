@@ -40,6 +40,9 @@ set(ENGINE_JNI ${ENGINE_ROOT}/src/main/jni)
 # PRUSA_REF pin; configured headless per prusa30-headless.yml:
 # cmake -S engine/build/prusaslicer-src -B build/prusa30 -DSLIC3R_GUI=OFF).
 set(PRUSA_SRC ${ENGINE_ROOT}/build/prusaslicer-src)
+# Generated 3.0 version header (see engine/CMakeLists.txt).
+set(PRUSA_GEN "${CMAKE_CURRENT_BINARY_DIR}/prusa-generated")
+configure_file(${ENGINE_ROOT}/cmake/Version.hpp.in ${PRUSA_GEN}/Slic3r/Version.hpp COPYONLY)
 set(ENGINE_OUTPUT ${ENGINE_ROOT}/output)
 set(SRC ${CMAKE_SOURCE_DIR}/src/main)
 set(JNI_IMPORTS ${ENGINE_ROOT}/src/main/jniImports)
@@ -90,7 +93,9 @@ target_include_directories(farm PRIVATE
         ${PRUSA_SRC}/src/slic3r-jthread/include
         ${PRUSA_SRC}/src/libpgcode/include
         ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
+        ${PRUSA_GEN}
         ${ENGINE_ROOT}/build/eigen-3.4.0/include  # staged Eigen 3.4.0 (scripts/stage_eigen.sh)
+        ${ENGINE_ROOT}/prusa30/jniImports/assert/include  # staged libassert (3.0 Assert.hpp)
         ${ENGINE_INCLUDE_SUBDIRS}               # flattened sys-style includes (<expat.h>, <nlopt.h>, ...)
         ${ENGINE_JNI}/render                # flat render headers: GLModel.hpp, GLShader.hpp, bed_utils.hpp
         ${ENGINE_JNI}/libvgcode/include     # vgcode flat include: Viewer.hpp

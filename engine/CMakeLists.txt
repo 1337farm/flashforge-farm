@@ -481,6 +481,10 @@ add_subdirectory(src/main/jni/mcut)
 # Fetched PrusaSlicer 3.0 tree (engine/prusa30/fetch_prusaslicer.sh, PRUSA_REF pin).
 # Defined before first use: add_library() below references ${PRUSA_SRC} sources.
 set(PRUSA_SRC "${CMAKE_CURRENT_SOURCE_DIR}/build/prusaslicer-src" CACHE PATH "Fetched 3.0 upstream tree")
+# Generated 3.0 version header: upstream generates Slic3r/Version.hpp in its
+# own build; our standalone target needs it too (fetched libslic3r.h).
+set(PRUSA_GEN "${CMAKE_CURRENT_BINARY_DIR}/prusa-generated")
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Version.hpp.in ${PRUSA_GEN}/Slic3r/Version.hpp COPYONLY)
 
 add_library(slic3r
         SHARED
@@ -786,6 +790,7 @@ target_include_directories(slic3r PRIVATE
         ${PRUSA_SRC}/src/slic3r-jthread/include
         ${PRUSA_SRC}/src/libpgcode/include
         ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
+        ${PRUSA_GEN}
         src/main/jni/openvdb
         src/main/jni/mpfr
         src/main/jni/zlib

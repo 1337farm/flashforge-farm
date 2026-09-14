@@ -784,6 +784,7 @@ target_include_directories(slic3r PRIVATE
     ${PRUSA_SRC}/src/libpgcode/include
     ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../jniImports/oneTBB/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../jniImports/boost/include
         ${CMAKE_CURRENT_SOURCE_DIR}/../../build/headers/eigen/include
         ${CMAKE_CURRENT_SOURCE_DIR}/../../build/headers/spdlog/include
         ${CMAKE_CURRENT_SOURCE_DIR}/../../build/headers/fmt/include

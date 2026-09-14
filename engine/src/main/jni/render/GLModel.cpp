@@ -549,7 +549,7 @@ namespace Slic3r {
             for (uint32_t i = 0; i < its.indices.size(); ++i) {
                 const stl_triangle_vertex_indices& face = its.indices[i];
                 const auto vertex = Domain::its_triangle_vertices(its, face);
-                const Domain::Vec3f n = Domain::its_face_normal(its, face);
+                const Domain::Vec3f n = Biz::Algorithms::TriangleMesh::its_face_normal(its, face);
                 for (size_t j = 0; j < 3; ++j) {
                     data.add_vertex(vertex[j], n);
                 }

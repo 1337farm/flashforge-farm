@@ -782,9 +782,12 @@ target_compile_definitions(slic3r PUBLIC -DUSE_TBB -DTBB_USE_CAPTURED_EXCEPTION=
 file(GLOB SLIC3R_IMPL_CPP ${PRUSA_SRC}/src/libslic3r/src/libslic3r/*.cpp)
 # Mirror upstream: src/libslic3r/CMakeLists.txt comments ArrangeHelper out
 # (it includes the nonexistent libslic3r/MultipleBeds.hpp and nothing else
-# references it); drop it so the glob builds exactly what upstream builds.
+# references it), and GCodeSender is dead serial-port code nothing references
+# (needs boost::noncopyable transitively + clashes with Android termios2);
+# drop both so the glob builds exactly what upstream builds.
 list(REMOVE_ITEM SLIC3R_IMPL_CPP
-    ${PRUSA_SRC}/src/libslic3r/src/libslic3r/ArrangeHelper.cpp)
+    ${PRUSA_SRC}/src/libslic3r/src/libslic3r/ArrangeHelper.cpp
+    ${PRUSA_SRC}/src/libslic3r/src/libslic3r/GCodeSender.cpp)
 # CustomParametersHandling.cpp captures structured bindings in OpenMP
 # regions, which NDK Clang rejects. Compile just this TU without OpenMP
 # (pragmas ignored -> serial execution, same results).
@@ -792,6 +795,10 @@ set_source_files_properties(
     ${PRUSA_SRC}/src/libslic3r/src/libslic3r/CustomParametersHandling.cpp
     PROPERTIES COMPILE_OPTIONS -fno-openmp)
 add_library(libslic3r_core STATIC ${SLIC3R_IMPL_CPP})
+# Order the BGCode export headers (generate_export_header) before any core TU:
+# upstream GCode.cpp pulls <binarize/binarize.hpp> -> <binarize/export.h>,
+# which only exists once its target's prebuild step runs.
+add_dependencies(libslic3r_core BGCode_core BGCode_binarize BGCode_convert)
 target_include_directories(libslic3r_core PRIVATE
     ${PRUSA_SRC}/src/libslic3r/include
     ${PRUSA_SRC}/src/libslic3r/src

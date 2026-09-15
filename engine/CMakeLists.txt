@@ -802,13 +802,31 @@ file(GLOB SLIC3R_IMPL_CPP ${PRUSA_SRC}/src/libslic3r/src/libslic3r/*.cpp)
 list(REMOVE_ITEM SLIC3R_IMPL_CPP
     ${PRUSA_SRC}/src/libslic3r/src/libslic3r/ArrangeHelper.cpp
     ${PRUSA_SRC}/src/libslic3r/src/libslic3r/GCodeSender.cpp)
+# Upstream module implementations (Domain::Model, FileLoadingLogic, ...): the
+# legacy glob covers only src/libslic3r. Glob the module trees too — none
+# contain GUI code. Exclusions: other-OS platform files, the render test
+# module, the standalone seqarrange tool, and the openssl-needing network TUs
+# (nothing in the slice path references them; re-add with OpenSSL staging if
+# the link ever demands them).
+file(GLOB_RECURSE SLIC3R_MODULE_SRC
+    ${PRUSA_SRC}/src/slic3r-domain/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-shared/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-base/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-biz-algorithms/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-biz-arrange/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-biz-cgal-algorithms/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-biz-parser/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-gcode-reader/src/*.cpp
+    ${PRUSA_SRC}/src/libpgcode/src/*.cpp
+    ${PRUSA_SRC}/src/libseqarrange/src/*.cpp)
+list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|Mac\\.cpp|TestRenderModule|sequential_decimator|HttpCurl\\.cpp|SHA256Linux\\.cpp")
 # CustomParametersHandling.cpp captures structured bindings in OpenMP
 # regions, which NDK Clang rejects. Compile just this TU without OpenMP
 # (pragmas ignored -> serial execution, same results).
 set_source_files_properties(
     ${PRUSA_SRC}/src/libslic3r/src/libslic3r/CustomParametersHandling.cpp
     PROPERTIES COMPILE_OPTIONS -fno-openmp)
-add_library(libslic3r_core STATIC ${SLIC3R_IMPL_CPP})
+add_library(libslic3r_core STATIC ${SLIC3R_IMPL_CPP} ${SLIC3R_MODULE_SRC})
 # Order the BGCode export headers (generate_export_header) before any core TU:
 # upstream GCode.cpp pulls <binarize/binarize.hpp> -> <binarize/export.h>,
 # which only exists once its target's prebuild step runs.
@@ -832,6 +850,16 @@ target_include_directories(libslic3r_core PRIVATE
     ${PRUSA_SRC}/src/slic3r-gcode-reader/include
     ${PRUSA_SRC}/src/slic3r-jthread/include
     ${PRUSA_SRC}/src/libpgcode/include
+    ${PRUSA_SRC}/src/slic3r-domain/src
+    ${PRUSA_SRC}/src/slic3r-shared/src
+    ${PRUSA_SRC}/src/slic3r-base/src
+    ${PRUSA_SRC}/src/slic3r-biz-algorithms/src
+    ${PRUSA_SRC}/src/slic3r-biz-arrange/src
+    ${PRUSA_SRC}/src/slic3r-biz-cgal-algorithms/src
+    ${PRUSA_SRC}/src/slic3r-biz-parser/src
+    ${PRUSA_SRC}/src/slic3r-gcode-reader/src
+    ${PRUSA_SRC}/src/libpgcode/src
+    ${PRUSA_SRC}/src/libseqarrange/src
     ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main/jniImports/oneTBB/include

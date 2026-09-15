@@ -883,6 +883,11 @@ target_include_directories(libslic3r_core PRIVATE
     src/main/jni/qhull
     src/main/jni/libigl
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/mixer/include
+    src/main/jni/miniz
+    src/main/jni/expat
+    src/main/jni/fast_float
+    src/main/jni/glu-libtess/include
+    src/main/jni/semver
     src/main/jni)
 
 # libassert (staged fresh by CI into prusa30/jniImports/assert): upstream 3.0

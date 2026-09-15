@@ -780,6 +780,11 @@ target_compile_definitions(slic3r PUBLIC -DUSE_TBB -DTBB_USE_CAPTURED_EXCEPTION=
 # upstream `libslic3r`, not as headers, so our app needs the actual TU set.
 # We add it unconditionally; CMake dedupes duplicate source entries by path.
 file(GLOB SLIC3R_IMPL_CPP ${PRUSA_SRC}/src/libslic3r/src/libslic3r/*.cpp)
+# Mirror upstream: src/libslic3r/CMakeLists.txt comments ArrangeHelper out
+# (it includes the nonexistent libslic3r/MultipleBeds.hpp and nothing else
+# references it); drop it so the glob builds exactly what upstream builds.
+list(REMOVE_ITEM SLIC3R_IMPL_CPP
+    ${PRUSA_SRC}/src/libslic3r/src/libslic3r/ArrangeHelper.cpp)
 add_library(libslic3r_core STATIC ${SLIC3R_IMPL_CPP})
 target_include_directories(libslic3r_core PRIVATE
     ${PRUSA_SRC}/src/libslic3r/include
@@ -787,6 +792,7 @@ target_include_directories(libslic3r_core PRIVATE
     ${PRUSA_SRC}/src/libseqarrange/include
     ${PRUSA_SRC}/bundled_deps
     ${PRUSA_SRC}/bundled_deps/admesh
+    ${PRUSA_SRC}/bundled_deps/clipper/include
     ${PRUSA_SRC}/bundled_deps/semver
     ${PRUSA_SRC}/bundled_deps/localesutils
     ${PRUSA_SRC}/src/slic3r-domain/include
@@ -827,6 +833,7 @@ target_include_directories(slic3r PRIVATE
         ${PRUSA_SRC}/src/libslic3r/src
         ${PRUSA_SRC}/bundled_deps
         ${PRUSA_SRC}/bundled_deps/admesh
+        ${PRUSA_SRC}/bundled_deps/clipper/include
         ${PRUSA_SRC}/bundled_deps/localesutils
         ${PRUSA_SRC}/bundled_deps/semver
         ${PRUSA_SRC}/bundled_deps/semver

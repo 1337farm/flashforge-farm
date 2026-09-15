@@ -920,6 +920,33 @@ jobs:
             || { echo "ERROR: nanosvg headers missing"; exit 1; }
           echo "nanosvg staged and verified"
 
+      - name: Restore oneTBB v2021.12.0 from cache (3.0 needs template tbb::filter)
+        # Same key as the prusa30-headless tbb job: cache is shared repo-wide,
+        # so the headless staging is reused here instead of rebuilding oneTBB.
+        id: tbb2021-cache
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/tbb
+          key: prusa30-tbb-v2021.12.0-${{ hashFiles('scripts/build_prusa30_tbb.sh') }}-ndk${{ env.NDK_VERSION }}-arm64-v8a
+
+      - name: Build oneTBB v2021.12.0 from source (cache miss)
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1' && steps.tbb2021-cache.outputs.cache-hit != 'true'
+        run: |
+          chmod +x scripts/build_prusa30_tbb.sh
+          NDK="$ANDROID_NDK_ROOT" ABI="arm64-v8a" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/tbb" \
+            ./scripts/build_prusa30_tbb.sh
+
+      - name: Verify staged oneTBB v2021.12.0
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          test -f engine/prusa30/jniImports/tbb/include/oneapi/tbb/version.h \
+            || { echo "ERROR: oneTBB 2021 headers missing"; exit 1; }
+          find engine/prusa30/jniImports/tbb -name 'libtbb.a' | grep -q . \
+            || { echo "ERROR: libtbb.a missing"; exit 1; }
+          echo "oneTBB v2021.12.0 staged and verified"
+
       - name: Build native engine .so from source (standalone CMake)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |

@@ -88,6 +88,20 @@ add_library(tbbmalloc STATIC IMPORTED)
 set_target_properties(tbbmalloc PROPERTIES IMPORTED_LOCATION
         ${jni_imports}/oneTBB/lib/${ANDROID_ABI}/libtbbmalloc.a)
 
+# oneTBB 2021 for the 3.0 core: upstream uses tbb::filter<T, U> (a template),
+# which classic 2019 TBB lacks (non-template base there). CI restores the
+# headless oneTBB v2021.12 staging at prusa30/jniImports/tbb; prefer it when
+# present so headers and archives stay in lockstep, else keep the dep release.
+file(GLOB TBB_2021_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/include)
+file(GLOB TBB_2021_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/lib*/libtbb.a)
+file(GLOB TBBMALLOC_2021_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/lib*/libtbbmalloc.a)
+if(TBB_2021_INCLUDE AND TBB_2021_LIB)
+    set_target_properties(tbb PROPERTIES IMPORTED_LOCATION ${TBB_2021_LIB})
+endif()
+if(TBBMALLOC_2021_LIB)
+    set_target_properties(tbbmalloc PROPERTIES IMPORTED_LOCATION ${TBBMALLOC_2021_LIB})
+endif()
+
 add_library(gmp SHARED IMPORTED)
 set_target_properties(gmp PROPERTIES IMPORTED_LOCATION
         ${jni_libs}/${ANDROID_ABI}/libgmp.so)
@@ -472,7 +486,7 @@ add_library(openvdb
         src/main/jni/openvdb/points/points.cc
         src/main/jni/openvdb/util/Formats.cc
         src/main/jni/openvdb/util/Util.cc)
-target_include_directories(openvdb PRIVATE src/main/jni src/main/jniImports/boost/include src/main/jniImports/oneTBB/include)
+target_include_directories(openvdb PRIVATE src/main/jni src/main/jniImports/boost/include ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/include src/main/jniImports/oneTBB/include)
 set(MCUT_BUILD_AS_SHARED_LIB OFF)
 set(MCUT_BUILD_TESTS OFF)
 set(MCUT_BUILD_TUTORIALS OFF)
@@ -819,6 +833,7 @@ target_include_directories(libslic3r_core PRIVATE
     ${PRUSA_SRC}/src/slic3r-jthread/include
     ${PRUSA_SRC}/src/libpgcode/include
     ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main/jniImports/oneTBB/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main/jniImports/boost/include
     ${PRUSA_GEN}
@@ -915,6 +930,7 @@ target_include_directories(slic3r PRIVATE
         src/main/jni/nlopt/api
         src/main/jni/libnest2d/include
         src/main/jni/libvgcode/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/include
         src/main/jniImports/oneTBB/include
         src/main/jniImports/boost/include
         src/main/jniImports/gmp/include/${ANDROID_ABI}

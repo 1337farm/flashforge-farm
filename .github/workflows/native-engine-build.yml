@@ -908,6 +908,18 @@ jobs:
             || { echo "ERROR: libassert headers missing"; exit 1; }
           echo "libassert staged and verified"
 
+      - name: Stage NanoSVG headers fresh (3.0 EmbossShape needs <nanosvg/nanosvg.h>)
+        # Header-only fltk fork (seconds); same pin/layout as
+        # scripts/build_prusa30_deps.sh so -I matches upstream's include spelling.
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          chmod +x scripts/stage_prusa30_nanosvg.sh
+          STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/nanosvg" \
+            ./scripts/stage_prusa30_nanosvg.sh
+          find engine/prusa30/jniImports/nanosvg -path '*/nanosvg/nanosvg.h' | grep -q . \
+            || { echo "ERROR: nanosvg headers missing"; exit 1; }
+          echo "nanosvg staged and verified"
+
       - name: Build native engine .so from source (standalone CMake)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |

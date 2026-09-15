@@ -811,7 +811,8 @@ target_include_directories(libslic3r_core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/sol2/include
     ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/expected/include
     ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/magic_enum/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/assert/include)
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/assert/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/nanosvg/include)
 
 # libassert (staged fresh by CI into prusa30/jniImports/assert): upstream 3.0
 # Assert.hpp needs its symbols at link time (slic3r-base links
@@ -850,6 +851,7 @@ target_include_directories(slic3r PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/expected/include
         ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/magic_enum/include
         ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/assert/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/nanosvg/include
         ${PRUSA_GEN}
         src/main/jni/openvdb
         src/main/jni/mpfr

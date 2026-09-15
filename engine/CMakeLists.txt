@@ -876,6 +876,8 @@ target_include_directories(libslic3r_core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/assert/include
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/nanosvg/include
     ${PRUSA_SRC}/bundled_deps/ankerl
+    ${PRUSA_SRC}/bundled_deps/stb_image
+    ${PRUSA_SRC}/bundled_deps/stb_dxt
     src/main/jni/libnest2d/include
     src/main/jni/LibBGCode
     src/main/jni/qhull
@@ -923,9 +925,9 @@ target_include_directories(slic3r PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/magic_enum/include
         ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/assert/include
         ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/nanosvg/include
-    ${PRUSA_SRC}/bundled_deps/ankerl
-    ${PRUSA_SRC}/bundled_deps/stb_image
-    ${PRUSA_SRC}/bundled_deps/stb_dxt
+        ${PRUSA_SRC}/bundled_deps/ankerl
+        ${PRUSA_SRC}/bundled_deps/stb_image
+        ${PRUSA_SRC}/bundled_deps/stb_dxt
         src/main/jni/libnest2d/include
         ${PRUSA_GEN}
         src/main/jni/openvdb

@@ -851,6 +851,7 @@ target_include_directories(libslic3r_core PRIVATE
     ${PRUSA_SRC}/src/slic3r-gcode-reader/include
     ${PRUSA_SRC}/src/slic3r-jthread/include
     ${PRUSA_SRC}/src/libpgcode/include
+    ${PRUSA_SRC}/src/slic3r-platform/include
     ${PRUSA_SRC}/src/slic3r-domain/src
     ${PRUSA_SRC}/src/slic3r-shared/src
     ${PRUSA_SRC}/src/slic3r-base/src

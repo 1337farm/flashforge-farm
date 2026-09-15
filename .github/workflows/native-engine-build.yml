@@ -1179,6 +1179,19 @@ jobs:
             || { echo "ERROR: oneTBB 2021 headers missing"; exit 1; }
           echo "oneTBB v2021.12.0 staged and verified"
 
+      - name: Stage NanoSVG headers fresh (bridge EmbossShape needs <nanosvg/nanosvg.h>)
+        # Header-only fltk fork (seconds); same pin/layout as
+        # scripts/build_prusa30_deps.sh. The apk runner is separate from the
+        # engine runner, so this must be staged here too, not reused.
+        if: needs.changes.outputs.native == 'true'
+        run: |
+          chmod +x scripts/stage_prusa30_nanosvg.sh
+          STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/nanosvg" \
+            ./scripts/stage_prusa30_nanosvg.sh
+          find engine/prusa30/jniImports/nanosvg -path '*/nanosvg/nanosvg.h' | grep -q . \
+            || { echo "ERROR: nanosvg headers missing"; exit 1; }
+          echo "nanosvg staged and verified"
+
       - name: Download GMP trees artifact
         if: needs.changes.outputs.native == 'true'
         uses: actions/download-artifact@v6

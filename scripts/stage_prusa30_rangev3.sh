@@ -33,13 +33,14 @@ SRC_INC="$(find "$WORK_DIR/range-v3" -maxdepth 3 -type d -name include | head -1
 [ -n "$SRC_INC" ] && [ -d "$SRC_INC/range" ] \
     || { echo "--- [stage] ERROR: range headers not found ---" >&2; exit 1; }
 mkdir -p "$STAGE_ROOT/include"
-cp -r "$SRC_INC/range" "$STAGE_ROOT/include/"
-# meta/ and concepts/ ship in-tree with range-v3 (range headers include
-# <meta/meta.hpp> and <concepts/concepts.hpp>).
-cp -r "$SRC_INC/meta" "$STAGE_ROOT/include/"
-cp -r "$SRC_INC/concepts" "$STAGE_ROOT/include/"
+# Copy the whole include tree (range/, meta/, concepts/, std/ shims): range
+# headers pull sibling subdirs (e.g. <std/detail/...>) that only surface
+# one CI round at a time if staged piecemeal.
+cp -r "$SRC_INC/range" "$SRC_INC/meta" "$SRC_INC/concepts" "$SRC_INC/std" \
+    "$STAGE_ROOT/include/"
 [ -f "$STAGE_ROOT/include/range/v3/view/concat.hpp" ] \
  && [ -f "$STAGE_ROOT/include/meta/meta.hpp" ] \
  && [ -f "$STAGE_ROOT/include/concepts/concepts.hpp" ] \
+ && [ -f "$STAGE_ROOT/include/std/detail/associated_types.hpp" ] \
     || { echo "--- [stage] ERROR: staged range headers incomplete ---" >&2; exit 1; }
 echo "range-v3 $RANGE_VER staged at $STAGE_ROOT/include"

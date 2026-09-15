@@ -785,6 +785,12 @@ file(GLOB SLIC3R_IMPL_CPP ${PRUSA_SRC}/src/libslic3r/src/libslic3r/*.cpp)
 # references it); drop it so the glob builds exactly what upstream builds.
 list(REMOVE_ITEM SLIC3R_IMPL_CPP
     ${PRUSA_SRC}/src/libslic3r/src/libslic3r/ArrangeHelper.cpp)
+# CustomParametersHandling.cpp captures structured bindings in OpenMP
+# regions, which NDK Clang rejects. Compile just this TU without OpenMP
+# (pragmas ignored -> serial execution, same results).
+set_source_files_properties(
+    ${PRUSA_SRC}/src/libslic3r/src/libslic3r/CustomParametersHandling.cpp
+    PROPERTIES COMPILE_OPTIONS -fno-openmp)
 add_library(libslic3r_core STATIC ${SLIC3R_IMPL_CPP})
 target_include_directories(libslic3r_core PRIVATE
     ${PRUSA_SRC}/src/libslic3r/include

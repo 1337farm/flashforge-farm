@@ -884,6 +884,7 @@ target_include_directories(libslic3r_core PRIVATE
     src/main/jni/libigl
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/mixer/include
     src/main/jni/miniz
+    src/main/jni/libpng
     src/main/jni/expat
     src/main/jni/fast_float
     src/main/jni/glu-libtess/include

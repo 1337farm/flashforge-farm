@@ -876,6 +876,7 @@ target_include_directories(libslic3r_core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/magic_enum/include
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/assert/include
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/nanosvg/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/rangev3/include
     ${PRUSA_SRC}/bundled_deps/ankerl
     ${PRUSA_SRC}/bundled_deps/stb_image
     ${PRUSA_SRC}/bundled_deps/stb_dxt

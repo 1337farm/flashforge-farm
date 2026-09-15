@@ -992,6 +992,17 @@ jobs:
             || { echo "ERROR: mixer headers missing"; exit 1; }
           echo "Qhull + prusa-fdm-mixer staged and verified"
 
+      - name: Stage range-v3 headers fresh (Preset views need <range/v3/...>)
+        # Header-only (seconds); pin mirrors upstream deps/+rangev3/rangev3.cmake.
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          chmod +x scripts/stage_prusa30_rangev3.sh
+          STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/rangev3" \
+            ./scripts/stage_prusa30_rangev3.sh
+          test -f engine/prusa30/jniImports/rangev3/include/range/v3/view/concat.hpp \
+            || { echo "ERROR: range-v3 headers missing"; exit 1; }
+          echo "range-v3 staged and verified"
+
       - name: Build native engine .so from source (standalone CMake)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |

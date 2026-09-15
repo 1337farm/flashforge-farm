@@ -834,6 +834,7 @@ target_include_directories(libslic3r_core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/nanosvg/include
     ${PRUSA_SRC}/bundled_deps/ankerl
     src/main/jni/libnest2d/include
+    src/main/jni/LibBGCode
     src/main/jni)
 
 # libassert (staged fresh by CI into prusa30/jniImports/assert): upstream 3.0

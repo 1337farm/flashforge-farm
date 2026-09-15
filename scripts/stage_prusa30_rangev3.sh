@@ -34,8 +34,12 @@ SRC_INC="$(find "$WORK_DIR/range-v3" -maxdepth 3 -type d -name include | head -1
     || { echo "--- [stage] ERROR: range headers not found ---" >&2; exit 1; }
 mkdir -p "$STAGE_ROOT/include"
 cp -r "$SRC_INC/range" "$STAGE_ROOT/include/"
-# meta/ ships in-tree with range-v3 (range/view headers include <meta/meta.hpp>).
+# meta/ and concepts/ ship in-tree with range-v3 (range headers include
+# <meta/meta.hpp> and <concepts/concepts.hpp>).
 cp -r "$SRC_INC/meta" "$STAGE_ROOT/include/"
-[ -f "$STAGE_ROOT/include/range/v3/view/concat.hpp" ] && [ -f "$STAGE_ROOT/include/meta/meta.hpp" ] \
+cp -r "$SRC_INC/concepts" "$STAGE_ROOT/include/"
+[ -f "$STAGE_ROOT/include/range/v3/view/concat.hpp" ] \
+ && [ -f "$STAGE_ROOT/include/meta/meta.hpp" ] \
+ && [ -f "$STAGE_ROOT/include/concepts/concepts.hpp" ] \
     || { echo "--- [stage] ERROR: staged range headers incomplete ---" >&2; exit 1; }
 echo "range-v3 $RANGE_VER staged at $STAGE_ROOT/include"

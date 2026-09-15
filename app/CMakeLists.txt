@@ -67,7 +67,6 @@ add_library(farm SHARED
         ${ENGINE_JNI}/render/GLShader.cpp)
 
 add_library(farm_prusa30_jni SHARED
-        ${ENGINE_ROOT}/prusa30/jni_bridge/jni_farm_slice.cpp
         ${ENGINE_ROOT}/prusa30/farm_driver.cpp)
 
 # Compile against the engine's own source tree (ABI-lockstep) + staged deps.
@@ -85,7 +84,7 @@ target_include_directories(farm PRIVATE
         ${ENGINE_JNI}                       # render/, expat/, clipper/, cereal/, ...
         ${PRUSA_SRC}/src/libslic3r/include  # ISSUE-210: 3.0 core headers (vendored libslic3r/ deleted)
         ${ENGINE_ROOT}/prusa30
-        ${ENGINE_ROOT}/prusa30/jni_bridge)
+        ${ENGINE_ROOT}/prusa30/jni_bridge
         ${PRUSA_SRC}/src/libslic3r/src
         ${PRUSA_SRC}/bundled_deps/admesh
         ${PRUSA_SRC}/bundled_deps/localesutils

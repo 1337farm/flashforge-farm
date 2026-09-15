@@ -88,6 +88,9 @@ target_include_directories(farm PRIVATE
         ${PRUSA_SRC}/src/libslic3r/src
         ${PRUSA_SRC}/bundled_deps/admesh
         ${PRUSA_SRC}/bundled_deps/localesutils
+        ${PRUSA_SRC}/bundled_deps/semver
+        ${PRUSA_SRC}/bundled_deps/clipper/include
+        ${PRUSA_SRC}/bundled_deps/ankerl
         ${PRUSA_SRC}/src/slic3r-domain/include
         ${PRUSA_SRC}/src/slic3r-base/include
         ${PRUSA_SRC}/src/slic3r-biz-algorithms/include
@@ -109,11 +112,14 @@ target_include_directories(farm PRIVATE
         ${ENGINE_ROOT}/build/headers/magic_enum/include
         ${PRUSA_GEN}
         ${ENGINE_ROOT}/prusa30/jniImports/assert/include  # staged libassert (3.0 Assert.hpp)
+        ${ENGINE_ROOT}/prusa30/jniImports/nanosvg/include
+        ${ENGINE_ROOT}/prusa30/jniImports/tbb/include
         ${ENGINE_INCLUDE_SUBDIRS}               # flattened sys-style includes (<expat.h>, <nlopt.h>, ...)
         ${ENGINE_JNI}/render                # flat render headers: GLModel.hpp, GLShader.hpp, bed_utils.hpp
         ${ENGINE_JNI}/libvgcode/include     # vgcode flat include: Viewer.hpp
         ${ENGINE_JNI}/libigl                # <igl/unproject.h>, <igl/copyleft/cgal/...>
         ${ENGINE_JNI}/libnest2d/include     # <libnest2d/...>
+        ${ENGINE_JNI}/LibBGCode
         ${JNI_IMPORTS}/oneTBB/include           # <tbb/...>, <oneapi/tbb/...>
         ${JNI_IMPORTS}/boost/include            # <boost/...>
         ${JNI_IMPORTS}/gmp/include/${ANDROID_ABI}  # <gmp.h>, <gmpxx.h>, <mpfr.h>

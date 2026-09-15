@@ -24,7 +24,6 @@
 
 #include <jni.h>
 
-#include "Slic3r/Domain/Types.hpp"
 #include "Slic3r/Domain/Model.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Domain/ModelVolume.hpp"

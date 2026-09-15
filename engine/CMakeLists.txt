@@ -878,12 +878,14 @@ target_include_directories(libslic3r_core PRIVATE
     ${PRUSA_SRC}/bundled_deps/ankerl
     ${PRUSA_SRC}/bundled_deps/stb_image
     ${PRUSA_SRC}/bundled_deps/stb_dxt
+    ${PRUSA_SRC}/bundled_deps/libnest2d/include
     src/main/jni/libnest2d/include
     src/main/jni/LibBGCode
     src/main/jni/qhull
     src/main/jni/libigl
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/mixer/include
     ${PRUSA_SRC}/bundled_deps/int128
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/main/jniImports/gmp/include/${ANDROID_ABI}
     src/main/jni/miniz
     src/main/jni/libpng
     src/main/jni/nlopt/api

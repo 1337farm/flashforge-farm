@@ -5,17 +5,13 @@
 ///|/
 ///|/ PrusaSlicer is released under the terms of the AGPLv3 or higher
 ///|/
-#include "libslic3r/libslic3r.h"
 #include "GLShader.hpp"
 
-#include "libslic3r/Utils.hpp"
-#include "libslic3r/format.hpp"
-#include "libslic3r/Color.hpp"
+#include "Slic3r/Domain/Color.hpp"
 
-#include <boost/nowide/fstream.hpp>
+#include <algorithm>
 #include <cassert>
-
-#include <boost/log/trivial.hpp>
+#include <vector>
 
 #include <android/log.h>
 

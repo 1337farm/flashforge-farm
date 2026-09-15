@@ -947,6 +947,51 @@ jobs:
             || { echo "ERROR: libtbb.a missing"; exit 1; }
           echo "oneTBB v2021.12.0 staged and verified"
 
+      - name: Restore staged Qhull+mixer from cache (VirtualExtruder needs mixer)
+        # Same key as the prusa30-headless qhullmix job: cache is shared
+        # repo-wide, so the headless staging is reused here.
+        id: qm-cache
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            engine/prusa30/jniImports/qhull
+            engine/prusa30/jniImports/mixer
+          key: prusa30-qhullmix-${{ hashFiles('scripts/build_prusa30_qhull.sh', 'scripts/build_prusa30_mixer.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored Qhull+mixer
+        id: qm-validate
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          NEED=1
+          if [ "${{ steps.qm-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            find engine/prusa30/jniImports/mixer -name 'libprusa_fdm_mixer.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/mixer -path '*/prusa_fdm_mixer/prusa_fdm_mixer.hpp' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Build Qhull + prusa-fdm-mixer from source (cache miss)
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1' && steps.qm-validate.outputs.need == '1'
+        run: |
+          chmod +x engine/prusa30/fetch_prusaslicer.sh scripts/build_prusa30_qhull.sh scripts/build_prusa30_mixer.sh
+          PRUSA_DIR=/tmp/prusa-overlay PRUSA_SHALLOW=1 ./engine/prusa30/fetch_prusaslicer.sh
+          test -f /tmp/prusa-overlay/deps/+prusa_fdm_mixer/CMakeLists.txt \
+            || { echo "ERROR: mixer overlay missing"; exit 1; }
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/qhull" \
+            ./scripts/build_prusa30_qhull.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/mixer" \
+            PRUSA_UP=/tmp/prusa-overlay \
+            ./scripts/build_prusa30_mixer.sh
+          find engine/prusa30/jniImports/mixer -name 'libprusa_fdm_mixer.a' | grep -q . \
+            || { echo "ERROR: no libprusa_fdm_mixer.a staged"; exit 1; }
+          find engine/prusa30/jniImports/mixer -path '*/prusa_fdm_mixer/prusa_fdm_mixer.hpp' | grep -q . \
+            || { echo "ERROR: mixer headers missing"; exit 1; }
+          echo "Qhull + prusa-fdm-mixer staged and verified"
+
       - name: Build native engine .so from source (standalone CMake)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |

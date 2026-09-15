@@ -820,7 +820,7 @@ file(GLOB_RECURSE SLIC3R_MODULE_SRC
     ${PRUSA_SRC}/src/libpgcode/src/*.cpp)
 # NOTE: libseqarrange excluded (needs z3++.h, absent); its only user is the
 # excluded ArrangeHelper. biz-crypto excluded (needs OpenSSL headers).
-list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|Mac\\.cpp|TestRenderModule|sequential_decimator|HttpCurl\\.cpp|SHA256Linux\\.cpp")
+list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|Mac\\.cpp|Slic3r/App/|sequential_decimator|HttpCurl\\.cpp|SHA256Linux\\.cpp|AppInstanceMessageHandlerLinux\\.cpp|AppInstanceMessageHandlerFactoryLinux\\.cpp|RemovableDriveMonitorLinux\\.cpp|RemovableDriveServiceLinux\\.cpp")
 # CustomParametersHandling.cpp captures structured bindings in OpenMP
 # regions, which NDK Clang rejects. Compile just this TU without OpenMP
 # (pragmas ignored -> serial execution, same results).
@@ -878,6 +878,9 @@ target_include_directories(libslic3r_core PRIVATE
     ${PRUSA_SRC}/bundled_deps/ankerl
     src/main/jni/libnest2d/include
     src/main/jni/LibBGCode
+    src/main/jni/qhull
+    src/main/jni/libigl
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/mixer/include
     src/main/jni)
 
 # libassert (staged fresh by CI into prusa30/jniImports/assert): upstream 3.0
@@ -885,7 +888,8 @@ target_include_directories(libslic3r_core PRIVATE
 # libassert::assert upstream). Glob the staged archives (libassert.a +
 # libcpptrace.a) so the final .so is self-contained.
 file(GLOB ASSERT_STATIC_LIBS ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/assert/lib/*.a)
-target_link_libraries(slic3r PRIVATE libslic3r_core ${ASSERT_STATIC_LIBS})
+file(GLOB MIXER_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/mixer/lib*/libprusa_fdm_mixer.a)
+target_link_libraries(slic3r PRIVATE libslic3r_core ${ASSERT_STATIC_LIBS} ${MIXER_STATIC_LIB})
 
 target_include_directories(slic3r PRIVATE
         src/main/jni

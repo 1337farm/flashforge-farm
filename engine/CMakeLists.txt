@@ -809,13 +809,15 @@ target_include_directories(libslic3r_core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/nlohmann_json/include
     ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/sol2/include
     ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/expected/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/magic_enum/include)
-target_link_libraries(libslic3r_core PUBLIC ${PRUSA_SRC}/bundled_deps/admesh
-                ${PRUSA_SRC}/bundled_deps/localesutils
-                ${PRUSA_SRC}/bundled_deps/semver
-                                        ${PRUSA_SRC}/bundled_deps/localesutils)
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/magic_enum/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/assert/include)
 
-target_link_libraries(slic3r PRIVATE libslic3r_core)
+# libassert (staged fresh by CI into prusa30/jniImports/assert): upstream 3.0
+# Assert.hpp needs its symbols at link time (slic3r-base links
+# libassert::assert upstream). Glob the staged archives (libassert.a +
+# libcpptrace.a) so the final .so is self-contained.
+file(GLOB ASSERT_STATIC_LIBS ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/assert/lib/*.a)
+target_link_libraries(slic3r PRIVATE libslic3r_core ${ASSERT_STATIC_LIBS})
 
 target_include_directories(slic3r PRIVATE
         src/main/jni
@@ -845,6 +847,7 @@ target_include_directories(slic3r PRIVATE
 
         ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/expected/include
         ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/magic_enum/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/assert/include
         ${PRUSA_GEN}
         src/main/jni/openvdb
         src/main/jni/mpfr

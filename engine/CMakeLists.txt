@@ -817,8 +817,9 @@ file(GLOB_RECURSE SLIC3R_MODULE_SRC
     ${PRUSA_SRC}/src/slic3r-biz-cgal-algorithms/src/*.cpp
     ${PRUSA_SRC}/src/slic3r-biz-parser/src/*.cpp
     ${PRUSA_SRC}/src/slic3r-gcode-reader/src/*.cpp
-    ${PRUSA_SRC}/src/libpgcode/src/*.cpp
-    ${PRUSA_SRC}/src/libseqarrange/src/*.cpp)
+    ${PRUSA_SRC}/src/libpgcode/src/*.cpp)
+# NOTE: libseqarrange excluded (needs z3++.h, absent); its only user is the
+# excluded ArrangeHelper. biz-crypto excluded (needs OpenSSL headers).
 list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|Mac\\.cpp|TestRenderModule|sequential_decimator|HttpCurl\\.cpp|SHA256Linux\\.cpp")
 # CustomParametersHandling.cpp captures structured bindings in OpenMP
 # regions, which NDK Clang rejects. Compile just this TU without OpenMP
@@ -859,7 +860,6 @@ target_include_directories(libslic3r_core PRIVATE
     ${PRUSA_SRC}/src/slic3r-biz-parser/src
     ${PRUSA_SRC}/src/slic3r-gcode-reader/src
     ${PRUSA_SRC}/src/libpgcode/src
-    ${PRUSA_SRC}/src/libseqarrange/src
     ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main/jniImports/oneTBB/include

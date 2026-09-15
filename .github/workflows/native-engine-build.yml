@@ -1163,6 +1163,22 @@ jobs:
             || { echo "ERROR: libassert headers missing"; exit 1; }
           echo "libassert v2.2.1 staged and verified"
 
+      - name: Stage oneTBB v2021.12.0 headers (bridge needs 2021 template tbb headers)
+        # Headers only (seconds): the app links the engine .so, never libtbb.a.
+        # No actions/cache by design (CI guard); pin mirrors build_prusa30_tbb.sh.
+        if: needs.changes.outputs.native == 'true'
+        run: |
+          chmod +x scripts/stage_prusa30_tbb_headers.sh
+          STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/tbb" \
+            ./scripts/stage_prusa30_tbb_headers.sh
+
+      - name: Verify staged oneTBB v2021.12.0 headers
+        if: needs.changes.outputs.native == 'true'
+        run: |
+          test -f engine/prusa30/jniImports/tbb/include/oneapi/tbb/version.h \
+            || { echo "ERROR: oneTBB 2021 headers missing"; exit 1; }
+          echo "oneTBB v2021.12.0 staged and verified"
+
       - name: Download GMP trees artifact
         if: needs.changes.outputs.native == 'true'
         uses: actions/download-artifact@v6

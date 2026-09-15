@@ -125,7 +125,6 @@ target_compile_options(farm_prusa30_jni PRIVATE -fsigned-char)
 
 target_include_directories(farm_prusa30_jni PRIVATE
         ${ENGINE_ROOT}/prusa30
-        ${ENGINE_ROOT}/prusa30/jni_bridge
         ${PRUSA_SRC}/src/libslic3r/include
         ${PRUSA_SRC}/src/libslic3r/src
         ${PRUSA_SRC}/src/slic3r-domain/include
@@ -138,9 +137,29 @@ target_include_directories(farm_prusa30_jni PRIVATE
         ${PRUSA_SRC}/src/slic3r-gcode-reader/include
         ${PRUSA_SRC}/src/slic3r-jthread/include
         ${PRUSA_SRC}/src/libpgcode/include
+        ${PRUSA_SRC}/bundled_deps/admesh
+        ${PRUSA_SRC}/bundled_deps/localesutils
+        ${PRUSA_SRC}/bundled_deps/semver
+        ${PRUSA_SRC}/bundled_deps/clipper/include
+        ${PRUSA_SRC}/bundled_deps/ankerl
+        ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
+        ${ENGINE_ROOT}/build/headers/eigen/include
+        ${ENGINE_ROOT}/build/headers/spdlog/include
+        ${ENGINE_ROOT}/build/headers/fmt/include
+        ${ENGINE_ROOT}/build/headers/cereal/include
+        ${ENGINE_ROOT}/build/headers/nlohmann_json/include
+        ${ENGINE_ROOT}/build/headers/sol2/include
+        ${ENGINE_ROOT}/build/headers/expected/include
+        ${ENGINE_ROOT}/build/headers/magic_enum/include
+        ${ENGINE_ROOT}/prusa30/jniImports/assert/include
+        ${ENGINE_ROOT}/prusa30/jniImports/nanosvg/include
+        ${ENGINE_ROOT}/prusa30/jniImports/tbb/include
+        ${ENGINE_JNI}/libnest2d/include
+        ${ENGINE_JNI}/LibBGCode
         ${PRUSA_GEN}
         ${JNI_IMPORTS}/boost/include
         ${JNI_IMPORTS}/oneTBB/include
+        ${JNI_IMPORTS}/gmp/include/${ANDROID_ABI}
 )
 target_compile_definitions(farm PRIVATE
         -DUSE_TBB -DTBB_USE_CAPTURED_EXCEPTION=0 -DLIBNEST2D_GEOMETRIES_libslic3r

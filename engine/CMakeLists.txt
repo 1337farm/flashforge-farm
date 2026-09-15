@@ -883,6 +883,7 @@ target_include_directories(libslic3r_core PRIVATE
     src/main/jni/qhull
     src/main/jni/libigl
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/mixer/include
+    ${PRUSA_SRC}/bundled_deps/int128
     src/main/jni/miniz
     src/main/jni/libpng
     src/main/jni/nlopt/api

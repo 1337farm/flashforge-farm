@@ -37,6 +37,6 @@ SRC="$(find "$WORK_DIR/oneTBB-$TBB_VER" -maxdepth 2 -name CMakeLists.txt -path '
     || { echo "--- [stage] ERROR: oneTBB include tree not found ---" >&2; exit 1; }
 mkdir -p "$STAGE_ROOT/include"
 cp -r "$SRC/include/oneapi" "$SRC/include/tbb" "$STAGE_ROOT/include/"
-[ -f "$STAGE_ROOT/include/oneapi/tbb/version.h" ] && [ -f "$STAGE_ROOT/include/tbb/pipeline.h" ] \
+[ -f "$STAGE_ROOT/include/oneapi/tbb/version.h" ] && [ -f "$STAGE_ROOT/include/tbb/parallel_pipeline.h" ] \
     || { echo "--- [stage] ERROR: staged oneTBB headers incomplete ---" >&2; exit 1; }
 echo "oneTBB $TBB_VER headers staged at $STAGE_ROOT/include"

@@ -1031,6 +1031,20 @@ jobs:
             || { echo "ERROR: libdeflate headers missing"; exit 1; }
           echo "libdeflate staged and verified"
 
+      - name: Stage Tracy headers fresh (3.0 ProjectInteractor needs <tracy/Tracy.hpp>)
+        # Profiling is OFF (SLIC3R_ENABLE_PROFILING default), so only the
+        # header is consumed; no TracyClient lib is built. Header-only intlint
+        # staging (seconds), same pin as build_prusa30_tracy.sh.
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          chmod +x scripts/build_prusa30_tracy.sh
+          STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/tracy" \
+            ABI="arm64-v8a" API_LEVEL="23" \
+            ./scripts/build_prusa30_tracy.sh
+          test -f engine/prusa30/jniImports/tracy/tracy/Tracy.hpp \
+            || { echo "ERROR: tracy/Tracy.hpp missing"; exit 1; }
+          echo "tracy staged and verified"
+
       - name: Build native engine .so from source (standalone CMake)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |

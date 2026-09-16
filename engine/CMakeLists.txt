@@ -940,6 +940,11 @@ file(GLOB LIBDEFLATE_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/l
 # fmt 12.1.0 (SPDLOG_FMT_EXTERNAL): the staged headers only compile the
 # fmt::v12 calls; the definitions live in the freshly built libfmt.a.
 file(GLOB FMT_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/fmtlib/lib*/libfmt.a)
+# ryml 0.10.0 (SLIC3R_YAML_RYML): YamlAdapterRyml's c4::yml calls need the
+# compiled rapidyaml + vendored c4core archives; c4core must link after
+# libryml.a (archive order: it resolves ryml's own references).
+file(GLOB RYML_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/ryml/lib/libryml.a)
+file(GLOB C4CORE_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/ryml/lib/libc4core.a)
 # --whole-archive around libslic3r_core: the farm JNI bridge (libfarm.so)
 # links against libslic3r.so and resolves the 3.0 Slic3r::Domain/Biz API at
 # link time. A plain archive pull would drag in only the members something
@@ -952,7 +957,8 @@ target_link_libraries(slic3r PRIVATE
         -Wl,--whole-archive
         libslic3r_core
         -Wl,--no-whole-archive
-        ${ASSERT_STATIC_LIBS} ${MIXER_STATIC_LIB} ${LIBDEFLATE_STATIC_LIB} ${FMT_STATIC_LIB})
+        ${ASSERT_STATIC_LIBS} ${MIXER_STATIC_LIB} ${LIBDEFLATE_STATIC_LIB} ${FMT_STATIC_LIB}
+        ${RYML_STATIC_LIB} ${C4CORE_STATIC_LIB})
 
 target_include_directories(slic3r PRIVATE
         src/main/jni

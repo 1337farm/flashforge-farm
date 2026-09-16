@@ -1017,6 +1017,22 @@ jobs:
             || { echo "ERROR: yaml-cpp headers missing"; exit 1; }
           echo "yaml headers staged and verified"
 
+      - name: Build ryml+c4core fresh (YamlAdapterRyml link needs libryml.a)
+        # Mirrors libdeflate/fmt: no cache reuse by design. Headers alone
+        # cannot provide the c4::yml symbols the whole-archive link
+        # force-resolves from YamlAdapterRyml.o. Same pin as the staged
+        # headers and upstream deps/+ryml; archives land under
+        # jniImports/ryml/lib (link order ryml -> c4core).
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          chmod +x scripts/build_prusa30_ryml.sh
+          ABI="arm64-v8a" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/ryml" \
+            ./scripts/build_prusa30_ryml.sh
+          test -f engine/prusa30/jniImports/ryml/lib/libryml.a \
+            || { echo "ERROR: no libryml.a staged"; exit 1; }
+          echo "ryml staged and verified"
+
       - name: Build libdeflate fresh (3mf needs libdeflate_* symbols)
         # No cache reuse by design (like libassert/GMP): ~1 min, immune to poisoning.
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'

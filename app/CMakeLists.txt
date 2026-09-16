@@ -172,9 +172,11 @@ target_compile_definitions(farm PRIVATE
         -DLIBNEST2D_OPTIMIZER_nlopt -DLIBNEST2D_THREADING_tbb -DLIBNEST2D_STATIC
         -DENABLE_OPENGL_ES -DSLIC3R_OPENGL_ES -DUSE_CPP11_REGEX
         -DJSON_USE_IMPLICIT_CONVERSIONS=0
+        -DSPDLOG_FMT_EXTERNAL
         -DSLIC3R_VERSION=${SLIC3R_VERSION} -DSLIC3R_BUILD_ID=${SLIC3R_BUILD_ID})
 target_compile_definitions(farm_prusa30_jni PRIVATE
-        -DJSON_USE_IMPLICIT_CONVERSIONS=0)
+        -DJSON_USE_IMPLICIT_CONVERSIONS=0
+        -DSPDLOG_FMT_EXTERNAL)
 
 # libfarm is a shared lib: any Boost/TBB/OCCT/GMP symbol it references resolves
 # from libslic3r.so and the dependencies it loads. Link the engine + JNI log.

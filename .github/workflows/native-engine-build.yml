@@ -1003,6 +1003,20 @@ jobs:
             || { echo "ERROR: range-v3 headers missing"; exit 1; }
           echo "range-v3 staged and verified"
 
+      - name: Stage YAML headers fresh (Preset IO needs <ryml.hpp>, Config needs yaml-cpp)
+        # Header-only (seconds); pins mirror upstream deps/+ryml/ryml.cmake and
+        # deps/+yamlCpp/yamlCpp.cmake.
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          chmod +x scripts/stage_prusa30_yaml.sh
+          STAGE_ROOT="$(pwd)/engine/prusa30/jniImports" \
+            ./scripts/stage_prusa30_yaml.sh
+          test -f engine/prusa30/jniImports/ryml/include/ryml.hpp \
+            || { echo "ERROR: ryml headers missing"; exit 1; }
+          test -f engine/prusa30/jniImports/yamlcpp/include/yaml-cpp/exceptions.h \
+            || { echo "ERROR: yaml-cpp headers missing"; exit 1; }
+          echo "yaml headers staged and verified"
+
       - name: Build native engine .so from source (standalone CMake)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |

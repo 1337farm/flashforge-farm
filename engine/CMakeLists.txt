@@ -825,6 +825,7 @@ file(GLOB_RECURSE SLIC3R_MODULE_SRC
     ${PRUSA_SRC}/src/slic3r-biz-cgal-algorithms/src/*.cpp
     ${PRUSA_SRC}/src/slic3r-biz-parser/src/*.cpp
     ${PRUSA_SRC}/src/slic3r-gcode-reader/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-platform/src/*.cpp
     ${PRUSA_SRC}/src/libpgcode/src/*.cpp)
 # NOTE: libseqarrange excluded (needs z3++.h, absent); its only user is the
 # excluded ArrangeHelper. biz-crypto excluded (needs OpenSSL headers).
@@ -836,7 +837,14 @@ file(GLOB_RECURSE SLIC3R_MODULE_SRC
 # PlatformInfo_emscripten.cpp excluded: unguarded duplicate definition of
 # Slic3r::PlatformInfo (same as _unix.cpp); whole-archive link surfaces it —
 # Android/bionic wants the _unix.cpp uname variant.
-list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|win32|Mac\\.cpp|Slic3r/App/|sequential_decimator|HttpCurl\\.cpp|HttpCurlFactory\\.cpp|SHA256Linux\\.cpp|AppInstanceMessageHandlerLinux\\.cpp|AppInstanceMessageHandlerFactoryLinux\\.cpp|RemovableDriveMonitorLinux\\.cpp|RemovableDriveServiceLinux\\.cpp|TryCatchSignalSEH\\.cpp|Emboss/EmbossJob\\.cpp|Emboss/TextShapeProvider\\.cpp|Emboss/TextLines\\.cpp|Emboss/SurfaceDrag\\.cpp|Format/3mf/BuildTicket\\.cpp|Preset/Bundle\\.cpp|Preset/AbstractConfigManipulation\\.cpp|YamlAdapterLibfyaml\\.cpp|YamlAdapterYamlCpp\\.cpp|PlatformInfo_emscripten\\.cpp")
+# EmbossJob.cpp re-added (was batch-excluded with the Plater-needing Emboss
+# UI TUs): upstream compiles it in the unconditional headless file set and
+# Biz/Format/SVG's load_svg calls Emboss::create_projection, defined there.
+# slic3r-platform/src globbed for the same reason (upstream builds it
+# headless): EmbossJob and other Biz TUs call PlatformServices, whose
+# implementation lives there; the Slic3r/App/ regex still drops its
+# canvas/animation half.
+list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|win32|Mac\\.cpp|Slic3r/App/|sequential_decimator|HttpCurl\\.cpp|HttpCurlFactory\\.cpp|SHA256Linux\\.cpp|AppInstanceMessageHandlerLinux\\.cpp|AppInstanceMessageHandlerFactoryLinux\\.cpp|RemovableDriveMonitorLinux\\.cpp|RemovableDriveServiceLinux\\.cpp|TryCatchSignalSEH\\.cpp|Emboss/TextShapeProvider\\.cpp|Emboss/TextLines\\.cpp|Emboss/SurfaceDrag\\.cpp|Format/3mf/BuildTicket\\.cpp|Preset/Bundle\\.cpp|Preset/AbstractConfigManipulation\\.cpp|YamlAdapterLibfyaml\\.cpp|YamlAdapterYamlCpp\\.cpp|PlatformInfo_emscripten\\.cpp")
 # CustomParametersHandling.cpp captures structured bindings in OpenMP
 # regions, which NDK Clang rejects. Compile just this TU without OpenMP
 # (pragmas ignored -> serial execution, same results).

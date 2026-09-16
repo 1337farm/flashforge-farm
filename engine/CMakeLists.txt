@@ -834,9 +834,9 @@ set_source_files_properties(
     ${PRUSA_SRC}/src/libslic3r/src/libslic3r/CustomParametersHandling.cpp
     PROPERTIES COMPILE_OPTIONS -fno-openmp)
 add_library(libslic3r_core STATIC ${SLIC3R_IMPL_CPP} ${SLIC3R_MODULE_SRC}
-    # pugixml is staged fresh by CI (see scripts/stage_prusa30_pugixml.sh);
-    # upstream 3mf/BuildTicket.cpp needs its symbols, not just headers.
-    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/pugixml/src/pugixml.cpp)
+    # Vendored pugixml (see engine/prusa30/vendor/pugixml/README): upstream
+    # 3mf/BuildTicket.cpp needs its symbols, not just headers.
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/vendor/pugixml/pugixml.cpp)
 # Order the BGCode export headers (generate_export_header) before any core TU:
 # upstream GCode.cpp pulls <binarize/binarize.hpp> -> <binarize/export.h>,
 # which only exists once its target's prebuild step runs.
@@ -897,7 +897,7 @@ target_include_directories(libslic3r_core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/mixer/include
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/ryml/include
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/yamlcpp/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/pugixml/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/vendor/pugixml
     ${PRUSA_SRC}/bundled_deps/int128
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main/jniImports/gmp/include/${ANDROID_ABI}
     src/main/jni/miniz

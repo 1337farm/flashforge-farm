@@ -1031,6 +1031,21 @@ jobs:
             || { echo "ERROR: libdeflate headers missing"; exit 1; }
           echo "libdeflate staged and verified"
 
+      - name: Build fmt fresh (SPDLOG_FMT_EXTERNAL link needs libfmt.a)
+        # Mirrors libdeflate: no cache reuse by design (immune to poisoning).
+        # fmt 12.1.0 pin matches the staged headers (scripts/stage_headers.sh);
+        # SPDLOG_FMT_EXTERNAL TUs reference fmt::v12 symbols that headers
+        # alone cannot provide at link time (ld.lld: undefined fmt::v12::*).
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          chmod +x scripts/build_prusa30_fmt.sh
+          ABI="arm64-v8a" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/fmtlib" \
+            ./scripts/build_prusa30_fmt.sh
+          find engine/prusa30/jniImports/fmtlib -name 'libfmt.a' | grep -q . \
+            || { echo "ERROR: no libfmt.a staged"; exit 1; }
+          echo "fmt staged and verified"
+
       - name: Stage Tracy headers fresh (3.0 ProjectInteractor needs <tracy/Tracy.hpp>)
         # Profiling is OFF (SLIC3R_ENABLE_PROFILING default), so only the
         # header is consumed; no TracyClient lib is built. Header-only intlint

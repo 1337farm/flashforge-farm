@@ -924,7 +924,10 @@ target_include_directories(libslic3r_core PRIVATE
 file(GLOB ASSERT_STATIC_LIBS ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/assert/lib/*.a)
 file(GLOB MIXER_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/mixer/lib*/libprusa_fdm_mixer.a)
 file(GLOB LIBDEFLATE_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/libdeflate/lib*/libdeflate.a)
-target_link_libraries(slic3r PRIVATE libslic3r_core ${ASSERT_STATIC_LIBS} ${MIXER_STATIC_LIB} ${LIBDEFLATE_STATIC_LIB})
+# fmt 12.1.0 (SPDLOG_FMT_EXTERNAL): the staged headers only compile the
+# fmt::v12 calls; the definitions live in the freshly built libfmt.a.
+file(GLOB FMT_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/fmtlib/lib*/libfmt.a)
+target_link_libraries(slic3r PRIVATE libslic3r_core ${ASSERT_STATIC_LIBS} ${MIXER_STATIC_LIB} ${LIBDEFLATE_STATIC_LIB} ${FMT_STATIC_LIB})
 
 target_include_directories(slic3r PRIVATE
         src/main/jni

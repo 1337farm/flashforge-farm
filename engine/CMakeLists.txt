@@ -898,6 +898,7 @@ target_include_directories(libslic3r_core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/ryml/include
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/yamlcpp/include
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/vendor/pugixml
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/libdeflate/include
     ${PRUSA_SRC}/bundled_deps/int128
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main/jniImports/gmp/include/${ANDROID_ABI}
     src/main/jni/miniz
@@ -915,7 +916,8 @@ target_include_directories(libslic3r_core PRIVATE
 # libcpptrace.a) so the final .so is self-contained.
 file(GLOB ASSERT_STATIC_LIBS ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/assert/lib/*.a)
 file(GLOB MIXER_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/mixer/lib*/libprusa_fdm_mixer.a)
-target_link_libraries(slic3r PRIVATE libslic3r_core ${ASSERT_STATIC_LIBS} ${MIXER_STATIC_LIB})
+file(GLOB LIBDEFLATE_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/libdeflate/lib*/libdeflate.a)
+target_link_libraries(slic3r PRIVATE libslic3r_core ${ASSERT_STATIC_LIBS} ${MIXER_STATIC_LIB} ${LIBDEFLATE_STATIC_LIB})
 
 target_include_directories(slic3r PRIVATE
         src/main/jni

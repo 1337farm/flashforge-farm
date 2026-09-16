@@ -857,6 +857,7 @@ target_include_directories(libslic3r_core PRIVATE
     ${PRUSA_SRC}/src/slic3r-biz-algorithms/include
     ${PRUSA_SRC}/src/slic3r-biz-arrange/include
     ${PRUSA_SRC}/src/slic3r-shared/include
+    ${PRUSA_SRC}/src/slic3r-render/include
     ${PRUSA_SRC}/src/slic3r-biz-cgal-algorithms/include
     ${PRUSA_SRC}/src/slic3r-biz-parser/include
     ${PRUSA_SRC}/src/slic3r-gcode-reader/include
@@ -937,6 +938,7 @@ target_include_directories(slic3r PRIVATE
         ${PRUSA_SRC}/src/slic3r-biz-algorithms/include
         ${PRUSA_SRC}/src/slic3r-biz-arrange/include
         ${PRUSA_SRC}/src/slic3r-shared/include
+        ${PRUSA_SRC}/src/slic3r-render/include
         ${PRUSA_SRC}/src/slic3r-biz-cgal-algorithms/include
         ${PRUSA_SRC}/src/slic3r-biz-parser/include
         ${PRUSA_SRC}/src/slic3r-gcode-reader/include

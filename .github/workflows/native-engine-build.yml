@@ -1017,6 +1017,20 @@ jobs:
             || { echo "ERROR: yaml-cpp headers missing"; exit 1; }
           echo "yaml headers staged and verified"
 
+      - name: Stage pugixml fresh (3mf BuildTicket needs pugi symbols)
+        # Headers + compiled TU (see engine/CMakeLists.txt); pin mirrors
+        # upstream deps/+pugixml.
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          chmod +x scripts/stage_prusa30_pugixml.sh
+          STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/pugixml" \
+            ./scripts/stage_prusa30_pugixml.sh
+          test -f engine/prusa30/jniImports/pugixml/include/pugixml.hpp \
+            || { echo "ERROR: pugixml headers missing"; exit 1; }
+          test -f engine/prusa30/jniImports/pugixml/src/pugixml.cpp \
+            || { echo "ERROR: pugixml sources missing"; exit 1; }
+          echo "pugixml staged and verified"
+
       - name: Build native engine .so from source (standalone CMake)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |

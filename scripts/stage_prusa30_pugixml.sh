@@ -16,16 +16,15 @@ PUGIXML_SHA="4e1aa9a5b5654b63b2ae5c4cd10b88ac295e91c86b1fb957e701fb4d5b04022"
 PUGIXML_URL="https://github.com/zeux/pugixml/releases/download/v${PUGIXML_VER}/pugixml-${PUGIXML_VER}.zip"
 mkdir -p "$STAGE_ROOT" "$WORK_DIR"
 DL="$WORK_DIR/pugixml.zip"
-for i in 1 2 3; do
-    if curl -fsSL --connect-timeout 20 --max-time 300 \
-            --retry 2 --retry-all-errors -o "$DL" "$PUGIXML_URL" \
-       && [ -s "$DL" ] \
-       && [ "$(sha256sum "$DL" | cut -d' ' -f1)" = "$PUGIXML_SHA" ]; then
+for i in 1 2 3 4 5; do
+    CODE="$(curl -fsSL --connect-timeout 20 --max-time 300 \
+            --retry 2 --retry-all-errors -o "$DL" -w "%{http_code}" "$PUGIXML_URL" 2>/dev/null || true)"
+    if [ -s "$DL" ] && [ "$(sha256sum "$DL" | cut -d' ' -f1)" = "$PUGIXML_SHA" ]; then
         break
     fi
-    echo "--- [stage] pugixml download/verify attempt $i/3 failed ---" >&2
-    [ "$i" = "3" ] && exit 1
-    sleep "$((i * 5))"
+    echo "--- [stage] pugixml download/verify attempt $i/5 failed (http=$CODE) ---" >&2
+    [ "$i" = "5" ] && exit 1
+    sleep "$((i * 15))"
 done
 rm -rf "$WORK_DIR/pugixml"; mkdir -p "$WORK_DIR/pugixml"
 unzip -q -o "$DL" -d "$WORK_DIR/pugixml"

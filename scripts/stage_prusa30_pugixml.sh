@@ -20,7 +20,7 @@ for i in 1 2 3; do
     if curl -fsSL --connect-timeout 20 --max-time 300 \
             --retry 2 --retry-all-errors -o "$DL" "$PUGIXML_URL" \
        && [ -s "$DL" ] \
-       && echo "$PUGIXML_SHA  $DL" | sha256sum -c --status -; then
+       && [ "$(sha256sum "$DL" | cut -d' ' -f1)" = "$PUGIXML_SHA" ]; then
         break
     fi
     echo "--- [stage] pugixml download/verify attempt $i/3 failed ---" >&2

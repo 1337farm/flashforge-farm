@@ -1048,9 +1048,10 @@ jobs:
 
       - name: UPTERM session (on failure)
         if: failure()
-        uses: lhotari/action-upterm@v2
+        uses: lhotari/action-upterm@v1
         with:
           limit-access-to-actor: true
+          wait-timeout-minutes: 5
 
       - name: Locate built libslic3r.so
         id: find-so

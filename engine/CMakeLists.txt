@@ -927,7 +927,19 @@ file(GLOB LIBDEFLATE_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/l
 # fmt 12.1.0 (SPDLOG_FMT_EXTERNAL): the staged headers only compile the
 # fmt::v12 calls; the definitions live in the freshly built libfmt.a.
 file(GLOB FMT_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/fmtlib/lib*/libfmt.a)
-target_link_libraries(slic3r PRIVATE libslic3r_core ${ASSERT_STATIC_LIBS} ${MIXER_STATIC_LIB} ${LIBDEFLATE_STATIC_LIB} ${FMT_STATIC_LIB})
+# --whole-archive around libslic3r_core: the farm JNI bridge (libfarm.so)
+# links against libslic3r.so and resolves the 3.0 Slic3r::Domain/Biz API at
+# link time. A plain archive pull would drag in only the members something
+# inside the .so already references — every module only the app uses
+# (Domain::Model, FileLoadingLogic, Biz::Cut, ...) never enters the link and
+# the bridge fails with undefined symbols. The deleted 2.x build compiled
+# its sources straight into the shared target, exporting everything;
+# whole-archive restores exactly that.
+target_link_libraries(slic3r PRIVATE
+        -Wl,--whole-archive
+        libslic3r_core
+        -Wl,--no-whole-archive
+        ${ASSERT_STATIC_LIBS} ${MIXER_STATIC_LIB} ${LIBDEFLATE_STATIC_LIB} ${FMT_STATIC_LIB})
 
 target_include_directories(slic3r PRIVATE
         src/main/jni

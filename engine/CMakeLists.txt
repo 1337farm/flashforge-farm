@@ -890,6 +890,7 @@ target_include_directories(libslic3r_core PRIVATE
     src/main/jni/libigl
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/mixer/include
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/ryml/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/yamlcpp/include
     ${PRUSA_SRC}/bundled_deps/int128
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main/jniImports/gmp/include/${ANDROID_ABI}
     src/main/jni/miniz

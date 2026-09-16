@@ -20,6 +20,9 @@ add_compile_options(-fsigned-char)
 # Suppress all warnings
 add_definitions(-w)
 add_definitions(-DNDEBUG)
+# Mirror upstream json build (deps/+json: JSON_ImplicitConversions=OFF):
+# v3.12.0's optional support resolves only with implicit conversions off.
+add_definitions(-DJSON_USE_IMPLICIT_CONVERSIONS=0)
 add_definitions(-DSLIC3R_VERSION=${SLIC3R_VERSION})
 add_definitions(-DSLIC3R_BUILD_ID=${SLIC3R_BUILD_ID})
 

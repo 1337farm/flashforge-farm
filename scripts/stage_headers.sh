@@ -77,6 +77,14 @@ needs nlohmann_json && dl_verify_stage nlohmann_json \
     "34660b5e9a407195d55e8da705ed26cc6d175ce5a6b1fb957e701fb4d5b04022" \
     json.zip "nlohmann/json.hpp" "nlohmann"
 
+# Mirror upstream deps/+json: v3.12.0's optional support is broken without
+# json.patch (get<optional<T>> fails to resolve). Same file upstream applies.
+if needs nlohmann_json; then
+    JSON_PATCH="$_SCRIPT_DIR/../engine/build/prusaslicer-src/deps/+json/json.patch"
+    [ -f "$JSON_PATCH" ] || { echo "ERROR: fetch the 3.0 tree first ($JSON_PATCH missing)" >&2; exit 1; }
+    patch -d "$DEST/nlohmann_json" -p1 -N --no-backup-if-mismatch < "$JSON_PATCH"
+fi
+
 needs sol2 && dl_verify_stage sol2 \
     "https://github.com/ThePhD/sol2/archive/refs/tags/v3.5.0.zip" \
     "b43e539415956960055f62a9d328fec3fd1ad4f272d6206631b9f022b0b12678" \

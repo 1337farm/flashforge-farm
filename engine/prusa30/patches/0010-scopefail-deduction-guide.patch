@@ -1,0 +1,18 @@
+# 0010: add explicit deduction guide for ScopeFail (NDK Clang rejects the
+# aggregate CTAD that desktop Clang synthesizes, so the lambda ctor can't
+# deduce F: "no viable constructor or deduction guide"; same stricter-CTAD
+# class as 0008). An explicit guide restores deduction, no runtime change.
+diff --git a/src/slic3r-shared/src/Slic3r/Biz/PresetUpdater/PresetUpdaterRepository.cpp b/src/slic3r-shared/src/Slic3r/Biz/PresetUpdater/PresetUpdaterRepository.cpp
+index 052326b..86d8097 100644
+--- a/src/slic3r-shared/src/Slic3r/Biz/PresetUpdater/PresetUpdaterRepository.cpp
++++ b/src/slic3r-shared/src/Slic3r/Biz/PresetUpdater/PresetUpdaterRepository.cpp
+@@ -327,6 +327,9 @@ struct ScopeFail {
+     void dismiss() { active = false; }
+ };
+ 
++template <typename F>
++ScopeFail(F) -> ScopeFail<F>;
++
+ bool LocalPresetUpdaterRepository::extract_local_archive_repository(
+     PresetUpdaterRepositoryDescriptor& descriptor,
+     std::string& error_msg

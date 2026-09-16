@@ -1046,6 +1046,12 @@ jobs:
             "-DSLIC3R_BUILD_ID=\"4\""
           cmake --build engine/build --target slic3r -j"$(nproc)"
 
+      - name: UPTERM session (on failure)
+        if: failure()
+        uses: lhotari/action-upterm@v2
+        with:
+          limit-access-to-actor: true
+
       - name: Locate built libslic3r.so
         id: find-so
         run: |

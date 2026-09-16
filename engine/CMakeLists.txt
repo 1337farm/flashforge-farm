@@ -828,13 +828,15 @@ file(GLOB_RECURSE SLIC3R_MODULE_SRC
     ${PRUSA_SRC}/src/libpgcode/src/*.cpp)
 # NOTE: libseqarrange excluded (needs z3++.h, absent); its only user is the
 # excluded ArrangeHelper. biz-crypto excluded (needs OpenSSL headers).
-# YamlAdapterLibfyaml.cpp excluded: SLIC3R_YAML_RYML is the selected backend
-# (add_definitions above); upstream compiles the libfyaml adapter only under
-# SLIC3R_YAML=libfyaml, and libfyaml.h is not staged.
+# YamlAdapterLibfyaml.cpp + YamlAdapterYamlCpp.cpp excluded:
+# SLIC3R_YAML_RYML is the selected backend (add_definitions above);
+# upstream's ryml file set compiles only YamlAdapterRyml — the other
+# adapters (libfyaml.h absent / yaml-cpp lib not built) are dead TUs the
+# whole-archive link would otherwise force-resolve.
 # PlatformInfo_emscripten.cpp excluded: unguarded duplicate definition of
 # Slic3r::PlatformInfo (same as _unix.cpp); whole-archive link surfaces it —
 # Android/bionic wants the _unix.cpp uname variant.
-list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|win32|Mac\\.cpp|Slic3r/App/|sequential_decimator|HttpCurl\\.cpp|HttpCurlFactory\\.cpp|SHA256Linux\\.cpp|AppInstanceMessageHandlerLinux\\.cpp|AppInstanceMessageHandlerFactoryLinux\\.cpp|RemovableDriveMonitorLinux\\.cpp|RemovableDriveServiceLinux\\.cpp|TryCatchSignalSEH\\.cpp|Emboss/EmbossJob\\.cpp|Emboss/TextShapeProvider\\.cpp|Emboss/TextLines\\.cpp|Emboss/SurfaceDrag\\.cpp|Format/3mf/BuildTicket\\.cpp|Preset/Bundle\\.cpp|Preset/AbstractConfigManipulation\\.cpp|YamlAdapterLibfyaml\\.cpp|PlatformInfo_emscripten\\.cpp")
+list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|win32|Mac\\.cpp|Slic3r/App/|sequential_decimator|HttpCurl\\.cpp|HttpCurlFactory\\.cpp|SHA256Linux\\.cpp|AppInstanceMessageHandlerLinux\\.cpp|AppInstanceMessageHandlerFactoryLinux\\.cpp|RemovableDriveMonitorLinux\\.cpp|RemovableDriveServiceLinux\\.cpp|TryCatchSignalSEH\\.cpp|Emboss/EmbossJob\\.cpp|Emboss/TextShapeProvider\\.cpp|Emboss/TextLines\\.cpp|Emboss/SurfaceDrag\\.cpp|Format/3mf/BuildTicket\\.cpp|Preset/Bundle\\.cpp|Preset/AbstractConfigManipulation\\.cpp|YamlAdapterLibfyaml\\.cpp|YamlAdapterYamlCpp\\.cpp|PlatformInfo_emscripten\\.cpp")
 # CustomParametersHandling.cpp captures structured bindings in OpenMP
 # regions, which NDK Clang rejects. Compile just this TU without OpenMP
 # (pragmas ignored -> serial execution, same results).

@@ -1,32 +1,33 @@
-// FlashForge Farm — PrusaSlicer 3.0 headless slice driver.
+// FlashForge Farm — PrusaSlicer 3.0 headless slice driver (legacy-INI flavor).
 //
-// Replaces the Orca `Print::apply()` + `process()` path and the GUI-gated
-// `slic3r-app-cli`. Drives the PrusaSlicer 3.0 slicing surface directly:
+// Drives the 3.0 slicing surface directly, mirroring the upstream CLI's
+// slice flow (slic3r-app-cli ProcessActions.cpp) without the interactor
+// stack:
 //
-//   FileLoadingLogic::read_model_from_file(path, nullptr)   -> tl::expected<Model>
-//   Config::load_preset_and_config(json)                    -> tl::expected<PresetAndConfig>
-//   init_print(PrinterTechnology, callbacks, id)            -> unique_ptr<IPrint>
-//   IPrint::update(model, config_pack, bed, metadata, ser)  -> ApplyStatus::Status
-//   IPrint::slice(id, thumbnail_gen, nullopt)               -> callbacks fire
+//   Biz::load_config_from_legacy_file(ini)   -> Domain::ConfigPack
+//   bed_shape/max_print_height from the pack -> Domain::Bed::create(...)
+//   init_print(FFF, callbacks, id)           -> unique_ptr<IPrint>
+//   IPrint::update(model, pack, bed, meta)   -> ApplyStatus::Status
+//   IPrint::slice(id, thumbnails, nullopt)   -> on_fdm_result(FDMResult)
+//   ProcessorResult::const_gcode()->str()    -> plain gcode file
 //
-// G-code/preview data arrives asynchronously via
-// IProcessCallbacks::on_fdm_result(FDMResult&&) where
-// FDMResult = libpgcode::ProcessorResult.
-//
-// This is a grounded structure compiled against the fetched upstream tree by
-// the CI engine build. Remaining glue (Bed construction, SlicingId allocation,
-// the metadata serializer, and serializing FDMResult back to gcode text) is
-// marked TODO and is resolved through the CI compile loop.
+// The app keeps writing its legacy PrusaSlicer INI (slic3r_current.ini);
+// Slic3r::Biz::load_config_from_legacy_file (ConfigLegacy.hpp) is the
+// public INI reader wrapper, so no JSON cutover is needed here.
 //
 #include <android/log.h>
 #include <fstream>
 #include <functional>
-#include <future>
+#include <map>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <variant>
-#include <nlohmann/json.hpp>
+#include <vector>
+
+#include <magic_enum/magic_enum.hpp>
 
 #include "libslic3r/InitPrint.hpp"
 #include "libslic3r/IPrint.hpp"
@@ -39,7 +40,7 @@
 #include "libslic3r/ThumbnailImageRequest.hpp"
 #include "libslic3r/ThumbnailImageResult.hpp"
 
-#include "Slic3r/Biz/Config/ConfigLoad.hpp"
+#include "Slic3r/Biz/Config/ConfigLegacy.hpp"
 #include "Slic3r/Biz/FileLoadingLogic.hpp"
 #include "Slic3r/Domain/Bed.hpp"
 #include "Slic3r/Domain/BedInstance.hpp"
@@ -48,16 +49,16 @@
 #include "Slic3r/Domain/Preset/SelectedPreset.hpp"
 #include "Slic3r/Domain/SlicingId.hpp"
 
+#include "farm_driver.hpp"
+
 #define TAG "FarmPrusa"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
 namespace farm {
 
+namespace Domain = Slic3r::Domain;
 namespace ApplyStatus = Slic3r::Biz::Slicing::ApplyStatus;
-using Slic3r::Biz::Config::PresetAndConfig;
-using Slic3r::Biz::Config::load_preset_and_config;
-using Slic3r::Biz::FileLoadingLogic::read_model_from_file;
 using Slic3r::Biz::Slicing::FDMResult;
 using Slic3r::Biz::Slicing::GeneratedSupportPointsSnapshot;
 using Slic3r::Biz::Slicing::IPrint;
@@ -71,12 +72,18 @@ using Slic3r::Biz::Slicing::StatusCode;
 using Slic3r::Biz::Slicing::ThumbnailImageRequests;
 using Slic3r::Biz::Slicing::ThumbnailImageResults;
 using Slic3r::Domain::Bed;
+using Slic3r::Domain::BedCreationData;
 using Slic3r::Domain::BedInstance;
+using Slic3r::Domain::BedType;
 using Slic3r::Domain::ConfigPack;
+using Slic3r::Domain::ConfigPackFDM;
 using Slic3r::Domain::Model;
-using Slic3r::Domain::Preset::SelectedPresetMetadata;
 using Slic3r::Domain::PrinterTechnology;
 using Slic3r::Domain::SlicingId;
+using Slic3r::Domain::Vec2d;
+using Slic3r::Domain::Vec2ds;
+
+namespace {
 
 class FarmCallbacks final : public IProcessCallbacks {
 public:
@@ -133,72 +140,136 @@ public:
     void handle_enqueued_requests() override {}
 };
 
-namespace {
-Model load_model(const std::string& path) {
-    auto model = read_model_from_file(path, nullptr);
-    if (!model) {
-        throw std::runtime_error("read_model_from_file failed: " + model.error());
-    }
-    return std::move(model.value());
+// Rectangular, axis-aligned bed detection for BedType derivation: the
+// legacy bed_shape carries the raw contour, but 3.0 beds also record their
+// type (processing helpers differ). Anything that is not an exact
+// axis-aligned rectangle is a generic Custom contour.
+bool is_axis_aligned_rectangle(const Vec2ds& contour) {
+    if (contour.size() != 4)
+        return false;
+    const Vec2d& a = contour[0];
+    const Vec2d& b = contour[1];
+    const Vec2d& c = contour[2];
+    const Vec2d& d = contour[3];
+    return (a.x() == b.x() || a.y() == b.y()) // consecutive edges alternate
+        && (b.x() == c.x() || b.y() == c.y())
+        && (c.x() == d.x() || c.y() == d.y())
+        && (d.x() == a.x() || d.y() == a.y());
 }
 
-PresetAndConfig load_config(const std::string& path) {
-    std::ifstream file(path);
-    nlohmann::ordered_json json_document;
-    file >> json_document;
+// Reads bed_shape (vector<Vec2d>) and max_print_height (double) from the
+// FDM printer box and builds the 3.0 Bed.
+Domain::Bed bed_from_config(const ConfigPackFDM& fdm) {
+    const auto& printer = fdm.printer;
+    const Slic3r::Domain::ConfigItem* shape_item = printer.items.find("bed_shape");
+    if (shape_item == nullptr)
+        throw std::runtime_error("config is missing bed_shape (printer settings)");
+    const Slic3r::Domain::ConfigItem* height_item = printer.items.find("max_print_height");
 
-    auto preset_and_config = load_preset_and_config(json_document);
-    if (!preset_and_config) {
-        throw std::runtime_error("load_preset_and_config failed: " + preset_and_config.error());
-    }
-    return std::move(preset_and_config.value());
+    Vec2ds contour = shape_item->get<Vec2ds>();
+    if (contour.size() < 3)
+        throw std::runtime_error("bed_shape has fewer than 3 points");
+    const float max_print_height = height_item != nullptr
+        ? static_cast<float>(height_item->get<double>())
+        : 200.0f;
+
+    BedCreationData data;
+    data.type = is_axis_aligned_rectangle(contour) ? BedType::Rectangle : BedType::Custom;
+    data.contour = std::move(contour);
+    data.max_print_height = max_print_height;
+    return Bed::create(data);
 }
+
+std::string stage_name(Slic3r::Biz::Slicing::ProgressInfo stage) {
+    std::string name{magic_enum::enum_name(stage)};
+    return name.empty() ? "slicing" : name;
+}
+
 } // namespace
 
-// Slice model+config to a ProcessorResult. The JNI bridge calls this on its
-// native thread (never the UI thread).
-FDMResult slice(const std::string& model_path, const std::string& config_json_path,
-                std::function<void(Slic3r::Biz::Slicing::Progress)> progress)
-{
-    Model model = load_model(model_path);
-    PresetAndConfig pac = load_config(config_json_path);
+SliceStats slice_to_gcode(Model& model,
+                          const std::string& legacy_ini_path,
+                          const std::string& gcode_out_path,
+                          std::function<void(int percent, const std::string& stage)> progress) {
+    // 1. Legacy INI -> 3.0 ConfigPack (public wrapper over the src-private
+    //    Slic3rLegacy::DynamicPrintConfig reader; may throw).
+    ConfigPack config = Slic3r::Biz::load_config_from_legacy_file(legacy_ini_path);
+    const ConfigPackFDM* fdm = std::get_if<ConfigPackFDM>(&config);
+    if (fdm == nullptr)
+        throw std::runtime_error("the config does not describe an FDM printer");
 
-    // TODO(prusa30): build the real bed shape from the config's printable area.
-    Bed bed = Bed::create(Slic3r::Domain::BedCreationData{});
+    // 2. Bed from the config's bed_shape/max_print_height.
+    Domain::Bed bed = bed_from_config(*fdm);
     BedInstance bed_instance{bed};
 
-    SelectedPresetMetadata metadata = pac.preset_metadata;
-    ConfigPack config = std::move(pac.config_pack);
+    // 3. Minimal preset metadata (gcode header data); the legacy INI has no
+    //    preset identity, and slicing only consumes the technology here.
+    Slic3r::Domain::Preset::SelectedPresetMetadata metadata;
+    metadata.hw_config.technology = PrinterTechnology::FFF;
 
     // Serialize universal print statistics to a SerializedConfig (project stats).
     auto serializer = [](const IPrint::UniversalPrintStatistics&) {
         return SerializedConfig{};
     };
 
-    const SlicingId id{};  // TODO(prusa30): allocate via the project/interactor layer
-
+    const SlicingId id{};
     FarmCallbacks callbacks;
     std::unique_ptr<IPrint> print = init_print(PrinterTechnology::FFF, callbacks, id);
-    if (!print) {
+    if (!print)
         throw std::runtime_error("init_print returned null");
-    }
 
-    print->progress_callback = std::move(progress);
+    if (progress)
+        print->progress_callback = [&progress](Slic3r::Biz::Slicing::Progress p) {
+            progress(static_cast<int>(p.progress.value), stage_name(p.progress_info));
+        };
 
-    const ApplyStatus::Status status = print->update(model, config, bed_instance, metadata, serializer);
+    // 4. apply(): model + config + bed -> slicing input.
+    const auto status = print->update(model, config, bed_instance, metadata, serializer);
     if (std::holds_alternative<ApplyStatus::InvalidData>(status)) {
         const auto& invalid = std::get<ApplyStatus::InvalidData>(status);
-        LOGD("print->update returned InvalidData (%zu errors)", invalid.errors.size());
+        std::ostringstream os;
+        os << "the model or config is invalid for slicing (" << invalid.errors.size() << " errors)";
+        for (const auto& error : invalid.errors)
+            os << "\n- " << error;
+        LOGE("%s", os.str().c_str());
+        throw std::runtime_error(os.str());
     }
 
+    // 5. slice(): synchronous; result lands via on_fdm_result.
     NoThumbnails thumbnails;
     print->slice(id, thumbnails, std::nullopt);
 
-    if (callbacks.exception()) {
+    if (callbacks.exception())
         std::rethrow_exception(callbacks.exception());
+
+    FDMResult result = callbacks.take_result();
+    if (result.const_gcode() == nullptr || result.const_gcode()->empty())
+        throw std::runtime_error("slicing produced no gcode");
+
+    // 6. Export: ProcessorResult embeds the plain gcode buffer.
+    {
+        std::ofstream out(gcode_out_path, std::ios::binary | std::ios::trunc);
+        if (!out)
+            throw std::runtime_error("cannot open " + gcode_out_path + " for writing");
+        out << result.const_gcode()->str();
+        out.flush();
+        if (!out)
+            throw std::runtime_error("writing " + gcode_out_path + " failed");
     }
 
-    return callbacks.take_result();
+    // 7. Filament stats for the app's result panel (Java role ints are 1:1
+    //    with Domain::GCodeExtrusionRole ordering — see farm_driver.hpp).
+    SliceStats stats;
+    std::visit([&stats](const auto& print_statistics) {
+        for (const auto& [role, mm_g] : print_statistics.used_filaments_per_role)
+            stats.per_role[static_cast<int>(role)] = mm_g;
+        if constexpr (std::is_same_v<std::decay_t<decltype(print_statistics)>,
+                                     Domain::FullPrintStatistics>) {
+            stats.per_extruder_mm = print_statistics.used_filament_per_extruder_mm;
+            stats.per_extruder_g = print_statistics.used_filament_per_extruder_g;
+        }
+    }, result.print_statistics);
+    return stats;
 }
 
 } // namespace farm

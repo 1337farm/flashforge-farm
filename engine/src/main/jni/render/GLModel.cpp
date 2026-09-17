@@ -2,23 +2,28 @@
 ///|/
 ///|/ PrusaSlicer is released under the terms of the AGPLv3 or higher
 ///|/
-#include "libslic3r/libslic3r.h"
-#include "libslic3r/TriangleMesh.hpp"
-#include "libslic3r/Model.hpp"
-#include "libslic3r/Polygon.hpp"
-#include "libslic3r/BuildVolume.hpp"
-#include "libslic3r/Geometry/ConvexHull.hpp"
 #include "GLModel.hpp"
 #include "GLShader.hpp"
 #include "render/Program.hpp"
 
+#include "Slic3r/Biz/Algorithms/BoundingBox.hpp"
+#include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
+
 #include <GLES3/gl3.h>
+
+#include <algorithm>
+#include <cassert>
+#include <cfloat>
+#include <cmath>
+#include <numbers>
+#include <utility>
 
 #define glsafe(cmd) cmd
 #define glcheck()
 
 namespace Slic3r {
     namespace GUI {
+        using namespace Domain;
         void GLModel::Geometry::add_vertex(const Vec2f &position) {
             assert(format.vertex_layout == EVertexLayout::P2);
             vertices.emplace_back(position.x());
@@ -205,8 +210,9 @@ namespace Slic3r {
             its.indices.reserve(indices_count() / 3);
             for (size_t i = 0; i < indices_count() / 3; ++i) {
                 const size_t tri_id = i * 3;
-                its.indices.emplace_back(extract_index(tri_id), extract_index(tri_id + 1),
-                                         extract_index(tri_id + 2));
+            its.indices.push_back({ static_cast<int>(extract_index(tri_id)),
+                                      static_cast<int>(extract_index(tri_id + 1)),
+                                      static_cast<int>(extract_index(tri_id + 2)) });
             }
             return its;
         }
@@ -510,11 +516,14 @@ namespace Slic3r {
             // update bounding box
             for (size_t i = 0; i < vertices_count(); ++i) {
                 const size_t position_stride = Geometry::position_stride_floats(data.format);
-                if (position_stride == 3)
-                    m_bounding_box.merge(m_render_data.geometry.extract_position_3(i).cast<double>());
+                if (position_stride == 3) {
+                    const Vec3f p = m_render_data.geometry.extract_position_3(i);
+                    m_bounding_box = Biz::Algorithms::BoundingBox::merge(m_bounding_box, Vec3d(p.x(), p.y(), p.z()));
+                }
                 else if (position_stride == 2) {
                     const Vec2f position = m_render_data.geometry.extract_position_2(i);
-                    m_bounding_box.merge(Vec3f(position.x(), position.y(), 0.0f).cast<double>());
+                    m_bounding_box = Biz::Algorithms::BoundingBox::merge(
+                        m_bounding_box, Vec3d(position.x(), position.y(), 0.0));
                 }
             }
         }
@@ -538,9 +547,9 @@ namespace Slic3r {
             // vertices + indices
             unsigned int vertices_counter = 0;
             for (uint32_t i = 0; i < its.indices.size(); ++i) {
-                const stl_triangle_vertex_indices face = its.indices[i];
-                const stl_vertex                  vertex[3] = { its.vertices[face[0]], its.vertices[face[1]], its.vertices[face[2]] };
-                const stl_vertex                  n = face_normal_normalized(vertex);
+                const stl_triangle_vertex_indices& face = its.indices[i];
+                const auto vertex = Domain::its_triangle_vertices(its, face);
+                const Domain::Vec3f n = Biz::Algorithms::TriangleMesh::its_face_normal(its, face);
                 for (size_t j = 0; j < 3; ++j) {
                     data.add_vertex(vertex[j], n);
                 }
@@ -550,7 +559,8 @@ namespace Slic3r {
 
             // update bounding box
             for (size_t i = 0; i < vertices_count(); ++i) {
-                m_bounding_box.merge(data.extract_position_3(i).cast<double>());
+                const Vec3f p = data.extract_position_3(i);
+                m_bounding_box = Biz::Algorithms::BoundingBox::merge(m_bounding_box, Vec3d(p.x(), p.y(), p.z()));
             }
         }
 
@@ -738,7 +748,7 @@ namespace Slic3r {
             data.reserve_vertices(6 * resolution + 2);
             data.reserve_indices(6 * resolution * 3);
 
-            const float angle_step = 2.0f * float(PI) / float(resolution);
+            const float angle_step = 2.0f * std::numbers::pi_v<float> / float(resolution);
             std::vector<float> cosines(resolution);
             std::vector<float> sines(resolution);
 
@@ -828,7 +838,7 @@ namespace Slic3r {
 
             const float outer_radius = radius + half_stem_width;
             const float inner_radius = radius - half_stem_width;
-            const float step_angle = 0.5f * float(PI) / float(resolution);
+            const float step_angle = 0.5f * std::numbers::pi_v<float> / float(resolution);
 
             // tip
             // top face vertices
@@ -861,19 +871,17 @@ namespace Slic3r {
             data.add_vertex(Vec3f(0.0f, outer_radius, half_thickness), (Vec3f)Vec3f::UnitX());
             data.add_vertex(Vec3f(0.0f, radius + half_tip_width, half_thickness), (Vec3f)Vec3f::UnitX());
 
-            Vec3f normal(-half_tip_width, tip_height, 0.0f);
-            normal.normalize();
+            Vec3f normal = Vec3f(-half_tip_width, tip_height, 0.0f).normalized();
             data.add_vertex(Vec3f(0.0f, radius + half_tip_width, -half_thickness), normal);
             data.add_vertex(Vec3f(-tip_height, radius, -half_thickness), normal);
             data.add_vertex(Vec3f(0.0f, radius + half_tip_width, half_thickness), normal);
             data.add_vertex(Vec3f(-tip_height, radius, half_thickness), normal);
 
-            normal = { -half_tip_width, -tip_height, 0.0f };
-            normal.normalize();
-            data.add_vertex(Vec3f(-tip_height, radius, -half_thickness), normal);
-            data.add_vertex(Vec3f(0.0f, radius - half_tip_width, -half_thickness), normal);
-            data.add_vertex(Vec3f(-tip_height, radius, half_thickness), normal);
-            data.add_vertex(Vec3f(0.0f, radius - half_tip_width, half_thickness), normal);
+            Vec3f normal2 = Vec3f(-half_tip_width, -tip_height, 0.0f).normalized();
+            data.add_vertex(Vec3f(-tip_height, radius, -half_thickness), normal2);
+            data.add_vertex(Vec3f(0.0f, radius - half_tip_width, -half_thickness), normal2);
+            data.add_vertex(Vec3f(-tip_height, radius, half_thickness), normal2);
+            data.add_vertex(Vec3f(0.0f, radius - half_tip_width, half_thickness), normal2);
 
             data.add_vertex(Vec3f(0.0f, radius - half_tip_width, -half_thickness), (Vec3f)Vec3f::UnitX());
             data.add_vertex(Vec3f(0.0f, inner_radius, -half_thickness), (Vec3f)Vec3f::UnitX());
@@ -1032,15 +1040,13 @@ namespace Slic3r {
             data.add_vertex(Vec3f(half_stem_width, stem_height, half_thickness), (Vec3f)(-Vec3f::UnitY()));
             data.add_vertex(Vec3f(half_tip_width, stem_height, half_thickness), (Vec3f)(-Vec3f::UnitY()));
 
-            Vec3f normal(tip_height, half_tip_width, 0.0f);
-            normal.normalize();
+            Vec3f normal = Vec3f(tip_height, half_tip_width, 0.0f).normalized();
             data.add_vertex(Vec3f(half_tip_width, stem_height, -half_thickness), normal);
             data.add_vertex(Vec3f(0.0f, total_height, -half_thickness), normal);
             data.add_vertex(Vec3f(half_tip_width, stem_height, half_thickness), normal);
             data.add_vertex(Vec3f(0.0f, total_height, half_thickness), normal);
 
-            normal = { -tip_height, half_tip_width, 0.0f };
-            normal.normalize();
+            const Vec3f normal2 = Vec3f(-tip_height, half_tip_width, 0.0f).normalized();
             data.add_vertex(Vec3f(0.0f, total_height, -half_thickness), normal);
             data.add_vertex(Vec3f(-half_tip_width, stem_height, -half_thickness), normal);
             data.add_vertex(Vec3f(0.0f, total_height, half_thickness), normal);
@@ -1069,6 +1075,19 @@ namespace Slic3r {
             }
 
             return data;
+        }
+
+        bool contains(const Domain::BedInstance& /*bed*/, const GLModel& /*model*/, bool /*ignore_bottom*/)
+        {
+            // TODO(#211): port to Slic3r::Biz::Algorithms::Bed::contains_3d once the farm viewer
+            // can build a BedInstanceCollisionData (needs an AABBMesh from
+            // bed_contour_as_aabb_mesh plus the scaled bed contour) and an ObjectCollisionData
+            // (model bounding box + 2D convex hull). Upstream question: which Domain::Bed /
+            // BedInstance construction should a static print-bed viewer use, and where does the
+            // old ignore_bottom flag map in contains_3d (Below vs Outside)? Conservative default:
+            // report not-inside so callers warn instead of silently treating an outside-bed
+            // model as printable.
+            return false;
         }
     }
 }

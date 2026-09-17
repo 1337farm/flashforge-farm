@@ -1,0 +1,16 @@
+# 0008: use explicit ResultError in Yaml.hpp (NDK Clang rejects CTAD on
+# alias templates; GCC accepts it as an extension. Matches the ResultError
+# spelling used everywhere else in this file).
+diff --git a/src/slic3r-shared/src/Slic3r/Biz/Yaml/Yaml.hpp b/src/slic3r-shared/src/Slic3r/Biz/Yaml/Yaml.hpp
+index 8b55d97b37..f68a205bd8 100644
+--- a/src/slic3r-shared/src/Slic3r/Biz/Yaml/Yaml.hpp
++++ b/src/slic3r-shared/src/Slic3r/Biz/Yaml/Yaml.hpp
+@@ -732,7 +732,7 @@ Result<bool> try_parse_discriminated_struct(
+         if (loader_load != nullptr) {
+             Result<T> s = parse_struct<T>(node);
+             if (!s.has_value()) {
+-                return unexpected{s.error()};
++                return ResultError{s.error()};
+             }
+             loader_load(std::move(*s));
+         }

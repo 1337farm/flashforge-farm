@@ -71,6 +71,21 @@ SRC="$(find "openssl-$OPENSSL_VER" -maxdepth 2 -name Configure -printf '%h\n' | 
 [ -n "$SRC" ] || { echo "[openssl] ERROR: no Configure in tarball" >&2; exit 1; }
 cd "$SRC"
 
+# Upstream fix (openssl/openssl#31670, fixed by PR #32132, not yet in the
+# 4.0.1 tarball): the SVE2 poly1305 asm leaves poly1305_blocks_sve2
+# preemptible, so ADRP/ADD against it fails when libcrypto.a is linked
+# into a shared library (ld.lld's "recompile with -fPIC" is misleading —
+# the rest of the archive already links PIC-clean). Upstream's one-line
+# fix marks the internal entry point .hidden; apply it to the perlasm
+# source (the tarball ships only .pl — make generates the .S from it).
+POLY_PL="crypto/poly1305/asm/poly1305-armv9-sve2.pl"
+if ! grep -q '^\.hidden.*poly1305_blocks_sve2' "$POLY_PL"; then
+    sed -i 's/^\.globl\tpoly1305_blocks_sve2$/.globl\tpoly1305_blocks_sve2\n.hidden\tpoly1305_blocks_sve2/' "$POLY_PL"
+    grep -q '^\.hidden.*poly1305_blocks_sve2' "$POLY_PL" \
+        || { echo "[openssl] ERROR: poly1305 SVE2 visibility patch failed" >&2; exit 1; }
+    echo "[openssl] applied upstream poly1305 SVE2 .hidden fix (#31670/#32132)"
+fi
+
 export ANDROID_NDK_ROOT="$NDK"
 ./Configure android-arm64 \
     --prefix="$STAGE_ROOT" \

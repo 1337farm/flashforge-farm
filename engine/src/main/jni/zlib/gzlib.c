@@ -5,6 +5,10 @@
 
 #include "gzguts.h"
 
+#ifndef _WIN32
+#  include <unistd.h> /* lseek (hard error under Clang 17, NDK r26) */
+#endif
+
 #if defined(_WIN32) && !defined(__BORLANDC__)
 #  define LSEEK _lseeki64
 #else

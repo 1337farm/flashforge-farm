@@ -1,0 +1,17 @@
+# 0007: drop `constexpr` on ArrangeInteractor local Settings (NDK Clang
+# rejects `const constexpr` for the non-literal type: Settings holds
+# std::optional members. Upstream desktop toolchains accept it; NDK r26
+# Clang 19 does not. Plain `const` is identical at runtime here).
+diff --git a/src/slic3r-shared/src/Slic3r/Biz/ArrangeInteractor.cpp b/src/slic3r-shared/src/Slic3r/Biz/ArrangeInteractor.cpp
+index 75a5d3db4f..b16602fd9b 100644
+--- a/src/slic3r-shared/src/Slic3r/Biz/ArrangeInteractor.cpp
++++ b/src/slic3r-shared/src/Slic3r/Biz/ArrangeInteractor.cpp
+@@ -839,7 +839,7 @@ void ArrangeInteractor::arrange_added_instances(
+ 
+ void ArrangeInteractor::process_added_arrange_queue()
+ {
+-    const constexpr Settings ARRANGE_SETTINGS{
++    const Settings ARRANGE_SETTINGS{
+         .strategy        = Arrange::Strategy::Gravity,
+         .scaled_offset   = Algorithms::Scaling::scaled(3.0),
+         .allow_rotations = false

@@ -11,30 +11,6 @@
 #define NANOSVG_IMPLEMENTATION
 #include "nanosvg/nanosvg.h"
 
-// --- stubs for unvendored backends ----------------------------------------------------
-#include <string>
-#include <vector>
-
-#include <boost/log/trivial.hpp>
-
-#include "libslic3r/TriangleMesh.hpp"
-#include "libslic3r/Model.hpp"
-#include "libslic3r/MeshBoolean.hpp"
-#include "libslic3r/Format/DRC.hpp"
-
-namespace Slic3r {
-
-// Draco-compressed mesh loading (Format/DRC.cpp). Draco is not vendored.
-bool load_drc(const char * /*path*/, TriangleMesh * /*meshptr*/) {
-    BOOST_LOG_TRIVIAL(warning) << "load_drc: Draco support is not available in this build";
-    return false;
-}
-
-bool load_drc(const char * /*path*/, Model * /*model*/, const char * /*object_name*/) {
-    BOOST_LOG_TRIVIAL(warning) << "load_drc: Draco support is not available in this build";
-    return false;
-}
-
-
-
-} // namespace Slic3r
+// NOTE (#210): the Draco load_drc() stubs lived here for the vendored 2.x
+// tree. Their only callers were deleted with that tree and upstream 3.0
+// owns DRC itself now, so the stubs (and the libslic3r includes) are gone.

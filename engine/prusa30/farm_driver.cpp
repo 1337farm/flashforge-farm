@@ -22,8 +22,10 @@
 #include <fstream>
 #include <functional>
 #include <future>
+#include <optional>
 #include <stdexcept>
 #include <utility>
+#include <variant>
 #include <nlohmann/json.hpp>
 
 #include "libslic3r/InitPrint.hpp"
@@ -156,7 +158,7 @@ PresetAndConfig load_config(const std::string& path) {
 // Slice model+config to a ProcessorResult. The JNI bridge calls this on its
 // native thread (never the UI thread).
 FDMResult slice(const std::string& model_path, const std::string& config_json_path,
-                std::function<void(const Slic3r::Biz::Slicing::Progress&)> progress)
+                std::function<void(Slic3r::Biz::Slicing::Progress)> progress)
 {
     Model model = load_model(model_path);
     PresetAndConfig pac = load_config(config_json_path);

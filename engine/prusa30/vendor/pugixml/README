@@ -1,0 +1,9 @@
+# Vendored pugixml v1.15 (headers + pugixml.cpp).
+#
+# Upstream 3mf/BuildTicket.cpp uses pugi:: symbols (needs the compiled TU, not
+# just headers). Pin/URL/SHA mirror upstream deps/+pugixml:
+#   https://github.com/zeux/pugixml/releases/download/v1.15/pugixml-1.15.zip
+#   SHA256 4e1aa9a5b5654b63b2ae5c4cd10b88ac295e91c86b1fb957e701fb4d5b04022
+# Vendored (not staged) because CI runners intermittently receive
+# hash-mismatched bytes for this asset while other hosts verify it fine;
+# two small files, no build needed, zero flake surface. Revisit if the pin moves.

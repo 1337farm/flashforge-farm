@@ -23,7 +23,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")"; pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.."; pwd)"
 cd "$ROOT/engine"
 
-NDK="${NDK:-$HOME/android-sdk/ndk/23.1.7779620}"
+NDK="${NDK:-$HOME/android-sdk/ndk/26.3.11579264}"
 ABI="${ABI:-arm64-v8a}"
 SYSROOT="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 
@@ -31,11 +31,39 @@ SYSROOT="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 [ -d src/main/occt/include/$ABI ] || { echo "ERROR: OCCT headers not staged (run scripts/build-debug.sh --fetch-only)" >&2; exit 1; }
 
 # Include dirs exactly as the CI build-engine job sets them for the slic3r target.
+# ISSUE-210: vendored src/main/jni/libslic3r is deleted; 3.0 core headers come
+# from the fetched tree (engine/prusa30/fetch_prusaslicer.sh -> build/prusaslicer-src).
+PRUSA_SRC="${PRUSA_SRC:-$ROOT/engine/build/prusaslicer-src}"
+[ -d "$PRUSA_SRC/src/libslic3r/include" ] || { echo "ERROR: 3.0 tree not fetched (run engine/prusa30/fetch_prusaslicer.sh)" >&2; exit 1; }
+EIGEN340="$ROOT/engine/build/headers"
+if [ ! -f "$EIGEN340/eigen/include/Eigen/Dense" ]; then
+  bash "$SCRIPT_DIR/stage_headers.sh" "$EIGEN340" || { echo "ERROR: header stage failed" >&2; exit 1; }
+fi
 INC=(
   -Isrc/main/jni
-  -Isrc/main/jni/libslic3r
+  -I"$PRUSA_SRC/src/libslic3r/include"
+  -I"$PRUSA_SRC/src/libslic3r/src"
+  -I"$PRUSA_SRC/bundled_deps"
+  -I"$PRUSA_SRC/src/slic3r-domain/include"
+  -I"$PRUSA_SRC/src/slic3r-base/include"
+  -I"$PRUSA_SRC/src/slic3r-biz-algorithms/include"
+  -I"$PRUSA_SRC/src/slic3r-biz-arrange/include"
+  -I"$PRUSA_SRC/src/slic3r-shared/include"
+  -I"$PRUSA_SRC/src/slic3r-biz-cgal-algorithms/include"
+  -I"$PRUSA_SRC/src/slic3r-biz-parser/include"
+  -I"$PRUSA_SRC/src/slic3r-gcode-reader/include"
+  -I"$PRUSA_SRC/src/slic3r-jthread/include"
+  -I"$PRUSA_SRC/src/libpgcode/include"
+  -I"$PRUSA_SRC/bundled_deps/slic3r-domain-types/include"
   -Isrc/main/jni/LibBGCode
-  -Isrc/main/jni/eigen
+  -I"$EIGEN340/eigen/include"
+  -I"$EIGEN340/spdlog/include"
+  -I"$EIGEN340/fmt/include"
+  -I"$EIGEN340/cereal/include"
+  -I"$EIGEN340/nlohmann_json/include"
+  -I"$EIGEN340/sol2/include"
+  -I"$EIGEN340/expected/include"
+  -I"$EIGEN340/magic_enum/include"
   -Isrc/main/jni/libigl
   -Isrc/main/jniImports/boost/include
   -Isrc/main/jniImports/oneTBB/include
@@ -46,7 +74,7 @@ if [ -n "${EXTRA_INC:-}" ]; then
   for i in "${E[@]}"; do INC+=(-I"$i"); done
 fi
 
-COMMON=(--target=aarch64-none-linux-android23 "--sysroot=$SYSROOT" -stdlib=libc++ -std=gnu++17 -fPIC -fsyntax-only "${INC[@]}")
+COMMON=(--target=aarch64-none-linux-android23 "--sysroot=$SYSROOT" -stdlib=libc++ -std=gnu++20 -fPIC -fsyntax-only "${INC[@]}")
 
 if [ "$#" -gt 0 ]; then
   SOURCES=("$@")

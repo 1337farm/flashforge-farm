@@ -6,17 +6,20 @@
 #ifndef slic3r_GLShader_hpp_
 #define slic3r_GLShader_hpp_
 
-#include "libslic3r/Point.hpp"
-#include "libslic3r/BoundingBox.hpp"
-#include "libslic3r/Color.hpp"
-#include "libslic3r/Utils.hpp"
+#include "Slic3r/Domain/Point.hpp"
+#include "Slic3r/Domain/BoundingBox.hpp"
+#include "Slic3r/Domain/Color.hpp"
+#include "Slic3r/Utils.hpp"
 #include "admesh/stl.h"
-#include "BuildVolume.hpp"
+#include <cassert>
 #include <vector>
 #include <string>
 
+namespace Slic3r { namespace Domain { struct BedInstance; } }
+
 namespace Slic3r {
     namespace GUI {
+        using namespace Domain;
         class GLModel {
             public:
                 struct Geometry {
@@ -286,7 +289,7 @@ namespace Slic3r {
             bool send_to_gpu();
         };
 
-        bool contains(const BuildVolume& volume, const GLModel& model, bool ignore_bottom = true);
+        bool contains(const Domain::BedInstance& bed, const GLModel& model, bool ignore_bottom = true);
 
         // create an arrow with cylindrical stem and conical tip, with the given dimensions and resolution
         // the origin of the arrow is in the center of the stem cap

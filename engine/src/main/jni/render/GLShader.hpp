@@ -5,19 +5,29 @@
 ///|/
 ///|/ PrusaSlicer is released under the terms of the AGPLv3 or higher
 ///|/
-#ifndef ORCA_SLICER3_RENDER_GLSHADER_HPP
-#define ORCA_SLICER3_RENDER_GLSHADER_HPP
+#ifndef FLASHFORGE_FARM_RENDER_GLSHADER_HPP
+#define FLASHFORGE_FARM_RENDER_GLSHADER_HPP
 
 #include <array>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
-#include "libslic3r/Point.hpp"
+#include "Slic3r/Domain/Point.hpp"
+#include "Slic3r/Domain/Color.hpp"
 
 namespace Slic3r {
 
-class ColorRGB;
-class ColorRGBA;
+using namespace Domain;
+
+// PrusaSlicer 3.0 keeps only square-matrix aliases in the domain types; the legacy
+// Slic3r::Matrix3f/... aliases were these same plain Eigen matrices, re-declared here
+// so the uniform-setter overloads keep their exact signatures.
+using Matrix3f = Eigen::Matrix<float, 3, 3, Eigen::DontAlign>;
+using Matrix3d = Eigen::Matrix<double, 3, 3, Eigen::DontAlign>;
+using Matrix4f = Eigen::Matrix<float, 4, 4, Eigen::DontAlign>;
+using Matrix4d = Eigen::Matrix<double, 4, 4, Eigen::DontAlign>;
 
 class GLShaderProgram
 {
@@ -107,4 +117,4 @@ public:
 
 } // namespace Slic3r
 
-#endif /* ORCA_SLICER3_RENDER_GLSHADER_HPP */
+#endif /* FLASHFORGE_FARM_RENDER_GLSHADER_HPP */

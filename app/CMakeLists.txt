@@ -214,6 +214,13 @@ target_link_libraries(farm PRIVATE
         ${UNWIND_ARCHIVE}
 )
 
+# The prusa30 driver TU (farm_prusa30_jni archive, pulled at this link) uses
+# 3.0's Assert.hpp, whose core libassert runtime is NOT exported by
+# libslic3r.so (only per-type template instantiations are). Link the apk
+# job's freshly staged libassert archives here so -Wl,--no-undefined holds.
+file(GLOB BRIDGE_ASSERT_STATIC_LIBS ${ENGINE_ROOT}/prusa30/jniImports/assert/lib/*.a)
+target_link_libraries(farm PRIVATE ${BRIDGE_ASSERT_STATIC_LIBS})
+
 target_link_libraries(farm_prusa30_jni PRIVATE
         slic3r
         ${log-lib}

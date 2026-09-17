@@ -1,0 +1,32 @@
+# 0011: Android needs no libcurl — HttpFactory slots stay empty. The
+# factory is explicitly designed for "libcurl is not available" (see its
+# header comment: tests install mocks via the set_*_fn slots before first
+# use). The farm app performs all networking in Java, so a no-op
+# initialize() under __ANDROID__ keeps the live UserAccount/IHttp TUs
+# linkable without staging curl. An accidental call throws
+# std::bad_function_call instead of silently hitting curl.
+diff --git a/src/slic3r-shared/src/Slic3r/Biz/Network/HttpCurlFactory.cpp b/src/slic3r-shared/src/Slic3r/Biz/Network/HttpCurlFactory.cpp
+index f1861ba..37e857f 100644
+--- a/src/slic3r-shared/src/Slic3r/Biz/Network/HttpCurlFactory.cpp
++++ b/src/slic3r-shared/src/Slic3r/Biz/Network/HttpCurlFactory.cpp
+@@ -1,4 +1,12 @@
+ #include "Slic3r/Biz/Network/HttpFactory.hpp"
++#ifdef __ANDROID__
++// Android NDK: no libcurl. HttpFactory's function slots stay empty — the
++// farm app performs all networking in Java; an accidental engine call
++// surfaces as std::bad_function_call instead of a curl link dependency.
++namespace Slic3r::Biz::Network {
++void HttpFactory::initialize() {}
++} // namespace Slic3r::Biz::Network
++#else
+ #include "Slic3r/Biz/Network/HttpCurl.hpp"
+ 
+ namespace Slic3r::Biz::Network {
+@@ -71,4 +79,5 @@ void HttpFactory::initialize()
+         };
+     }
+ }
+-}
+\ No newline at end of file
++}
++#endif // __ANDROID__

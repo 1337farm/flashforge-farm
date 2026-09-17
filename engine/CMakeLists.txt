@@ -846,14 +846,18 @@ file(GLOB_RECURSE SLIC3R_MODULE_SRC
 # headless): EmbossJob and other Biz TUs call PlatformServices, whose
 # implementation lives there; the Slic3r/App/ regex still drops its
 # canvas/animation half.
-# Preset/Bundle.cpp re-added: PresetInteractor (live) calls
-# Bundle::find_printer_preset et al. — not dead after all.
+# Preset/Bundle.cpp: the LIVE implementation is slic3r-domain's
+# Slic3r/Domain/Preset/Bundle.cpp (PresetInteractor calls
+# Domain::Preset::Bundle::find_printer_preset et al.). The slic3r-shared
+# Biz/Preset/Bundle.cpp leftover is commented out in upstream's file list
+# and includes a nonexistent header — exclude ONLY the Biz path (a bare
+# Preset/Bundle regex also killed the live Domain TU).
 # SHA256Linux.cpp re-added: the live UserAccount TUs call Biz::sha256;
 # its OpenSSL dependency is staged from the prusa30-openssl cache.
 # Emboss/TextPresetManager.cpp + SingleInstanceCheckerLock.cpp excluded:
 # only App/ and app-desktop TUs (all excluded/unglobbed) reference them —
 # dead in the .so, and they drag AppServices/AppInstanceMessageHandler.
-list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|win32|Mac\\.cpp|Slic3r/App/|sequential_decimator|HttpCurl\\.cpp|HttpCurlFactory\\.cpp|AppInstanceMessageHandlerLinux\\.cpp|AppInstanceMessageHandlerFactoryLinux\\.cpp|RemovableDriveMonitorLinux\\.cpp|RemovableDriveServiceLinux\\.cpp|TryCatchSignalSEH\\.cpp|Emboss/TextShapeProvider\\.cpp|Emboss/TextLines\\.cpp|Emboss/SurfaceDrag\\.cpp|Emboss/TextPresetManager\\.cpp|SingleInstanceCheckerLock\\.cpp|Format/3mf/BuildTicket\\.cpp|Preset/AbstractConfigManipulation\\.cpp|YamlAdapterLibfyaml\\.cpp|YamlAdapterYamlCpp\\.cpp|PlatformInfo_emscripten\\.cpp")
+list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|win32|Mac\\.cpp|Slic3r/App/|sequential_decimator|HttpCurl\\.cpp|HttpCurlFactory\\.cpp|AppInstanceMessageHandlerLinux\\.cpp|AppInstanceMessageHandlerFactoryLinux\\.cpp|RemovableDriveMonitorLinux\\.cpp|RemovableDriveServiceLinux\\.cpp|TryCatchSignalSEH\\.cpp|Emboss/TextShapeProvider\\.cpp|Emboss/TextLines\\.cpp|Emboss/SurfaceDrag\\.cpp|Emboss/TextPresetManager\\.cpp|SingleInstanceCheckerLock\\.cpp|Biz/Preset/Bundle\\.cpp|Format/3mf/BuildTicket\\.cpp|Preset/AbstractConfigManipulation\\.cpp|YamlAdapterLibfyaml\\.cpp|YamlAdapterYamlCpp\\.cpp|PlatformInfo_emscripten\\.cpp")
 # CustomParametersHandling.cpp captures structured bindings in OpenMP
 # regions, which NDK Clang rejects. Compile just this TU without OpenMP
 # (pragmas ignored -> serial execution, same results).

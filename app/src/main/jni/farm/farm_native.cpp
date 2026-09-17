@@ -31,6 +31,7 @@
 #include "Slic3r/Domain/TriangleMesh.hpp"
 #include "Slic3r/Domain/CutConnector.hpp"
 #include "Slic3r/Domain/LayerHeightProfile.hpp"
+#include "farm_driver.hpp"
 #include "Slic3r/Biz/FileLoadingLogic.hpp"
 #include "Slic3r/Biz/Algorithms/Model.hpp"
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
@@ -94,6 +95,7 @@ struct GCodeViewerRef {
 };
 struct GCodeResultRef {
     std::string name;
+    farm::RoleFilamentStats per_role; // Java GCodeViewer.ExtrusionRole int -> (mm, g)
 };
 // TODO(#212): opaque until Java passes JSON presets (Biz::Config::load_preset_and_config).
 struct ConfigRef {
@@ -582,23 +584,44 @@ extern "C" {
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_model_1slice(JNIEnv* env, jclass, jlong ptr, jstring configPath, jstring path, jobject listener, jint numFilaments, jintArray colorsArr, jint calibMode, jdouble calibStart, jdouble calibEnd, jdouble calibStep) {
-        // Slice prep for #213: the 3.0 shape is read_model_from_file +
-        // Biz::Config::load_preset_and_config(JSON) + init_print(FFF, callbacks, id) +
-        // IPrint::update(model, pack, bed, metadata, serializer) + slice(id, thumbnails,
-        // nullopt), with results via IProcessCallbacks::on_fdm_result (see
-        // engine/prusa30/farm_driver.cpp). Two gaps block wiring it here:
-        //   1. Java passes a legacy INI file; load_preset_and_config takes JSON, and the
-        //      INI reader (Slic3rLegacy::DynamicPrintConfig) is src-private in 3.0.
-        //   2. FDMResult (libpgcode::ProcessorResult) -> gcode text/export has no verified
-        //      JNI-side path yet (export_gcode/Print::apply/process are gone).
-        // Throw: a slice must never report silent success.
-        (void) ptr; (void) configPath; (void) path; (void) listener;
-        (void) numFilaments; (void) colorsArr; (void) calibMode;
-        (void) calibStart; (void) calibEnd; (void) calibStep;
-        LOGE("model_slice: 3.0 slice path not wired yet (see #213)");
-        env->ThrowNew(env->FindClass("com/flashforge/farm/slic3r/Slic3rRuntimeError"),
-            "Slicing is not available in this build: the 3.0 slice path (INI config + gcode export) is still being ported (#213)");
-        return 0;
+        // #213: legacy-INI slice path. The app's slic3r_current.ini feeds
+        // Biz::load_config_from_legacy_file (the public wrapper over the
+        // src-private legacy reader), the bed comes from the config's
+        // bed_shape/max_print_height, and the FDMResult's embedded gcode is
+        // written verbatim to the destination (see engine/prusa30/farm_driver.cpp).
+        // The legacy numFilaments/colors/calibration params stay in the JNI
+        // contract; their content is carried by the INI itself.
+        ModelRef* ref = (ModelRef*) (intptr_t) ptr;
+        if (ref == nullptr) return 0;
+        const char* cfgChars = env->GetStringUTFChars(configPath, JNI_FALSE);
+        std::string cppConfig(cfgChars);
+        env->ReleaseStringUTFChars(configPath, cfgChars);
+        const char* pathChars = env->GetStringUTFChars(path, JNI_FALSE);
+        std::string cppGcodePath(pathChars);
+        env->ReleaseStringUTFChars(path, pathChars);
+        (void) numFilaments; (void) colorsArr;
+        (void) calibMode; (void) calibStart; (void) calibEnd; (void) calibStep;
+
+        // model_slice runs on the app's farm-slice Java thread, so the
+        // captured env is valid for the whole call.
+        auto progress = [&](int percent, const std::string& stage) {
+            jstring js = env->NewStringUTF(stage.c_str());
+            env->CallVoidMethod(listener, sliceListenerOnProgress, (jint) percent, js);
+            env->DeleteLocalRef(js);
+        };
+
+        try {
+            farm::SliceStats stats = farm::slice_to_gcode(ref->model, cppConfig, cppGcodePath, progress);
+            GCodeResultRef* result = new GCodeResultRef();
+            const size_t slash = cppGcodePath.find_last_of('/');
+            result->name = slash == std::string::npos ? cppGcodePath : cppGcodePath.substr(slash + 1);
+            result->per_role = std::move(stats.per_role);
+            return (jlong) (intptr_t) result;
+        } catch (const std::exception& e) {
+            LOGE("model_slice failed: %s", e.what());
+            env->ThrowNew(env->FindClass("com/flashforge/farm/slic3r/Slic3rRuntimeError"), e.what());
+            return 0;
+        }
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1export_13mf(JNIEnv* env, jclass, jlong ptr, jstring configPath, jstring path) {
@@ -635,15 +658,19 @@ extern "C" {
     }
 
     JNIEXPORT jdouble JNICALL Java_com_flashforge_farm_slic3r_Native_gcoderesult_1get_1used_1filament_1mm(JNIEnv* env, jclass, jlong ptr, jint role) {
-        // TODO(#212): no print_statistics without a 3.0 gcode result.
-        (void) env; (void) ptr; (void) role;
-        return 0.0;
+        (void) env;
+        GCodeResultRef* ref = (GCodeResultRef*) (intptr_t) ptr;
+        if (ref == nullptr) return 0.0;
+        const auto it = ref->per_role.find(role);
+        return it == ref->per_role.end() ? 0.0 : (jdouble) it->second.first;
     }
 
     JNIEXPORT jdouble JNICALL Java_com_flashforge_farm_slic3r_Native_gcoderesult_1get_1used_1filament_1g(JNIEnv* env, jclass, jlong ptr, jint role) {
-        // TODO(#212): see get_used_filament_mm.
-        (void) env; (void) ptr; (void) role;
-        return 0.0;
+        (void) env;
+        GCodeResultRef* ref = (GCodeResultRef*) (intptr_t) ptr;
+        if (ref == nullptr) return 0.0;
+        const auto it = ref->per_role.find(role);
+        return it == ref->per_role.end() ? 0.0 : (jdouble) it->second.second;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_gcoderesult_1release(JNIEnv* env, jclass, jlong ptr) {

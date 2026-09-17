@@ -66,8 +66,12 @@ add_library(farm SHARED
         ${ENGINE_JNI}/render/GLModel.cpp
         ${ENGINE_JNI}/render/GLShader.cpp)
 
-add_library(farm_prusa30_jni SHARED
+add_library(farm_prusa30_jni STATIC
         ${ENGINE_ROOT}/prusa30/farm_driver.cpp)
+# The driver TU links into libfarm: farm_native.cpp calls farm::slice_to_gcode.
+# STATIC so the archive member is pulled at libfarm's link — no second .so to
+# package or load (the previous SHARED orphan left the symbol undefined).
+target_link_libraries(farm PRIVATE farm_prusa30_jni)
 
 # Compile against the engine's own source tree (ABI-lockstep) + staged deps.
 # The engine keeps its src/main/jni tree as the single header source, so
@@ -209,6 +213,13 @@ target_link_libraries(farm PRIVATE
         dl
         ${UNWIND_ARCHIVE}
 )
+
+# The prusa30 driver TU (farm_prusa30_jni archive, pulled at this link) uses
+# 3.0's Assert.hpp, whose core libassert runtime is NOT exported by
+# libslic3r.so (only per-type template instantiations are). Link the apk
+# job's freshly staged libassert archives here so -Wl,--no-undefined holds.
+file(GLOB BRIDGE_ASSERT_STATIC_LIBS ${ENGINE_ROOT}/prusa30/jniImports/assert/lib/*.a)
+target_link_libraries(farm PRIVATE ${BRIDGE_ASSERT_STATIC_LIBS})
 
 target_link_libraries(farm_prusa30_jni PRIVATE
         slic3r

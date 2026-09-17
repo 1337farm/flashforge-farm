@@ -1128,11 +1128,6 @@ jobs:
             "-DSLIC3R_BUILD_ID=\"4\""
           cmake --build engine/build --target slic3r -j"$(nproc)"
 
-      - name: UPTERM session (on failure)
-        if: failure()
-        run: |
-          bash scripts/setup-upterm-debug.sh
-
       - name: Locate built libslic3r.so
         id: find-so
         run: |

@@ -1033,6 +1033,43 @@ jobs:
             || { echo "ERROR: no libryml.a staged"; exit 1; }
           echo "ryml staged and verified"
 
+      - name: Restore staged OpenSSL from cache (SHA256 needs libcrypto)
+        # Same key as the prusa30-headless openssl job: the cache is shared
+        # repo-wide, so the engine reuses the staged prefix instead of
+        # rebuilding. SHA256Linux.cpp (live via the UserAccount TUs) calls
+        # Biz::sha256 against libcrypto's EVP API.
+        id: openssl-cache
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/openssl
+          key: prusa30-openssl4.0.1-${{ hashFiles('scripts/build_prusa30_openssl.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored OpenSSL
+        id: openssl-validate
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          NEED=1
+          if [ "${{ steps.openssl-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/openssl/include/openssl/ssl.h || OK=0
+            ls engine/prusa30/jniImports/openssl/lib/libcrypto.a >/dev/null 2>&1 || OK=0
+            ls engine/prusa30/jniImports/openssl/lib/libssl.a >/dev/null 2>&1 || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Build OpenSSL from source (cache miss)
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1' && steps.openssl-validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_openssl.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/openssl" \
+            ./scripts/build_prusa30_openssl.sh
+          test -f engine/prusa30/jniImports/openssl/lib/libcrypto.a \
+            || { echo "ERROR: no libcrypto.a staged"; exit 1; }
+          echo "openssl staged and verified"
+
       - name: Build libdeflate fresh (3mf needs libdeflate_* symbols)
         # No cache reuse by design (like libassert/GMP): ~1 min, immune to poisoning.
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'

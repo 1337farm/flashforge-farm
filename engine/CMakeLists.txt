@@ -523,9 +523,6 @@ add_library(slic3r
         # Upstream 3.0 TU for CNumericLocalesSetter (used by admesh).
         ${PRUSA_SRC}/bundled_deps/localesutils/LocalesUtils.cpp
 
-        src/main/jni/clipper/clipper_z.cpp
-        src/main/jni/clipper/clipper_z.hpp
-
         src/main/jni/expat/xmlparse.c
         src/main/jni/expat/xmlrole.c
         src/main/jni/expat/xmltok.c
@@ -826,7 +823,12 @@ file(GLOB_RECURSE SLIC3R_MODULE_SRC
     ${PRUSA_SRC}/src/slic3r-biz-parser/src/*.cpp
     ${PRUSA_SRC}/src/slic3r-gcode-reader/src/*.cpp
     ${PRUSA_SRC}/src/slic3r-platform/src/*.cpp
-    ${PRUSA_SRC}/src/libpgcode/src/*.cpp)
+    ${PRUSA_SRC}/src/libpgcode/src/*.cpp
+    # Upstream classic ClipperLib with TBB scalable_allocator typedefs — the
+    # 3.0 biz-algorithms signatures (ClipperLib::Area(vector<Vec,scalable_alloc>)
+    # etc.) only resolve against this implementation; the vendored 2.x copy
+    # (std allocator, no remaining consumers) is dropped from the build.
+    ${PRUSA_SRC}/bundled_deps/clipper/src/*.cpp)
 # NOTE: libseqarrange excluded (needs z3++.h, absent); its only user is the
 # excluded ArrangeHelper. biz-crypto excluded (needs OpenSSL headers).
 # YamlAdapterLibfyaml.cpp + YamlAdapterYamlCpp.cpp excluded:
@@ -844,7 +846,14 @@ file(GLOB_RECURSE SLIC3R_MODULE_SRC
 # headless): EmbossJob and other Biz TUs call PlatformServices, whose
 # implementation lives there; the Slic3r/App/ regex still drops its
 # canvas/animation half.
-list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|win32|Mac\\.cpp|Slic3r/App/|sequential_decimator|HttpCurl\\.cpp|HttpCurlFactory\\.cpp|SHA256Linux\\.cpp|AppInstanceMessageHandlerLinux\\.cpp|AppInstanceMessageHandlerFactoryLinux\\.cpp|RemovableDriveMonitorLinux\\.cpp|RemovableDriveServiceLinux\\.cpp|TryCatchSignalSEH\\.cpp|Emboss/TextShapeProvider\\.cpp|Emboss/TextLines\\.cpp|Emboss/SurfaceDrag\\.cpp|Format/3mf/BuildTicket\\.cpp|Preset/Bundle\\.cpp|Preset/AbstractConfigManipulation\\.cpp|YamlAdapterLibfyaml\\.cpp|YamlAdapterYamlCpp\\.cpp|PlatformInfo_emscripten\\.cpp")
+# Preset/Bundle.cpp re-added: PresetInteractor (live) calls
+# Bundle::find_printer_preset et al. — not dead after all.
+# SHA256Linux.cpp re-added: the live UserAccount TUs call Biz::sha256;
+# its OpenSSL dependency is staged from the prusa30-openssl cache.
+# Emboss/TextPresetManager.cpp + SingleInstanceCheckerLock.cpp excluded:
+# only App/ and app-desktop TUs (all excluded/unglobbed) reference them —
+# dead in the .so, and they drag AppServices/AppInstanceMessageHandler.
+list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|win32|Mac\\.cpp|Slic3r/App/|sequential_decimator|HttpCurl\\.cpp|HttpCurlFactory\\.cpp|AppInstanceMessageHandlerLinux\\.cpp|AppInstanceMessageHandlerFactoryLinux\\.cpp|RemovableDriveMonitorLinux\\.cpp|RemovableDriveServiceLinux\\.cpp|TryCatchSignalSEH\\.cpp|Emboss/TextShapeProvider\\.cpp|Emboss/TextLines\\.cpp|Emboss/SurfaceDrag\\.cpp|Emboss/TextPresetManager\\.cpp|SingleInstanceCheckerLock\\.cpp|Format/3mf/BuildTicket\\.cpp|Preset/AbstractConfigManipulation\\.cpp|YamlAdapterLibfyaml\\.cpp|YamlAdapterYamlCpp\\.cpp|PlatformInfo_emscripten\\.cpp")
 # CustomParametersHandling.cpp captures structured bindings in OpenMP
 # regions, which NDK Clang rejects. Compile just this TU without OpenMP
 # (pragmas ignored -> serial execution, same results).
@@ -919,6 +928,7 @@ target_include_directories(libslic3r_core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/yamlcpp/include
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/vendor/pugixml
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/libdeflate/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/openssl/include
     ${PRUSA_SRC}/bundled_deps/int128
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main/jniImports/gmp/include/${ANDROID_ABI}
     src/main/jni/miniz
@@ -945,6 +955,10 @@ file(GLOB FMT_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/fmtlib/l
 # libryml.a (archive order: it resolves ryml's own references).
 file(GLOB RYML_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/ryml/lib/libryml.a)
 file(GLOB C4CORE_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/ryml/lib/libc4core.a)
+# OpenSSL 4.0.1 (prusa30-openssl cache): SHA256Linux's Biz::sha256 uses
+# libcrypto's EVP digest API; libssl links after it (it resolves crypto).
+file(GLOB CRYPTO_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/openssl/lib/libcrypto.a)
+file(GLOB SSL_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/openssl/lib/libssl.a)
 # --whole-archive around libslic3r_core: the farm JNI bridge (libfarm.so)
 # links against libslic3r.so and resolves the 3.0 Slic3r::Domain/Biz API at
 # link time. A plain archive pull would drag in only the members something
@@ -958,7 +972,7 @@ target_link_libraries(slic3r PRIVATE
         libslic3r_core
         -Wl,--no-whole-archive
         ${ASSERT_STATIC_LIBS} ${MIXER_STATIC_LIB} ${LIBDEFLATE_STATIC_LIB} ${FMT_STATIC_LIB}
-        ${RYML_STATIC_LIB} ${C4CORE_STATIC_LIB})
+        ${RYML_STATIC_LIB} ${C4CORE_STATIC_LIB} ${CRYPTO_STATIC_LIB} ${SSL_STATIC_LIB})
 
 target_include_directories(slic3r PRIVATE
         src/main/jni

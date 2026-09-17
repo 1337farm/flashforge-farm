@@ -66,8 +66,12 @@ add_library(farm SHARED
         ${ENGINE_JNI}/render/GLModel.cpp
         ${ENGINE_JNI}/render/GLShader.cpp)
 
-add_library(farm_prusa30_jni SHARED
+add_library(farm_prusa30_jni STATIC
         ${ENGINE_ROOT}/prusa30/farm_driver.cpp)
+# The driver TU links into libfarm: farm_native.cpp calls farm::slice_to_gcode.
+# STATIC so the archive member is pulled at libfarm's link — no second .so to
+# package or load (the previous SHARED orphan left the symbol undefined).
+target_link_libraries(farm PRIVATE farm_prusa30_jni)
 
 # Compile against the engine's own source tree (ABI-lockstep) + staged deps.
 # The engine keeps its src/main/jni tree as the single header source, so

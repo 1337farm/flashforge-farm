@@ -943,6 +943,7 @@ target_include_directories(libslic3r_core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main/jniImports/gmp/include/${ANDROID_ABI}
     src/main/jni/miniz
     src/main/jni/libpng
+    src/main/jni/libjpeg-turbo
     src/main/jni/nlopt/api
     src/main/jni/expat
     src/main/jni/fast_float

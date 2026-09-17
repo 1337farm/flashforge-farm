@@ -798,14 +798,16 @@ target_compile_definitions(slic3r PUBLIC -DUSE_TBB -DTBB_USE_CAPTURED_EXCEPTION=
 # definitions for Domain::Model/ModelObject/ModelVolume et al are compiled in
 # upstream `libslic3r`, not as headers, so our app needs the actual TU set.
 # We add it unconditionally; CMake dedupes duplicate source entries by path.
-file(GLOB SLIC3R_IMPL_CPP ${PRUSA_SRC}/src/libslic3r/src/libslic3r/*.cpp)
+file(GLOB_RECURSE SLIC3R_IMPL_CPP ${PRUSA_SRC}/src/libslic3r/src/libslic3r/*.cpp)
 # Mirror upstream: src/libslic3r/CMakeLists.txt comments ArrangeHelper out
 # (it includes the nonexistent libslic3r/MultipleBeds.hpp and nothing else
-# references it), and GCodeSender is dead serial-port code nothing references
-# (needs boost::noncopyable transitively + clashes with Android termios2);
-# drop both so the glob builds exactly what upstream builds.
+# references it), GCodeSender is dead serial-port code nothing references
+# (needs boost::noncopyable transitively + clashes with Android termios2),
+# and Format/PrintRequest.cpp is commented out upstream — drop all three so
+# the recursive glob builds exactly what upstream builds.
 list(REMOVE_ITEM SLIC3R_IMPL_CPP
     ${PRUSA_SRC}/src/libslic3r/src/libslic3r/ArrangeHelper.cpp
+    ${PRUSA_SRC}/src/libslic3r/src/libslic3r/Format/PrintRequest.cpp
     ${PRUSA_SRC}/src/libslic3r/src/libslic3r/GCodeSender.cpp)
 # Upstream module implementations (Domain::Model, FileLoadingLogic, ...): the
 # legacy glob covers only src/libslic3r. Glob the module trees too — none
@@ -857,7 +859,10 @@ file(GLOB_RECURSE SLIC3R_MODULE_SRC
 # Emboss/TextPresetManager.cpp + SingleInstanceCheckerLock.cpp excluded:
 # only App/ and app-desktop TUs (all excluded/unglobbed) reference them —
 # dead in the .so, and they drag AppServices/AppInstanceMessageHandler.
-list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|win32|Mac\\.cpp|Slic3r/App/|sequential_decimator|HttpCurl\\.cpp|HttpCurlFactory\\.cpp|AppInstanceMessageHandlerLinux\\.cpp|AppInstanceMessageHandlerFactoryLinux\\.cpp|RemovableDriveMonitorLinux\\.cpp|RemovableDriveServiceLinux\\.cpp|TryCatchSignalSEH\\.cpp|Emboss/TextShapeProvider\\.cpp|Emboss/TextLines\\.cpp|Emboss/SurfaceDrag\\.cpp|Emboss/TextPresetManager\\.cpp|SingleInstanceCheckerLock\\.cpp|Biz/Preset/Bundle\\.cpp|Format/3mf/BuildTicket\\.cpp|Preset/AbstractConfigManipulation\\.cpp|YamlAdapterLibfyaml\\.cpp|YamlAdapterYamlCpp\\.cpp|PlatformInfo_emscripten\\.cpp")
+# HttpCurlFactory.cpp re-added: patch 0011 turns it into the __ANDROID__
+# no-op HttpFactory::initialize() (HttpCurl.cpp itself still excluded —
+# the curl implementation never builds for NDK).
+list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|win32|Mac\\.cpp|Slic3r/App/|sequential_decimator|HttpCurl\\.cpp|AppInstanceMessageHandlerLinux\\.cpp|AppInstanceMessageHandlerFactoryLinux\\.cpp|RemovableDriveMonitorLinux\\.cpp|RemovableDriveServiceLinux\\.cpp|TryCatchSignalSEH\\.cpp|Emboss/TextShapeProvider\\.cpp|Emboss/TextLines\\.cpp|Emboss/SurfaceDrag\\.cpp|Emboss/TextPresetManager\\.cpp|SingleInstanceCheckerLock\\.cpp|Biz/Preset/Bundle\\.cpp|Format/3mf/BuildTicket\\.cpp|Preset/AbstractConfigManipulation\\.cpp|YamlAdapterLibfyaml\\.cpp|YamlAdapterYamlCpp\\.cpp|PlatformInfo_emscripten\\.cpp")
 # CustomParametersHandling.cpp captures structured bindings in OpenMP
 # regions, which NDK Clang rejects. Compile just this TU without OpenMP
 # (pragmas ignored -> serial execution, same results).

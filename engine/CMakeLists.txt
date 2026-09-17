@@ -869,7 +869,23 @@ list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|win32|Mac\\.cpp|Slic3r/App/|s
 set_source_files_properties(
     ${PRUSA_SRC}/src/libslic3r/src/libslic3r/CustomParametersHandling.cpp
     PROPERTIES COMPILE_OPTIONS -fno-openmp)
+# Upstream compiles bundled clipper.cpp TWICE (bundled_deps/clipper/
+# CMakeLists.txt): plain -> namespace ClipperLib, and with
+# CLIPPERLIB_USE_XYZ=1 -> namespace ClipperLib_Z (Z-coordinate variant
+# used by SupportCommon/Brim/Arachne/SLA). The module glob builds the
+# plain variant into libslic3r_core; compile the Z variant as an object
+# library and merge it in — distinct namespaces, no symbol clash.
+add_library(clipper_z OBJECT ${PRUSA_SRC}/bundled_deps/clipper/src/clipper.cpp)
+target_compile_definitions(clipper_z PRIVATE CLIPPERLIB_USE_XYZ=1)
+target_include_directories(clipper_z PRIVATE
+    ${PRUSA_SRC}/bundled_deps/clipper/include
+    ${PRUSA_SRC}/bundled_deps/int128
+    ${PRUSA_SRC}/src/slic3r-domain/include
+    ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/eigen/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/include)
 add_library(libslic3r_core STATIC ${SLIC3R_IMPL_CPP} ${SLIC3R_MODULE_SRC}
+    $<TARGET_OBJECTS:clipper_z>
     # Vendored pugixml (see engine/prusa30/vendor/pugixml/README): upstream
     # 3mf/BuildTicket.cpp needs its symbols, not just headers.
     ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/vendor/pugixml/pugixml.cpp)

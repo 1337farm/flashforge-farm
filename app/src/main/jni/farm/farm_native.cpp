@@ -1222,7 +1222,12 @@ extern "C" {
             while (std::getline(in, line)) {
                 const auto eq = line.find('=');
                 if (eq == std::string::npos) continue;
-                const std::string key = line.substr(0, eq);
+                std::string key = line.substr(0, eq);
+                const auto key_last = key.find_last_not_of(" \t");
+                if (key_last == std::string::npos) continue;
+                key = key.substr(0, key_last + 1);
+                const auto key_first = key.find_first_not_of(" \t");
+                if (key_first != std::string::npos) key = key.substr(key_first);
                 std::string value = line.substr(eq + 1);
                 const auto first = value.find_first_not_of(" \t\"");
                 const auto last = value.find_last_not_of(" \t\"\r");

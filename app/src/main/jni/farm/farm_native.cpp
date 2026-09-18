@@ -14,9 +14,11 @@
 // marked TODO(#212). Slice/export paths throw instead of fake success.
 
 #include <android/log.h>
+#include <algorithm>
 #include <cfloat>
 #include <cmath>
 #include <cstring>
+#include <fstream>
 #include <memory>
 #include <numbers>
 #include <string>
@@ -48,9 +50,15 @@ using Domain::Vec3f;
 using Domain::Transform3d;
 using Domain::TriangleSelector::TriangleStateType;
 
-// GLShaderProgram lives in the app render stack (still 2.x); forward-declare so
-// get_current_shader() keeps its signature without pulling those headers.
-#include "render/Program.hpp"
+// The render stack is real 3.0-ported code compiled into libfarm itself
+// (render/GLModel.cpp + render/GLShader.cpp are farm target sources): GLModel
+// for mesh draw + raycast, GLShaderProgram for program lifecycle, and
+// bed_utils.hpp for the plate/gridline/contour builders.
+#include "Slic3r/Biz/Algorithms/Scaling.hpp"
+#include "render/GLShader.hpp"
+#include "render/Program.hpp"   // declares Slic3r::get_current_shader() (defined below)
+#include "render/GLModel.hpp"
+#include "render/bed_utils.hpp"
 
 #define LOG_TAG "NativeCut"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
@@ -74,20 +82,30 @@ struct PaintSessionRef {
     Slic3r::AABBMesh* emesh = nullptr;
     std::unique_ptr<BizAlgo::TriangleSelector> selector;
 };
-// TODO(#212): opaque until the GL render stack ports to 3.0.
+// Live GL shader program handle (render/GLShader.hpp, compiled into libfarm).
 struct ShaderRef {
     Slic3r::GLShaderProgram* program = nullptr;
 };
-// TODO(#212): opaque until the GL render stack ports to 3.0.
+// Renderable mesh: the GLModel plus the CPU-side mesh backing raycasts
+// (emesh over the same world-coords its, per-face normals for hit shading).
 struct GLModelRef {
-    bool initialized = false;
+    Slic3r::GUI::GLModel model;
+    Domain::TriangleMesh mesh;
+    std::unique_ptr<Slic3r::AABBMesh> emesh;
+    std::vector<Domain::Vec3f> normals;
 };
-// Bed data that survives without the GL bed visuals. `contour` is filled by
-// bed_configure once a public 3.0 INI->bed-shape reader exists; bed_arrange
-// then drives Biz::Arrange::arrange_model_in_place.
-struct BedRef {
-    Domain::Vec2ds contour;
+// Bed visuals: scaled contour + print height parsed from the app's legacy INI
+// (bed_shape/max_print_height), and the three GL models Bed3D renders
+// (plate triangles, gridlines, contour lines). The models are handed to
+// Java as GLModelRef pointers via bed_create and driven by the glmodel_*
+// natives; bed_arrange consumes the contour once it is ported (#212).
+struct FarmBedRef {
+    Domain::Vec2ds contour_mm;
+    float max_print_height = 0.0f;
     bool configured = false;
+    std::unique_ptr<GLModelRef> triangles;
+    std::unique_ptr<GLModelRef> gridlines;
+    std::unique_ptr<GLModelRef> contourlines;
 };
 // TODO(#212): opaque until the gcode preview stack ports to 3.0.
 struct GCodeViewerRef {
@@ -110,10 +128,18 @@ static jmethodID shadersManagerGetCurrent = nullptr;
 
 static JavaVM* staticVM;
 
-// TODO(#212): no shader stack on the 3.0 bridge yet; the engine render utils
-// treat null as "no program bound".
+// The Java GLShadersManager owns the programs (built via shader_init_from_texts)
+// and tracks GLES30.glGetIntegerv(GL_CURRENT_PROGRAM); ask it for the matching
+// native pointer so GLModel::render binds attributes against the right program.
+// Render calls happen on the GL thread (a Java-attached thread), so GetEnv works.
 Slic3r::GLShaderProgram* Slic3r::get_current_shader() {
-    return nullptr;
+    JNIEnv* env = nullptr;
+    if (staticVM == nullptr || staticVM->GetEnv((void**) &env, JNI_VERSION_1_6) != JNI_OK)
+        return nullptr;
+    if (shadersManagerClass == nullptr || shadersManagerGetCurrent == nullptr)
+        return nullptr;
+    const jlong p = env->CallStaticLongMethod(shadersManagerClass, shadersManagerGetCurrent);
+    return (Slic3r::GLShaderProgram*) (intptr_t) p;
 }
 
 extern "C" {
@@ -514,10 +540,11 @@ extern "C" {
 
     JNIEXPORT jlongArray JNICALL Java_com_flashforge_farm_slic3r_Native_model_1create_1flatten_1planes(JNIEnv* env, jclass, jlong ptr, jint i) {
         // TODO(#212): plane extraction needs the convex-hull facet walk ported to
-        // Domain::TriangleMesh plus GL planes for picking; both pending.
-        (void) env; (void) ptr; (void) i;
+        // Domain::TriangleMesh plus GL planes for picking; both pending. Return an
+        // EMPTY array (never null): Model.java dereferences ptr.length immediately.
+        (void) ptr; (void) i;
         LOGD("model_create_flatten_planes: stub, pending");
-        return nullptr;
+        return env->NewLongArray(0);
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1auto_1orient(JNIEnv* env, jclass, jlong ptr, jint i) {
@@ -680,122 +707,318 @@ extern "C" {
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_shader_1init_1from_1texts(JNIEnv* env, jclass, jstring name, jstring fsText, jstring vsText) {
-        // TODO(#212): GL render stack still 2.x; no shader program to build.
-        (void) env; (void) name; (void) fsText; (void) vsText;
-        LOGD("shader_init_from_texts: stub, GL stack pending");
-        return 0;
+        const char* nameChars = env->GetStringUTFChars(name, JNI_FALSE);
+        const char* fsChars = env->GetStringUTFChars(fsText, JNI_FALSE);
+        const char* vsChars = env->GetStringUTFChars(vsText, JNI_FALSE);
+        ShaderRef* ref = new ShaderRef();
+        ref->program = new Slic3r::GLShaderProgram();
+        // ShaderSources is indexed by EShaderType {Vertex, Fragment} while the
+        // Java signature passes the fragment source first.
+        const bool ok = ref->program->init_from_texts(std::string(nameChars),
+            {std::string(vsChars), std::string(fsChars)});
+        env->ReleaseStringUTFChars(name, nameChars);
+        env->ReleaseStringUTFChars(fsText, fsChars);
+        env->ReleaseStringUTFChars(vsText, vsChars);
+        if (!ok) {
+            delete ref->program;
+            delete ref;
+            LOGE("shader_init_from_texts: compile/link failed");
+            return 0;
+        }
+        return (jlong) (intptr_t) ref;
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1create(JNIEnv* env, jclass) {
-        // TODO(#212): GLModel (render/GLModel.hpp) includes deleted libslic3r headers.
         (void) env;
-        return 0;
+        return (jlong) (intptr_t) new GLModelRef();
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1raycast_1data(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see glmodel_create.
-        (void) env; (void) ptr;
+        (void) env;
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->emesh = std::make_unique<Slic3r::AABBMesh>(ref->mesh, true);
+        ref->normals = BizAlgo::TriangleMesh::its_face_normals(ref->mesh.its);
     }
 
     JNIEXPORT jdoubleArray JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1raycast_1closest_1hit(JNIEnv* env, jclass, jlong ptr, jdoubleArray pointArr, jdoubleArray directionArr) {
-        // TODO(#212): see glmodel_create. Empty hit list (never null) keeps callers safe.
-        (void) ptr; (void) pointArr; (void) directionArr;
-        return env->NewDoubleArray(0);
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        if (ref == nullptr || ref->emesh == nullptr) return env->NewDoubleArray(0);
+        jdouble* point = env->GetDoubleArrayElements(pointArr, JNI_FALSE);
+        jdouble* direction = env->GetDoubleArrayElements(directionArr, JNI_FALSE);
+        const Domain::Vec3d point3d(point);
+        const Domain::Vec3d direction3d(direction);
+        env->ReleaseDoubleArrayElements(pointArr, point, JNI_ABORT);
+        env->ReleaseDoubleArrayElements(directionArr, direction, JNI_ABORT);
+
+        // The camera ray is a line; query both half-rays so the pick works
+        // from either side of the surface (2.x semantics).
+        std::vector<Slic3r::AABBMesh::hit_result> hits =
+            ref->emesh->query_ray_hits(point3d - direction3d, direction3d);
+        std::vector<Slic3r::AABBMesh::hit_result> hits_neg =
+            ref->emesh->query_ray_hits(point3d + direction3d, -direction3d);
+        hits.insert(hits.end(), hits_neg.begin(), hits_neg.end());
+        std::stable_sort(hits.begin(), hits.end(),
+            [](const Slic3r::AABBMesh::hit_result& a, const Slic3r::AABBMesh::hit_result& b) {
+                return a.distance() < b.distance();
+            });
+
+        // Java consumes a flat {px,py,pz, nx,ny,nz} stride per hit, sorted
+        // closest-first (it only reads hits.get(0)).
+        jdoubleArray arr = env->NewDoubleArray((jsize) (hits.size() * 6));
+        std::vector<jdouble> packed;
+        packed.reserve(hits.size() * 6);
+        for (const auto& hit : hits) {
+            const Domain::Vec3d pos = hit.position();
+            const Domain::Vec3f n = (hit.face() >= 0 && (size_t) hit.face() < ref->normals.size())
+                ? ref->normals[(size_t) hit.face()]
+                : Domain::Vec3f::UnitZ();
+            packed.push_back(pos.x()); packed.push_back(pos.y()); packed.push_back(pos.z());
+            packed.push_back(n.x());   packed.push_back(n.y());   packed.push_back(n.z());
+        }
+        if (!packed.empty())
+            env->SetDoubleArrayRegion(arr, 0, (jsize) packed.size(), packed.data());
+        return arr;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1from_1model(JNIEnv* env, jclass, jlong ptr, jlong model) {
-        // TODO(#212): see glmodel_create.
-        (void) env; (void) ptr; (void) model;
+        (void) env;
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        ModelRef* mRef = (ModelRef*) (intptr_t) model;
+        if (ref == nullptr || mRef == nullptr) return;
+        // Whole model flattened to a single mesh (2.x Model::mesh() semantics).
+        ref->mesh = BizAlgo::Model::flatten_to_mesh(mRef->model);
+        ref->model.init_from(ref->mesh.its);
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1from_1model_1object(JNIEnv* env, jclass, jlong ptr, jlong model, jint i) {
-        // TODO(#212): see glmodel_create.
-        (void) env; (void) ptr; (void) model; (void) i;
+        (void) env;
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        ModelRef* mRef = (ModelRef*) (intptr_t) model;
+        if (ref == nullptr || mRef == nullptr) return;
+        Domain::ModelObject* obj = check_object(mRef, i);
+        if (obj == nullptr) return;
+        // World-coords merged mesh (all instances transformed) — 2.x
+        // ModelObject::mesh() semantics via the 3.0 free function.
+        ref->mesh = BizAlgo::ModelObject::mesh(*obj);
+        ref->model.init_from(ref->mesh.its);
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1set_1color(JNIEnv* env, jclass, jlong ptr, jfloat red, jfloat green, jfloat blue, jfloat alpha) {
-        // TODO(#212): see glmodel_create.
-        (void) env; (void) ptr; (void) red; (void) green; (void) blue; (void) alpha;
+        (void) env;
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->model.set_color({red, green, blue, alpha});
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1stilized_1arrow(JNIEnv* env, jclass, jlong ptr, jfloat tip_radius, jfloat tip_length, jfloat stem_radius, jfloat stem_length) {
-        // TODO(#212): see glmodel_create.
-        (void) env; (void) ptr; (void) tip_radius; (void) tip_length; (void) stem_radius; (void) stem_length;
+        (void) env;
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        // Resolution 16 matches the 2.x arrow the Java CoordAxes expects.
+        ref->model.init_from(Slic3r::GUI::stilized_arrow(16, tip_radius, tip_length, stem_radius, stem_length));
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1background_1triangles(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see glmodel_create.
-        (void) env; (void) ptr;
+        (void) env;
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->model.reset();
+        Slic3r::GUI::GLModel::Geometry init_data;
+        init_data.format = {Slic3r::GUI::GLModel::Geometry::EPrimitiveType::Triangles,
+                            Slic3r::GUI::GLModel::Geometry::EVertexLayout::P2T2};
+        init_data.reserve_vertices(4);
+        init_data.reserve_indices(6);
+        init_data.add_vertex(Domain::Vec2f(-1.0f, -1.0f), Domain::Vec2f(0.0f, 0.0f));
+        init_data.add_vertex(Domain::Vec2f(1.0f, -1.0f), Domain::Vec2f(1.0f, 0.0f));
+        init_data.add_vertex(Domain::Vec2f(1.0f, 1.0f), Domain::Vec2f(1.0f, 1.0f));
+        init_data.add_vertex(Domain::Vec2f(-1.0f, 1.0f), Domain::Vec2f(0.0f, 1.0f));
+        init_data.add_triangle(0, 1, 2);
+        init_data.add_triangle(2, 3, 0);
+        ref->model.init_from(std::move(init_data));
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1box(JNIEnv* env, jclass, jlong ptr, jfloat width, jfloat depth, jfloat height) {
-        // TODO(#212): see glmodel_create.
-        (void) env; (void) ptr; (void) width; (void) depth; (void) height;
+        (void) env;
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->model.reset();
+        // Rectangular prism, origin at the front-left-bottom corner (Java doc).
+        Slic3r::GUI::GLModel::Geometry g;
+        g.format = {Slic3r::GUI::GLModel::Geometry::EPrimitiveType::Triangles,
+                    Slic3r::GUI::GLModel::Geometry::EVertexLayout::P3N3};
+        const float w = width, d = depth, h = height;
+        const Domain::Vec3f corners[8] = {
+            {0, 0, 0}, {w, 0, 0}, {w, d, 0}, {0, d, 0},
+            {0, 0, h}, {w, 0, h}, {w, d, h}, {0, d, h},
+        };
+        const int faces[6][4] = { // quad as {v0, v1, v2, v3}, CCW
+            {4, 5, 6, 7}, // top    +Z
+            {3, 2, 1, 0}, // bottom -Z
+            {0, 1, 5, 4}, // front  -Y
+            {2, 3, 7, 6}, // back   +Y
+            {1, 2, 6, 5}, // right  +X
+            {0, 4, 7, 3}, // left   -X
+        };
+        g.reserve_vertices(24);
+        g.reserve_indices(36);
+        unsigned int next = 0;
+        for (const auto& f : faces) {
+            const Domain::Vec3f& a = corners[f[0]];
+            const Domain::Vec3f& b = corners[f[1]];
+            const Domain::Vec3f& c = corners[f[2]];
+            const Domain::Vec3f& d2 = corners[f[3]];
+            const Domain::Vec3f n = (b - a).cross(c - a).normalized();
+            g.add_vertex(a, n); g.add_vertex(b, n); g.add_vertex(c, n); g.add_vertex(d2, n);
+            g.add_triangle(next, next + 1, next + 2);
+            g.add_triangle(next, next + 2, next + 3);
+            next += 4;
+        }
+        ref->model.init_from(std::move(g));
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1bounding_1box(JNIEnv* env, jclass, jlong ptr, jlong modelPtr, jint i) {
-        // TODO(#212): see glmodel_create.
-        (void) env; (void) ptr; (void) modelPtr; (void) i;
+        (void) env;
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        ModelRef* mRef = (ModelRef*) (intptr_t) modelPtr;
+        if (ref == nullptr || mRef == nullptr) return;
+        Domain::ModelObject* obj = check_object(mRef, i);
+        if (obj == nullptr) return;
+        const Domain::TriangleMesh mesh = BizAlgo::ModelObject::mesh(*obj);
+        if (mesh.its.vertices.empty()) return;
+        Domain::Vec3f b_min(FLT_MAX, FLT_MAX, FLT_MAX), b_max(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+        for (const Domain::Vec3f& v : mesh.its.vertices) {
+            b_min = b_min.cwiseMin(v);
+            b_max = b_max.cwiseMax(v);
+        }
+        // Selection box: corner brackets (Lines), rebuilt only when the box moved.
+        const Domain::Vec3f size = 0.2f * (b_max - b_min);
+        ref->model.reset();
+        Slic3r::GUI::GLModel::Geometry g;
+        g.format = {Slic3r::GUI::GLModel::Geometry::EPrimitiveType::Lines,
+                    Slic3r::GUI::GLModel::Geometry::EVertexLayout::P3};
+        struct C { Domain::Vec3f p, s; };
+        const C brackets[24] = {
+            // bottom face brackets (min corner axes)
+            {b_min, { size.x(), 0, 0}}, {b_min, {0,  size.y(), 0}}, {b_min, {0, 0,  size.z()}},
+            {{b_max.x(), b_min.y(), b_min.z()}, {-size.x(), 0, 0}},
+            {{b_max.x(), b_min.y(), b_min.z()}, {0,  size.y(), 0}},
+            {{b_max.x(), b_min.y(), b_min.z()}, {0, 0,  size.z()}},
+            {{b_max.x(), b_max.y(), b_min.z()}, {-size.x(), 0, 0}},
+            {{b_max.x(), b_max.y(), b_min.z()}, {0, -size.y(), 0}},
+            {{b_max.x(), b_max.y(), b_min.z()}, {0, 0,  size.z()}},
+            {{b_min.x(), b_max.y(), b_min.z()}, { size.x(), 0, 0}},
+            {{b_min.x(), b_max.y(), b_min.z()}, {0, -size.y(), 0}},
+            {{b_min.x(), b_max.y(), b_min.z()}, {0, 0,  size.z()}},
+            // top face brackets
+            {{b_min.x(), b_min.y(), b_max.z()}, { size.x(), 0, 0}},
+            {{b_min.x(), b_min.y(), b_max.z()}, {0,  size.y(), 0}},
+            {{b_min.x(), b_min.y(), b_max.z()}, {0, 0, -size.z()}},
+            {{b_max.x(), b_min.y(), b_max.z()}, {-size.x(), 0, 0}},
+            {{b_max.x(), b_min.y(), b_max.z()}, {0,  size.y(), 0}},
+            {{b_max.x(), b_min.y(), b_max.z()}, {0, 0, -size.z()}},
+            {{b_max.x(), b_max.y(), b_max.z()}, {-size.x(), 0, 0}},
+            {{b_max.x(), b_max.y(), b_max.z()}, {0, -size.y(), 0}},
+            {{b_max.x(), b_max.y(), b_max.z()}, {0, 0, -size.z()}},
+            {{b_min.x(), b_max.y(), b_max.z()}, { size.x(), 0, 0}},
+            {{b_min.x(), b_max.y(), b_max.z()}, {0, -size.y(), 0}},
+            {{b_min.x(), b_max.y(), b_max.z()}, {0, 0, -size.z()}},
+        };
+        g.reserve_vertices(48);
+        g.reserve_indices(48);
+        unsigned int vi = 0;
+        for (const auto& br : brackets) {
+            // Materialize the Eigen sum: an unmaterialized expression converts
+            // to every Vec overload and makes add_vertex ambiguous.
+            const Domain::Vec3f end = br.p + br.s;
+            g.add_vertex(br.p);
+            g.add_vertex(end);
+            g.add_index(vi++);
+            g.add_index(vi++);
+        }
+        ref->model.init_from(std::move(g));
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1render(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see glmodel_create. Silent: called per frame, must not log-spam.
-        (void) env; (void) ptr;
+        (void) env;
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->model.render();
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1reset(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see glmodel_create.
-        (void) env; (void) ptr;
+        (void) env;
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->model.reset();
+        ref->mesh.its.vertices.clear();
+        ref->mesh.its.indices.clear();
+        ref->emesh = nullptr;
+        ref->normals.clear();
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1is_1initialized(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see glmodel_create.
-        (void) env; (void) ptr;
-        return false;
+        (void) env;
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        return ref != nullptr && ref->model.is_initialized() ? JNI_TRUE : JNI_FALSE;
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1is_1empty(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see glmodel_create.
-        (void) env; (void) ptr;
-        return true;
+        (void) env;
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        return ref == nullptr || ref->model.is_empty() ? JNI_TRUE : JNI_FALSE;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1release(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see glmodel_create. create() returns 0 so there is nothing to free.
-        (void) env; (void) ptr;
+        (void) env;
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->model.reset();
+        delete ref;
     }
 
     JNIEXPORT jint JNICALL Java_com_flashforge_farm_slic3r_Native_shader_1get_1id(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see shader_init_from_texts.
-        (void) env; (void) ptr;
-        return 0;
+        (void) env;
+        ShaderRef* shader = (ShaderRef*) (intptr_t) ptr;
+        return shader != nullptr && shader->program != nullptr ? (jint) shader->program->get_id() : 0;
     }
 
     JNIEXPORT jint JNICALL Java_com_flashforge_farm_slic3r_Native_shader_1get_1uniform_1location(JNIEnv* env, jclass, jlong ptr, jstring name) {
-        // TODO(#212): see shader_init_from_texts.
-        (void) env; (void) ptr; (void) name;
-        return 0;
+        ShaderRef* shader = (ShaderRef*) (intptr_t) ptr;
+        if (shader == nullptr || shader->program == nullptr) return -1;
+        const char* chars = env->GetStringUTFChars(name, JNI_FALSE);
+        const jint location = (jint) shader->program->get_uniform_location(chars);
+        env->ReleaseStringUTFChars(name, chars);
+        return location;
     }
 
     JNIEXPORT jint JNICALL Java_com_flashforge_farm_slic3r_Native_shader_1get_1attrib_1location(JNIEnv* env, jclass, jlong ptr, jstring name) {
-        // TODO(#212): see shader_init_from_texts.
-        (void) env; (void) ptr; (void) name;
-        return 0;
+        ShaderRef* shader = (ShaderRef*) (intptr_t) ptr;
+        if (shader == nullptr || shader->program == nullptr) return -1;
+        const char* chars = env->GetStringUTFChars(name, JNI_FALSE);
+        const jint location = (jint) shader->program->get_attrib_location(chars);
+        env->ReleaseStringUTFChars(name, chars);
+        return location;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_shader_1start_1using(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see shader_init_from_texts.
-        (void) env; (void) ptr;
+        (void) env;
+        ShaderRef* shader = (ShaderRef*) (intptr_t) ptr;
+        if (shader != nullptr && shader->program != nullptr) shader->program->start_using();
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_shader_1stop_1using(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see shader_init_from_texts.
-        (void) env; (void) ptr;
+        (void) env;
+        ShaderRef* shader = (ShaderRef*) (intptr_t) ptr;
+        if (shader != nullptr && shader->program != nullptr) shader->program->stop_using();
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_shader_1release(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see shader_init_from_texts.
-        (void) env; (void) ptr;
+        (void) env;
+        ShaderRef* shader = (ShaderRef*) (intptr_t) ptr;
+        if (shader == nullptr) return;
+        delete shader->program;
+        delete shader;
     }
 
     // 3x3 helpers so utils_calc_view_normal_matrix needs no Eigen at the call site
@@ -931,57 +1154,157 @@ extern "C" {
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1create(JNIEnv* env, jclass, jlongArray data) {
-        BedRef* ref = new BedRef();
-        // The 3 GL slots (triangles/gridlines/contourlines) have no 3.0 GL backend
-        // yet; report nulls so Java never dereferences a dead pointer.
-        jlong zero = 0;
-        for (int i = 0; i < 3; i++)
-            env->SetLongArrayRegion(data, i, 1, &zero);
+        FarmBedRef* ref = new FarmBedRef();
+        ref->triangles = std::make_unique<GLModelRef>();
+        ref->gridlines = std::make_unique<GLModelRef>();
+        ref->contourlines = std::make_unique<GLModelRef>();
+        const jlong slots[3] = {
+            (jlong) (intptr_t) ref->triangles.get(),
+            (jlong) (intptr_t) ref->gridlines.get(),
+            (jlong) (intptr_t) ref->contourlines.get(),
+        };
+        env->SetLongArrayRegion(data, 0, 3, slots);
         return (jlong) (intptr_t) ref;
     }
 
+    // Builds the plate/gridline/contour GL models and the plate raycast mesh
+    // from the BedRef's configured contour. Shared by bed_configure (rebuild)
+    // and bed_init_triangles_mesh (Java calls it after configure).
+    static void bed_build_visuals(FarmBedRef* ref) {
+        if (ref == nullptr || !ref->configured || ref->contour_mm.size() < 3) return;
+
+        // bed_utils works on scaled-coordinate polygons (Domain::Point = Vec2crd).
+        Domain::Points pts;
+        pts.reserve(ref->contour_mm.size());
+        for (const Domain::Vec2d& v : ref->contour_mm)
+            pts.push_back(BizAlgo::Scaling::scaled(v));
+        Domain::ExPolygon bed_poly(std::move(pts));
+
+        ref->triangles->model.reset();
+        ref->gridlines->model.reset();
+        ref->contourlines->model.reset();
+        bed_util_init_triangles(bed_poly, &ref->triangles->model);
+        bed_util_init_gridlines(bed_poly, &ref->gridlines->model);
+        bed_util_init_contourlines(bed_poly, &ref->contourlines->model);
+
+        // Plate raycast data (tap-to-place / drop-on-bed): the triangles
+        // model mirrors the plate as a CPU mesh.
+        ::indexed_triangle_set its;
+        bed_util_init_triangles_its(bed_poly, &its);
+        ref->triangles->mesh.its = std::move(its);
+        ref->triangles->emesh = std::make_unique<Slic3r::AABBMesh>(ref->triangles->mesh, true);
+        ref->triangles->normals = BizAlgo::TriangleMesh::its_face_normals(ref->triangles->mesh.its);
+    }
+
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1configure(JNIEnv* env, jclass, jlong ptr, jstring config_path) {
-        // TODO(#212): the bed needs printable_area/printable_height from a legacy INI
-        // file, whose reader is src-private in 3.0. Target: Domain::Bed::create(
-        // BedCreationData{contour, max_print_height}) + BedInstance; see #213.
-        (void) ptr;
+        FarmBedRef* ref = (FarmBedRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
         const char* chars = env->GetStringUTFChars(config_path, JNI_FALSE);
+        const std::string iniPath(chars);
         env->ReleaseStringUTFChars(config_path, chars);
-        LOGD("bed_configure: stub, INI->BedCreationData pending");
+
+        // Minimal legacy-INI scan for the two bed keys (2.x semantics):
+        // bed_shape is "XxY,XxY,..." in mm; max_print_height a mm double.
+        Domain::Vec2ds shape;
+        float max_height = 200.0f;
+        {
+            std::ifstream in(iniPath);
+            if (!in) return;
+            std::string line;
+            while (std::getline(in, line)) {
+                const auto eq = line.find('=');
+                if (eq == std::string::npos) continue;
+                const std::string key = line.substr(0, eq);
+                std::string value = line.substr(eq + 1);
+                const auto first = value.find_first_not_of(" \t\"");
+                const auto last = value.find_last_not_of(" \t\"\r");
+                if (first == std::string::npos) continue;
+                value = value.substr(first, last - first + 1);
+                if (key == "bed_shape") {
+                    shape.clear();
+                    size_t pos = 0;
+                    while (pos < value.size()) {
+                        const size_t comma = value.find(',', pos);
+                        const std::string tok = value.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+                        const size_t x = tok.find('x');
+                        if (x != std::string::npos) {
+                            try {
+                                shape.emplace_back(std::stod(tok.substr(0, x)), std::stod(tok.substr(x + 1)));
+                            } catch (const std::exception&) { /* skip malformed point */ }
+                        }
+                        if (comma == std::string::npos) break;
+                        pos = comma + 1;
+                    }
+                } else if (key == "max_print_height") {
+                    try { max_height = std::stof(value); } catch (const std::exception&) { }
+                }
+            }
+        }
+        if (shape.size() < 3) {
+            env->ThrowNew(env->FindClass("com/flashforge/farm/slic3r/Slic3rRuntimeError"), "Invalid bed shape");
+            return;
+        }
+        ref->contour_mm = std::move(shape);
+        ref->max_print_height = max_height;
+        ref->configured = true;
+
+        // Rebuild the plate on every reconfigure.
+        bed_build_visuals(ref);
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1init_1triangles_1mesh(JNIEnv* env, jclass, jlong ptr, jlong triangles_ptr) {
-        // TODO(#212): bed triangulation visuals need the GL stack.
-        (void) env; (void) ptr; (void) triangles_ptr;
+        // The three models live in the FarmBedRef (Java passes the triangles
+        // pointer, but gridlines/contourlines are only reachable from here).
+        (void) env; (void) triangles_ptr;
+        bed_build_visuals((FarmBedRef*) (intptr_t) ptr);
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1arrange(JNIEnv* env, jclass, jlong ptr, jlong model) {
         // TODO(#212): target is Biz::Arrange::arrange_model_in_place(model, contour,
-        // Settings) once bed_configure supplies the contour. False = "did not fit",
+        // Settings) once the arrange surface is verified; false = "did not fit",
         // matching the old failure signal; never claim a layout we did not compute.
         (void) env; (void) ptr; (void) model;
-        LOGD("bed_arrange: stub, contour pending");
+        LOGD("bed_arrange: stub, arrange port pending");
         return false;
     }
 
     JNIEXPORT jdoubleArray JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1get_1bounding_1volume(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): backed by Domain::BedInstance once bed_configure lands.
-        (void) ptr;
+        FarmBedRef* ref = (FarmBedRef*) (intptr_t) ptr;
         jdoubleArray arr = env->NewDoubleArray(6);
-        jdouble zeros[6] = { 0, 0, 0, 0, 0, 0 };
-        env->SetDoubleArrayRegion(arr, 0, 6, zeros);
+        if (ref == nullptr || !ref->configured) {
+            const jdouble zeros[6] = { 0, 0, 0, 0, 0, 0 };
+            env->SetDoubleArrayRegion(arr, 0, 6, zeros);
+            return arr;
+        }
+        Domain::Vec2d min(1e30, 1e30), max(-1e30, -1e30);
+        for (const Domain::Vec2d& v : ref->contour_mm) {
+            min = min.cwiseMin(v);
+            max = max.cwiseMax(v);
+        }
+        const jdouble volume[6] = {
+            min.x(), min.y(), 0.0,
+            max.x(), max.y(), (jdouble) ref->max_print_height,
+        };
+        env->SetDoubleArrayRegion(arr, 0, 6, volume);
         return arr;
     }
 
     JNIEXPORT jint JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1get_1bounding_1volume_1max_1size(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see bed_get_bounding_volume.
-        (void) env; (void) ptr;
-        return 0;
+        (void) env;
+        FarmBedRef* ref = (FarmBedRef*) (intptr_t) ptr;
+        if (ref == nullptr || !ref->configured) return 0;
+        Domain::Vec2d min(1e30, 1e30), max(-1e30, -1e30);
+        for (const Domain::Vec2d& v : ref->contour_mm) {
+            min = min.cwiseMin(v);
+            max = max.cwiseMax(v);
+        }
+        const Domain::Vec2d size = max - min;
+        return (jint) std::max({ size.x(), size.y(), (double) ref->max_print_height });
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1release(JNIEnv* env, jclass, jlong ptr) {
         (void) env;
-        BedRef* ref = (BedRef*) (intptr_t) ptr;
+        FarmBedRef* ref = (FarmBedRef*) (intptr_t) ptr;
         delete ref;
     }
 
@@ -1352,10 +1675,18 @@ extern "C" {
     }
 
     JNIEXPORT jint JNICALL Java_com_flashforge_farm_slic3r_Native_model_1build_1paint_1overlay(JNIEnv* env, jclass, jlong modelPtr, jint objIdx, jlong glPtr, jint filamentIdx) {
-        // TODO(#212): facet accumulation is 3.0 (see accumulate_paint_facets) but the
-        // GLModel target is still 2.x. Returns 0 triangles until the GL stack ports.
-        (void) env; (void) modelPtr; (void) objIdx; (void) glPtr; (void) filamentIdx;
-        return 0;
+        (void) env;
+        // World-coords painted-facet overlay: accumulate across all instances
+        // and volumes (see accumulate_paint_facets) straight into the GLModel.
+        GLModelRef* ref = (GLModelRef*) (intptr_t) glPtr;
+        ModelRef* m = (ModelRef*) (intptr_t) modelPtr;
+        if (ref == nullptr || m == nullptr) return 0;
+        Domain::ModelObject* obj = check_object(m, objIdx);
+        if (obj == nullptr) return 0;
+        ::indexed_triangle_set its = accumulate_paint_facets(obj, paint_state(filamentIdx));
+        ref->model.reset();
+        ref->model.init_from(its);
+        return (jint) its.indices.size();
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_model_1has_1paint(JNIEnv* env, jclass, jlong modelPtr, jint objIdx) {
@@ -1396,8 +1727,16 @@ extern "C" {
     }
 
     JNIEXPORT jint JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1from_1paint(JNIEnv* env, jclass, jlong glPtr, jlong sessionPtr, jint filamentIdx) {
-        // TODO(#212): facet extraction is 3.0 but the GLModel target is still 2.x.
-        (void) env; (void) glPtr; (void) sessionPtr; (void) filamentIdx;
-        return 0;
+        (void) env;
+        GLModelRef* ref = (GLModelRef*) (intptr_t) glPtr;
+        PaintSessionRef* s = (PaintSessionRef*) (intptr_t) sessionPtr;
+        if (ref == nullptr) return 0;
+        // Paint-session mesh-local coordinates (see PaintSessionRef).
+        ::indexed_triangle_set its;
+        if (s != nullptr && s->selector != nullptr)
+            its = s->selector->get_facets(paint_state(filamentIdx));
+        ref->model.reset();
+        ref->model.init_from(its);
+        return (jint) its.indices.size();
     }
 }

@@ -139,7 +139,15 @@ Slic3r::GLShaderProgram* Slic3r::get_current_shader() {
     if (shadersManagerClass == nullptr || shadersManagerGetCurrent == nullptr)
         return nullptr;
     const jlong p = env->CallStaticLongMethod(shadersManagerClass, shadersManagerGetCurrent);
-    return (Slic3r::GLShaderProgram*) (intptr_t) p;
+    if (p == 0) return nullptr;
+    // getCurrentShaderPointer() returns the JNI handle from
+    // shader_init_from_texts — a ShaderRef* — NOT the raw GLShaderProgram*.
+    // Unwrapping is mandatory: ShaderRef's first member is a pointer while
+    // GLShaderProgram's is a std::string, so a direct cast made the engine
+    // dereference string bytes as pointers (device SIGSEGV, fault address
+    // 0x31796b6e6974 == ASCII garbage).
+    ShaderRef* ref = (ShaderRef*) (intptr_t) p;
+    return ref->program;
 }
 
 extern "C" {

@@ -185,6 +185,71 @@ std::string stage_name(Slic3r::Biz::Slicing::ProgressInfo stage) {
     return name.empty() ? "slicing" : name;
 }
 
+// Rewrites the app-written legacy INI into a sibling temp file, fixing 2.x
+// dialect values the 3.0 config definitions reject. Everything passes through
+// untouched except verified quirks:
+//   ironing: 2.x folded the enable into ironing_type ("no ironing" = off);
+//   3.0 split it into `ironing` (bool) + ironing_type in {top, topmost, solid}.
+//   An invalid value otherwise aborts the whole config load with
+//   "Invalid value provided for parameter ironing_type: no ironing".
+std::string normalize_legacy_ini(const std::string& ini_path) {
+    std::ifstream in(ini_path);
+    if (!in)
+        throw std::runtime_error("cannot open config file " + ini_path);
+    std::ostringstream out;
+    std::string line;
+    const auto value_of = [](std::string l) {
+        const auto eq = l.find('=');
+        std::string v = eq == std::string::npos ? "" : l.substr(eq + 1);
+        // trim spaces + optional quotes (legacy configs quote some values)
+        const auto first = v.find_first_not_of(" \t\"");
+        const auto last = v.find_last_not_of(" \t\"\r");
+        return first == std::string::npos ? "" : v.substr(first, last - first + 1);
+    };
+    const auto key_of = [](const std::string& l) {
+        const auto eq = l.find('=');
+        if (eq == std::string::npos) return std::string{};
+        auto k = l.substr(0, eq);
+        const auto last = k.find_last_not_of(" \t");
+        return last == std::string::npos ? std::string{} : k.substr(0, last + 1);
+    };
+    bool has_ironing_key = false;
+    {
+        // Pre-scan: does the file already carry an explicit `ironing` bool?
+        std::ifstream scan(ini_path);
+        std::string l;
+        while (std::getline(scan, l)) {
+            if (key_of(l) == "ironing") { has_ironing_key = true; break; }
+        }
+    }
+    while (std::getline(in, line)) {
+        if (key_of(line) == "ironing_type") {
+            std::string v = value_of(line);
+            if (v == "no ironing" || v == "no_ironing" || v == "none") {
+                // Ironing off: 3.0 has no "none" enum value; the bool carries it.
+                if (!has_ironing_key) { out << "ironing = 0\n"; has_ironing_key = true; }
+                continue; // drop the type line
+            }
+            if (v == "all top surfaces" || v == "all_top_surfaces") v = "top";
+            else if (v == "topmost surface" || v == "topmost_surface") v = "topmost";
+            else if (v == "all solid layers" || v == "all_solid_layers") v = "solid";
+            if (!has_ironing_key) { out << "ironing = 1\n"; has_ironing_key = true; }
+            out << "ironing_type = " << v << "\n";
+            continue;
+        }
+        out << line << '\n';
+    }
+    const std::string normalized_path = ini_path + ".prusa30";
+    std::ofstream outf(normalized_path, std::ios::binary | std::ios::trunc);
+    if (!outf)
+        throw std::runtime_error("cannot write normalized config " + normalized_path);
+    outf << out.str();
+    outf.close();
+    if (!outf)
+        throw std::runtime_error("writing normalized config " + normalized_path + " failed");
+    return normalized_path;
+}
+
 } // namespace
 
 SliceStats slice_to_gcode(Model& model,
@@ -192,8 +257,11 @@ SliceStats slice_to_gcode(Model& model,
                           const std::string& gcode_out_path,
                           std::function<void(int percent, const std::string& stage)> progress) {
     // 1. Legacy INI -> 3.0 ConfigPack (public wrapper over the src-private
-    //    Slic3rLegacy::DynamicPrintConfig reader; may throw).
-    ConfigPack config = Slic3r::Biz::load_config_from_legacy_file(legacy_ini_path);
+    //    Slic3rLegacy::DynamicPrintConfig reader; may throw). The file is
+    //    normalized first (ironing et al.): 2.x dialect values 3.0 rejects
+    //    would otherwise abort the whole load.
+    const std::string normalized_ini = normalize_legacy_ini(legacy_ini_path);
+    ConfigPack config = Slic3r::Biz::load_config_from_legacy_file(normalized_ini);
     const ConfigPackFDM* fdm = std::get_if<ConfigPackFDM>(&config);
     if (fdm == nullptr)
         throw std::runtime_error("the config does not describe an FDM printer");

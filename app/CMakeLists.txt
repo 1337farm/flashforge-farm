@@ -85,7 +85,8 @@ file(GLOB ENGINE_INCLUDE_SUBDIRS "${ENGINE_JNI}/*/")
 # (and any sibling the engine excludes) so the flattened roots stay safe.
 list(FILTER ENGINE_INCLUDE_SUBDIRS EXCLUDE REGEX "/CGAL/?$")
 target_include_directories(farm PRIVATE
-        ${ENGINE_JNI}                       # render/, expat/, clipper/, cereal/, ...
+        ${PRUSA_SRC}/bundled_deps/clipper/include  # 3.0 TBB-allocator clipper; MUST precede ENGINE_JNI or the vendored 2.x clipper/ shadows it (ClipperUtils.hpp PolyPath assign fails)
+        ${ENGINE_JNI}                       # render/, expat/, cereal/, ...
         ${PRUSA_SRC}/src/libslic3r/include  # ISSUE-210: 3.0 core headers (vendored libslic3r/ deleted)
         ${ENGINE_ROOT}/prusa30
         ${ENGINE_ROOT}/prusa30/jni_bridge
@@ -93,7 +94,6 @@ target_include_directories(farm PRIVATE
         ${PRUSA_SRC}/bundled_deps/admesh
         ${PRUSA_SRC}/bundled_deps/localesutils
         ${PRUSA_SRC}/bundled_deps/semver
-        ${PRUSA_SRC}/bundled_deps/clipper/include
         ${PRUSA_SRC}/bundled_deps/ankerl
         ${PRUSA_SRC}/src/slic3r-domain/include
         ${PRUSA_SRC}/src/slic3r-base/include

@@ -56,6 +56,7 @@ using Domain::TriangleSelector::TriangleStateType;
 // bed_utils.hpp for the plate/gridline/contour builders.
 #include "Slic3r/Biz/Algorithms/Scaling.hpp"
 #include "render/GLShader.hpp"
+#include "render/Program.hpp"   // declares Slic3r::get_current_shader() (defined below)
 #include "render/GLModel.hpp"
 #include "render/bed_utils.hpp"
 
@@ -98,7 +99,7 @@ struct GLModelRef {
 // (plate triangles, gridlines, contour lines). The models are handed to
 // Java as GLModelRef pointers via bed_create and driven by the glmodel_*
 // natives; bed_arrange consumes the contour once it is ported (#212).
-struct BedRef {
+struct FarmBedRef {
     Domain::Vec2ds contour_mm;
     float max_print_height = 0.0f;
     bool configured = false;
@@ -786,7 +787,7 @@ extern "C" {
         ModelRef* mRef = (ModelRef*) (intptr_t) model;
         if (ref == nullptr || mRef == nullptr) return;
         // Whole model flattened to a single mesh (2.x Model::mesh() semantics).
-        ref->mesh = BizAlgo::flatten_to_mesh(mRef->model);
+        ref->mesh = BizAlgo::Model::flatten_to_mesh(mRef->model);
         ref->model.init_from(ref->mesh.its);
     }
 
@@ -927,8 +928,11 @@ extern "C" {
         g.reserve_indices(48);
         unsigned int vi = 0;
         for (const auto& br : brackets) {
+            // Materialize the Eigen sum: an unmaterialized expression converts
+            // to every Vec overload and makes add_vertex ambiguous.
+            const Domain::Vec3f end = br.p + br.s;
             g.add_vertex(br.p);
-            g.add_vertex(br.p + br.s);
+            g.add_vertex(end);
             g.add_index(vi++);
             g.add_index(vi++);
         }
@@ -947,7 +951,8 @@ extern "C" {
         GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
         if (ref == nullptr) return;
         ref->model.reset();
-        ref->mesh.clear();
+        ref->mesh.its.vertices.clear();
+        ref->mesh.its.indices.clear();
         ref->emesh = nullptr;
         ref->normals.clear();
     }
@@ -1149,7 +1154,7 @@ extern "C" {
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1create(JNIEnv* env, jclass, jlongArray data) {
-        BedRef* ref = new BedRef();
+        FarmBedRef* ref = new FarmBedRef();
         ref->triangles = std::make_unique<GLModelRef>();
         ref->gridlines = std::make_unique<GLModelRef>();
         ref->contourlines = std::make_unique<GLModelRef>();
@@ -1162,8 +1167,37 @@ extern "C" {
         return (jlong) (intptr_t) ref;
     }
 
+    // Builds the plate/gridline/contour GL models and the plate raycast mesh
+    // from the BedRef's configured contour. Shared by bed_configure (rebuild)
+    // and bed_init_triangles_mesh (Java calls it after configure).
+    static void bed_build_visuals(FarmBedRef* ref) {
+        if (ref == nullptr || !ref->configured || ref->contour_mm.size() < 3) return;
+
+        // bed_utils works on scaled-coordinate polygons (Domain::Point = Vec2crd).
+        Domain::Points pts;
+        pts.reserve(ref->contour_mm.size());
+        for (const Domain::Vec2d& v : ref->contour_mm)
+            pts.push_back(BizAlgo::Scaling::scaled(v));
+        Domain::ExPolygon bed_poly(std::move(pts));
+
+        ref->triangles->model.reset();
+        ref->gridlines->model.reset();
+        ref->contourlines->model.reset();
+        bed_util_init_triangles(bed_poly, &ref->triangles->model);
+        bed_util_init_gridlines(bed_poly, &ref->gridlines->model);
+        bed_util_init_contourlines(bed_poly, &ref->contourlines->model);
+
+        // Plate raycast data (tap-to-place / drop-on-bed): the triangles
+        // model mirrors the plate as a CPU mesh.
+        ::indexed_triangle_set its;
+        bed_util_init_triangles_its(bed_poly, &its);
+        ref->triangles->mesh.its = std::move(its);
+        ref->triangles->emesh = std::make_unique<Slic3r::AABBMesh>(ref->triangles->mesh, true);
+        ref->triangles->normals = BizAlgo::TriangleMesh::its_face_normals(ref->triangles->mesh.its);
+    }
+
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1configure(JNIEnv* env, jclass, jlong ptr, jstring config_path) {
-        BedRef* ref = (BedRef*) (intptr_t) ptr;
+        FarmBedRef* ref = (FarmBedRef*) (intptr_t) ptr;
         if (ref == nullptr) return;
         const char* chars = env->GetStringUTFChars(config_path, JNI_FALSE);
         const std::string iniPath(chars);
@@ -1215,37 +1249,14 @@ extern "C" {
         ref->configured = true;
 
         // Rebuild the plate on every reconfigure.
-        Java_com_flashforge_farm_slic3r_Native_bed_1init_1triangles_1mesh(env, nullptr, ptr, 0);
+        bed_build_visuals(ref);
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1init_1triangles_1mesh(JNIEnv* env, jclass, jlong ptr, jlong triangles_ptr) {
-        // The three models live in the BedRef (Java passes the triangles
+        // The three models live in the FarmBedRef (Java passes the triangles
         // pointer, but gridlines/contourlines are only reachable from here).
         (void) env; (void) triangles_ptr;
-        BedRef* ref = (BedRef*) (intptr_t) ptr;
-        if (ref == nullptr || !ref->configured || ref->contour_mm.size() < 3) return;
-
-        // bed_utils works on scaled-coordinate polygons (Domain::Point = Vec2crd).
-        Domain::Points pts;
-        pts.reserve(ref->contour_mm.size());
-        for (const Domain::Vec2d& v : ref->contour_mm)
-            pts.push_back(BizAlgo::Scaling::scaled(v));
-        Domain::ExPolygon bed_poly(std::move(pts));
-
-        ref->triangles->model.reset();
-        ref->gridlines->model.reset();
-        ref->contourlines->model.reset();
-        bed_util_init_triangles(bed_poly, &ref->triangles->model);
-        bed_util_init_gridlines(bed_poly, &ref->gridlines->model);
-        bed_util_init_contourlines(bed_poly, &ref->contourlines->model);
-
-        // Plate raycast data (tap-to-place / drop-on-bed): the triangles
-        // model mirrors the plate as a CPU mesh.
-        ::indexed_triangle_set its;
-        bed_util_init_triangles_its(bed_poly, &its);
-        ref->triangles->mesh.its = std::move(its);
-        ref->triangles->emesh = std::make_unique<Slic3r::AABBMesh>(ref->triangles->mesh, true);
-        ref->triangles->normals = BizAlgo::TriangleMesh::its_face_normals(ref->triangles->mesh.its);
+        bed_build_visuals((FarmBedRef*) (intptr_t) ptr);
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1arrange(JNIEnv* env, jclass, jlong ptr, jlong model) {
@@ -1258,7 +1269,7 @@ extern "C" {
     }
 
     JNIEXPORT jdoubleArray JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1get_1bounding_1volume(JNIEnv* env, jclass, jlong ptr) {
-        BedRef* ref = (BedRef*) (intptr_t) ptr;
+        FarmBedRef* ref = (FarmBedRef*) (intptr_t) ptr;
         jdoubleArray arr = env->NewDoubleArray(6);
         if (ref == nullptr || !ref->configured) {
             const jdouble zeros[6] = { 0, 0, 0, 0, 0, 0 };
@@ -1280,7 +1291,7 @@ extern "C" {
 
     JNIEXPORT jint JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1get_1bounding_1volume_1max_1size(JNIEnv* env, jclass, jlong ptr) {
         (void) env;
-        BedRef* ref = (BedRef*) (intptr_t) ptr;
+        FarmBedRef* ref = (FarmBedRef*) (intptr_t) ptr;
         if (ref == nullptr || !ref->configured) return 0;
         Domain::Vec2d min(1e30, 1e30), max(-1e30, -1e30);
         for (const Domain::Vec2d& v : ref->contour_mm) {
@@ -1293,7 +1304,7 @@ extern "C" {
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1release(JNIEnv* env, jclass, jlong ptr) {
         (void) env;
-        BedRef* ref = (BedRef*) (intptr_t) ptr;
+        FarmBedRef* ref = (FarmBedRef*) (intptr_t) ptr;
         delete ref;
     }
 

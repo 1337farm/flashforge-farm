@@ -251,6 +251,17 @@ public class ConfigObject implements ProfileListFragment.ProfileListItem {
         if (value == null) {
             return null;
         }
+        // gap_fill_enabled (legacy bool) migrates to gap_fill_target (engine enum
+        // everywhere/topbottom/nowhere). Without translating the stored 0/1 the
+        // engine rejects the value on load. Do the bool->enum conversion here so
+        // any imported/legacy profile serializes to a valid enum name.
+        if ("gap_fill_target".equals(key)) {
+            if ("1".equals(value) || "true".equalsIgnoreCase(value)) {
+                value = "everywhere";
+            } else if ("0".equals(value) || "false".equalsIgnoreCase(value)) {
+                value = "nowhere";
+            }
+        }
         if ("before_layer_change_gcode".equals(key) && value.contains("G92 E0")) {
             StringBuilder cleaned = new StringBuilder();
             String[] lines = value.split("\n", -1);

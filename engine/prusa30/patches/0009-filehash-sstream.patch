@@ -1,0 +1,14 @@
+# 0009: missing <sstream> for std::stringstream in PresetUpdaterFileHash
+# (transitively provided by desktop toolchains, not by NDK libc++).
+diff --git a/src/slic3r-shared/src/Slic3r/Biz/PresetUpdater/PresetUpdaterFileHash.cpp b/src/slic3r-shared/src/Slic3r/Biz/PresetUpdater/PresetUpdaterFileHash.cpp
+index 4b7f09c680..29359677b6 100644
+--- a/src/slic3r-shared/src/Slic3r/Biz/PresetUpdater/PresetUpdaterFileHash.cpp
++++ b/src/slic3r-shared/src/Slic3r/Biz/PresetUpdater/PresetUpdaterFileHash.cpp
+@@ -1,6 +1,7 @@
+ #include "PresetUpdaterFileHash.hpp"
+ 
+ #include <iomanip>
++#include <sstream>
+ 
+ #include "Slic3r/Biz/SHA256.hpp"
+ 

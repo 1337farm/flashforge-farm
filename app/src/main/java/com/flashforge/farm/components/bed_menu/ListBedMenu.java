@@ -52,7 +52,7 @@ public abstract class ListBedMenu extends BedMenu {
         recyclerView.addItemDecoration(new RecyclerView.ItemDecoration() {
             @Override
             public void getItemOffsets(@NonNull Rect outRect, @NonNull View view, @NonNull RecyclerView parent, @NonNull RecyclerView.State state) {
-                if (parent.getChildViewHolder(view).getAdapterPosition() == adapter.getItemCount() - 1) {
+                if (parent.getChildViewHolder(view).getBindingAdapterPosition() == adapter.getItemCount() - 1) {
                     if (portrait) {
                         outRect.right = ViewUtils.dp(6);
                     } else {

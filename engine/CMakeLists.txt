@@ -11,18 +11,25 @@ include(CheckCSourceCompiles)
 cmake_minimum_required(VERSION 3.4.1)
 project(libslic3r-engine C CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-old-style-cast -Wno-reserved-id-macro -Wno-c++98-compat-pedantic -funwind-tables -fopenmp -static-openmp -ffunction-sections -fdata-sections -Wl,--no-merge-exidx-entries")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-old-style-cast -Wno-reserved-id-macro -Wno-c++98-compat-pedantic -funwind-tables -ffunction-sections -fdata-sections -Wl,--no-merge-exidx-entries")
 add_compile_options(-fsigned-char)
 
 # Suppress all warnings
 add_definitions(-w)
 add_definitions(-DNDEBUG)
+# Use staged fmt 12.1.0 everywhere: without this spdlog falls back to its
+# bundled (older) fmt and the two clash (locale_ref).
+add_definitions(-DSPDLOG_FMT_EXTERNAL)
+# Mirror upstream json build (deps/+json: JSON_ImplicitConversions=OFF):
+# v3.12.0's optional support resolves only with implicit conversions off.
+add_definitions(-DJSON_USE_IMPLICIT_CONVERSIONS=0)
+# Mirror upstream default SLIC3R_YAML=ryml (Yaml.hpp #errors without one).
+add_definitions(-DSLIC3R_YAML_RYML)
 add_definitions(-DSLIC3R_VERSION=${SLIC3R_VERSION})
 add_definitions(-DSLIC3R_BUILD_ID=${SLIC3R_BUILD_ID})
-add_definitions(-DSoftFever_VERSION=${SLIC3R_VERSION})
 
 set(jni_imports ${CMAKE_SOURCE_DIR}/src/main/jniImports)
 set(jni_libs ${CMAKE_SOURCE_DIR}/src/main/jniLibs)
@@ -89,6 +96,20 @@ add_library(tbbmalloc STATIC IMPORTED)
 set_target_properties(tbbmalloc PROPERTIES IMPORTED_LOCATION
         ${jni_imports}/oneTBB/lib/${ANDROID_ABI}/libtbbmalloc.a)
 
+# oneTBB 2021 for the 3.0 core: upstream uses tbb::filter<T, U> (a template),
+# which classic 2019 TBB lacks (non-template base there). CI restores the
+# headless oneTBB v2021.12 staging at prusa30/jniImports/tbb; prefer it when
+# present so headers and archives stay in lockstep, else keep the dep release.
+file(GLOB TBB_2021_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/include)
+file(GLOB TBB_2021_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/lib*/libtbb.a)
+file(GLOB TBBMALLOC_2021_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/lib*/libtbbmalloc.a)
+if(TBB_2021_INCLUDE AND TBB_2021_LIB)
+    set_target_properties(tbb PROPERTIES IMPORTED_LOCATION ${TBB_2021_LIB})
+endif()
+if(TBBMALLOC_2021_LIB)
+    set_target_properties(tbbmalloc PROPERTIES IMPORTED_LOCATION ${TBBMALLOC_2021_LIB})
+endif()
+
 add_library(gmp SHARED IMPORTED)
 set_target_properties(gmp PROPERTIES IMPORTED_LOCATION
         ${jni_libs}/${ANDROID_ABI}/libgmp.so)
@@ -101,7 +122,7 @@ add_library(mpfr SHARED IMPORTED)
 set_target_properties(mpfr PROPERTIES IMPORTED_LOCATION
         ${jni_libs}/${ANDROID_ABI}/libmpfr.so)
 
-include_directories(src/main/jni/eigen)
+include_directories(build/eigen-3.4.0/include)
 include_directories(src/main/jni/libigl)
 include_directories(src/main/occt/include/${ANDROID_ABI})
 
@@ -473,25 +494,34 @@ add_library(openvdb
         src/main/jni/openvdb/points/points.cc
         src/main/jni/openvdb/util/Formats.cc
         src/main/jni/openvdb/util/Util.cc)
-target_include_directories(openvdb PRIVATE src/main/jni src/main/jniImports/boost/include src/main/jniImports/oneTBB/include)
+target_include_directories(openvdb PRIVATE src/main/jni src/main/jniImports/boost/include ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/include src/main/jniImports/oneTBB/include)
 set(MCUT_BUILD_AS_SHARED_LIB OFF)
 set(MCUT_BUILD_TESTS OFF)
 set(MCUT_BUILD_TUTORIALS OFF)
 add_subdirectory(src/main/jni/mcut)
 
+# Fetched PrusaSlicer 3.0 tree (engine/prusa30/fetch_prusaslicer.sh, PRUSA_REF pin).
+# Defined before first use: add_library() below references ${PRUSA_SRC} sources.
+set(PRUSA_SRC "${CMAKE_CURRENT_SOURCE_DIR}/build/prusaslicer-src" CACHE PATH "Fetched 3.0 upstream tree")
+# Generated 3.0 version header: upstream generates Slic3r/Version.hpp in its
+# own build; our standalone target needs it too (fetched libslic3r.h).
+set(PRUSA_GEN "${CMAKE_CURRENT_BINARY_DIR}/prusa-generated")
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Version.hpp.in ${PRUSA_GEN}/Slic3r/Version.hpp COPYONLY)
+
 add_library(slic3r
         SHARED
         src/main/jni/semver/semver.c
 
-        src/main/jni/admesh/connect.cpp
-        src/main/jni/admesh/normals.cpp
-        src/main/jni/admesh/shared.cpp
-        src/main/jni/admesh/stl_io.cpp
-        src/main/jni/admesh/stlinit.cpp
-        src/main/jni/admesh/util.cpp
+        # Upstream 3.0 bundled admesh (2.x copy deleted; same TU set).
+        ${PRUSA_SRC}/bundled_deps/admesh/admesh/connect.cpp
+        ${PRUSA_SRC}/bundled_deps/admesh/admesh/normals.cpp
+        ${PRUSA_SRC}/bundled_deps/admesh/admesh/shared.cpp
+        ${PRUSA_SRC}/bundled_deps/admesh/admesh/stl_io.cpp
+        ${PRUSA_SRC}/bundled_deps/admesh/admesh/stlinit.cpp
+        ${PRUSA_SRC}/bundled_deps/admesh/admesh/util.cpp
 
-        src/main/jni/clipper/clipper_z.cpp
-        src/main/jni/clipper/clipper_z.hpp
+        # Upstream 3.0 TU for CNumericLocalesSetter (used by admesh).
+        ${PRUSA_SRC}/bundled_deps/localesutils/LocalesUtils.cpp
 
         src/main/jni/expat/xmlparse.c
         src/main/jni/expat/xmlrole.c
@@ -736,461 +766,23 @@ add_library(slic3r
         src/main/jni/libvgcode/src/ViewRange.hpp
         src/main/jni/libvgcode/src/ViewRange.cpp
 
-        src/main/jni/libslic3r/AABBMesh.cpp
-        src/main/jni/libslic3r/AABBMesh.hpp
-        src/main/jni/libslic3r/AABBTreeIndirect.hpp
-        src/main/jni/libslic3r/AABBTreeLines.hpp
-        src/main/jni/libslic3r/Algorithm/LineSplit.cpp
-        src/main/jni/libslic3r/Algorithm/LineSplit.hpp
-        src/main/jni/libslic3r/Algorithm/RegionExpansion.cpp
-        src/main/jni/libslic3r/Algorithm/RegionExpansion.hpp
-        src/main/jni/libslic3r/AnyPtr.hpp
-        src/main/jni/libslic3r/AppConfig.cpp
-        src/main/jni/libslic3r/AppConfig.hpp
-        src/main/jni/libslic3r/Arachne/BeadingStrategy/BeadingStrategy.cpp
-        src/main/jni/libslic3r/Arachne/BeadingStrategy/BeadingStrategyFactory.cpp
-        src/main/jni/libslic3r/Arachne/BeadingStrategy/BeadingStrategyFactory.hpp
-        src/main/jni/libslic3r/Arachne/BeadingStrategy/BeadingStrategy.hpp
-        src/main/jni/libslic3r/Arachne/BeadingStrategy/DistributedBeadingStrategy.cpp
-        src/main/jni/libslic3r/Arachne/BeadingStrategy/DistributedBeadingStrategy.hpp
-        src/main/jni/libslic3r/Arachne/BeadingStrategy/LimitedBeadingStrategy.cpp
-        src/main/jni/libslic3r/Arachne/BeadingStrategy/LimitedBeadingStrategy.hpp
-        src/main/jni/libslic3r/Arachne/BeadingStrategy/OuterWallInsetBeadingStrategy.cpp
-        src/main/jni/libslic3r/Arachne/BeadingStrategy/OuterWallInsetBeadingStrategy.hpp
-        src/main/jni/libslic3r/Arachne/BeadingStrategy/RedistributeBeadingStrategy.cpp
-        src/main/jni/libslic3r/Arachne/BeadingStrategy/RedistributeBeadingStrategy.hpp
-        src/main/jni/libslic3r/Arachne/BeadingStrategy/WideningBeadingStrategy.cpp
-        src/main/jni/libslic3r/Arachne/BeadingStrategy/WideningBeadingStrategy.hpp
-        src/main/jni/libslic3r/Arachne/SkeletalTrapezoidation.cpp
-        src/main/jni/libslic3r/Arachne/SkeletalTrapezoidationEdge.hpp
-        src/main/jni/libslic3r/Arachne/SkeletalTrapezoidationGraph.cpp
-        src/main/jni/libslic3r/Arachne/SkeletalTrapezoidationGraph.hpp
-        src/main/jni/libslic3r/Arachne/SkeletalTrapezoidation.hpp
-        src/main/jni/libslic3r/Arachne/SkeletalTrapezoidationJoint.hpp
-        src/main/jni/libslic3r/Arachne/utils/ExtrusionJunction.hpp
-        src/main/jni/libslic3r/Arachne/utils/ExtrusionLine.cpp
-        src/main/jni/libslic3r/Arachne/utils/ExtrusionLine.hpp
-        src/main/jni/libslic3r/Arachne/utils/HalfEdgeGraph.hpp
-        src/main/jni/libslic3r/Arachne/utils/HalfEdge.hpp
-        src/main/jni/libslic3r/Arachne/utils/HalfEdgeNode.hpp
-        src/main/jni/libslic3r/Arachne/utils/PolygonsPointIndex.hpp
-        src/main/jni/libslic3r/Arachne/utils/PolygonsSegmentIndex.hpp
-        src/main/jni/libslic3r/Arachne/utils/PolylineStitcher.cpp
-        src/main/jni/libslic3r/Arachne/utils/PolylineStitcher.hpp
-        src/main/jni/libslic3r/Arachne/utils/SparseGrid.hpp
-        src/main/jni/libslic3r/Arachne/utils/SparseLineGrid.hpp
-        src/main/jni/libslic3r/Arachne/utils/SparsePointGrid.hpp
-        src/main/jni/libslic3r/Arachne/utils/SquareGrid.cpp
-        src/main/jni/libslic3r/Arachne/utils/SquareGrid.hpp
-        src/main/jni/libslic3r/Arachne/WallToolPaths.cpp
-        src/main/jni/libslic3r/Arachne/WallToolPaths.hpp
-        src/main/jni/libslic3r/ArcFitter.cpp
-        src/main/jni/libslic3r/ArcFitter.hpp
-        src/main/jni/libslic3r/Arrange.cpp
-        src/main/jni/libslic3r/Arrange.hpp
-        src/main/jni/libslic3r/BlacklistedLibraryCheck.cpp
-        src/main/jni/libslic3r/BlacklistedLibraryCheck.hpp
-        src/main/jni/libslic3r/BoundingBox.cpp
-        src/main/jni/libslic3r/BoundingBox.hpp
-        src/main/jni/libslic3r/BridgeDetector.cpp
-        src/main/jni/libslic3r/BridgeDetector.hpp
-        src/main/jni/libslic3r/Brim.cpp
-        src/main/jni/libslic3r/BrimEarsPoint.hpp
-        src/main/jni/libslic3r/Brim.hpp
-        src/main/jni/libslic3r/BuildVolume.cpp
-        src/main/jni/libslic3r/BuildVolume.hpp
-        src/main/jni/libslic3r/calib.cpp
-        src/main/jni/libslic3r/calib.hpp
-        src/main/jni/libslic3r/Circle.cpp
-        src/main/jni/libslic3r/Circle.hpp
-        src/main/jni/libslic3r/clipper.cpp
-        src/main/jni/libslic3r/clipper.hpp
-        src/main/jni/libslic3r/ClipperUtils.cpp
-        src/main/jni/libslic3r/ClipperUtils.hpp
+        # ISSUE-210 (PrusaSlicer 3.0 build swap): the vendored 2.x tree
+        # src/main/jni/libslic3r/ was deleted (git rm). The 3.0 core is fetched
+        # at build time by engine/prusa30/fetch_prusaslicer.sh (pinned PRUSA_REF)
+        # into engine/build/prusaslicer-src and configured headless, mirroring
+        # .github/workflows/prusa30-headless.yml:
+        #   cmake -S engine/build/prusaslicer-src -B build/prusa30 -DSLIC3R_GUI=OFF
+        # This target consumes the fetched tree's headless `libslic3r` CMake
+        # target next (CI compile-fix loop); 2.x-only sources with no 3.0
+        # counterpart stay listed as breaks in the issue — no shims invented.
 
-        src/main/jni/libslic3r/ClipperZUtils.hpp
-        src/main/jni/libslic3r/Color.cpp
-        src/main/jni/libslic3r/Color.hpp
-        src/main/jni/libslic3r/CommonDefs.hpp
-        src/main/jni/libslic3r/Config.cpp
-        src/main/jni/libslic3r/Config.hpp
-        src/main/jni/libslic3r/ContourZ.cpp
-        src/main/jni/libslic3r/CustomGCode.cpp
-        src/main/jni/libslic3r/CustomGCode.hpp
-        src/main/jni/libslic3r/CutUtils.cpp
-        src/main/jni/libslic3r/CutUtils.hpp
-        src/main/jni/libslic3r/EdgeGrid.cpp
-        src/main/jni/libslic3r/EdgeGrid.hpp
-        src/main/jni/libslic3r/ElephantFootCompensation.cpp
-        src/main/jni/libslic3r/ElephantFootCompensation.hpp
-        src/main/jni/libslic3r/Emboss.cpp
-        src/main/jni/libslic3r/Emboss.hpp
-        src/main/jni/libslic3r/EmbossShape.hpp
-        src/main/jni/libslic3r/enum_bitmask.hpp
-        src/main/jni/libslic3r/Execution/Execution.hpp
-        src/main/jni/libslic3r/Execution/ExecutionSeq.hpp
-        src/main/jni/libslic3r/Execution/ExecutionTBB.hpp
-        src/main/jni/libslic3r/ExPolygon.cpp
-        src/main/jni/libslic3r/ExPolygon.hpp
-        src/main/jni/libslic3r/ExPolygonSerialize.hpp
-        src/main/jni/libslic3r/ExPolygonsIndex.cpp
-        src/main/jni/libslic3r/ExPolygonsIndex.hpp
-        src/main/jni/libslic3r/Extruder.cpp
-        src/main/jni/libslic3r/Extruder.hpp
-        src/main/jni/libslic3r/ExtrusionEntityCollection.cpp
-        src/main/jni/libslic3r/ExtrusionEntityCollection.hpp
-        src/main/jni/libslic3r/ExtrusionEntity.cpp
-        src/main/jni/libslic3r/ExtrusionEntity.hpp
-        src/main/jni/libslic3r/ExtrusionSimulator.cpp
-        src/main/jni/libslic3r/ExtrusionSimulator.hpp
-        src/main/jni/libslic3r/FaceDetector.cpp
-        src/main/jni/libslic3r/FaceDetector.hpp
-        src/main/jni/libslic3r/Feature/FuzzySkin/FuzzySkin.cpp
-        src/main/jni/libslic3r/Feature/FuzzySkin/FuzzySkin.hpp
-        src/main/jni/libslic3r/Feature/Interlocking/InterlockingGenerator.cpp
-        src/main/jni/libslic3r/Feature/Interlocking/InterlockingGenerator.hpp
-        src/main/jni/libslic3r/Feature/Interlocking/VoxelUtils.cpp
-        src/main/jni/libslic3r/Feature/Interlocking/VoxelUtils.hpp
-        src/main/jni/libslic3r/FileParserError.hpp
-        src/main/jni/libslic3r/Fill/Fill3DHoneycomb.cpp
-        src/main/jni/libslic3r/Fill/Fill3DHoneycomb.hpp
-        src/main/jni/libslic3r/Fill/FillAdaptive.cpp
-        src/main/jni/libslic3r/Fill/FillAdaptive.hpp
-        src/main/jni/libslic3r/Fill/FillBase.cpp
-        src/main/jni/libslic3r/Fill/FillBase.hpp
-        src/main/jni/libslic3r/Fill/FillConcentric.cpp
-        src/main/jni/libslic3r/Fill/FillConcentric.hpp
-        src/main/jni/libslic3r/Fill/FillConcentricInternal.cpp
-        src/main/jni/libslic3r/Fill/FillConcentricInternal.hpp
-        src/main/jni/libslic3r/Fill/Fill.cpp
-        src/main/jni/libslic3r/Fill/FillCrossHatch.cpp
-        src/main/jni/libslic3r/Fill/FillCrossHatch.hpp
-        src/main/jni/libslic3r/Fill/FillGyroid.cpp
-        src/main/jni/libslic3r/Fill/FillGyroid.hpp
-        src/main/jni/libslic3r/Fill/FillHoneycomb.cpp
-        src/main/jni/libslic3r/Fill/FillHoneycomb.hpp
-        src/main/jni/libslic3r/Fill/Fill.hpp
-        src/main/jni/libslic3r/Fill/FillLightning.cpp
-        src/main/jni/libslic3r/Fill/FillLightning.hpp
-        src/main/jni/libslic3r/Fill/FillLine.cpp
-        src/main/jni/libslic3r/Fill/FillLine.hpp
-        src/main/jni/libslic3r/Fill/FillPlanePath.cpp
-        src/main/jni/libslic3r/Fill/FillPlanePath.hpp
-        src/main/jni/libslic3r/Fill/FillRectilinear.cpp
-        src/main/jni/libslic3r/Fill/FillRectilinear.hpp
-        src/main/jni/libslic3r/Fill/FillTpmsD.cpp
-        src/main/jni/libslic3r/Fill/FillTpmsD.hpp
-        src/main/jni/libslic3r/Fill/FillTpmsFK.cpp
-        src/main/jni/libslic3r/Fill/FillTpmsFK.hpp
-        src/main/jni/libslic3r/Fill/Lightning/DistanceField.cpp
-        src/main/jni/libslic3r/Fill/Lightning/DistanceField.hpp
-        src/main/jni/libslic3r/Fill/Lightning/Generator.cpp
-        src/main/jni/libslic3r/Fill/Lightning/Generator.hpp
-        src/main/jni/libslic3r/Fill/Lightning/Layer.cpp
-        src/main/jni/libslic3r/Fill/Lightning/Layer.hpp
-        src/main/jni/libslic3r/Fill/Lightning/TreeNode.cpp
-        src/main/jni/libslic3r/Fill/Lightning/TreeNode.hpp
-        src/main/jni/libslic3r/Flow.cpp
-        src/main/jni/libslic3r/Flow.hpp
-        src/main/jni/libslic3r/FlushVolCalc.cpp
-        src/main/jni/libslic3r/FlushVolCalc.hpp
-        src/main/jni/libslic3r/Format/3mf.cpp
-        src/main/jni/libslic3r/Format/3mf.hpp
-        src/main/jni/libslic3r/Format/AMF.cpp
-        src/main/jni/libslic3r/Format/AMF.hpp
-        src/main/jni/libslic3r/Format/bbs_3mf.cpp
-        src/main/jni/libslic3r/Format/bbs_3mf.hpp
-        src/main/jni/libslic3r/Format/STEP.cpp
-        src/main/jni/libslic3r/Format/STEP.hpp
-        src/main/jni/libslic3r/format.hpp
-        src/main/jni/libslic3r/Format/OBJ.cpp
-        src/main/jni/libslic3r/Format/OBJ.hpp
-        src/main/jni/libslic3r/Format/objparser.cpp
-        src/main/jni/libslic3r/Format/objparser.hpp
-        src/main/jni/libslic3r/Format/SL1.cpp
-        src/main/jni/libslic3r/Format/SL1.hpp
-        src/main/jni/libslic3r/Format/STL.cpp
-        src/main/jni/libslic3r/Format/STL.hpp
-        src/main/jni/libslic3r/Format/svg.cpp
-        src/main/jni/libslic3r/Format/svg.hpp
-        src/main/jni/libslic3r/Format/ZipperArchiveImport.cpp
-        src/main/jni/libslic3r/Format/ZipperArchiveImport.hpp
-        src/main/jni/libslic3r/GCode/AdaptivePAInterpolator.cpp
-        src/main/jni/libslic3r/GCode/AdaptivePAInterpolator.hpp
-        src/main/jni/libslic3r/GCode/AdaptivePAProcessor.cpp
-        src/main/jni/libslic3r/GCode/AdaptivePAProcessor.hpp
-        src/main/jni/libslic3r/GCode/AvoidCrossingPerimeters.cpp
-        src/main/jni/libslic3r/GCode/AvoidCrossingPerimeters.hpp
-        src/main/jni/libslic3r/GCode/ConflictChecker.cpp
-        src/main/jni/libslic3r/GCode/ConflictChecker.hpp
-        src/main/jni/libslic3r/GCode/CoolingBuffer.cpp
-        src/main/jni/libslic3r/GCode/CoolingBuffer.hpp
-        src/main/jni/libslic3r/GCode/TimelapsePosPicker.cpp
-        src/main/jni/libslic3r/GCode/TimelapsePosPicker.hpp
-        src/main/jni/libslic3r/GCode.cpp
-        src/main/jni/libslic3r/GCode/ExtrusionProcessor.hpp
-        src/main/jni/libslic3r/GCode/FanMover.cpp
-        src/main/jni/libslic3r/GCode/FanMover.hpp
-        src/main/jni/libslic3r/GCode/GCodeProcessor.cpp
-        src/main/jni/libslic3r/GCode/GCodeProcessor.hpp
-        src/main/jni/libslic3r/GCode.hpp
-        src/main/jni/libslic3r/GCode/PchipInterpolatorHelper.cpp
-        src/main/jni/libslic3r/GCode/PchipInterpolatorHelper.hpp
-        src/main/jni/libslic3r/GCode/PostProcessor.cpp
-        src/main/jni/libslic3r/GCode/PostProcessor.hpp
-        src/main/jni/libslic3r/GCode/PressureEqualizer.cpp
-        src/main/jni/libslic3r/GCode/PressureEqualizer.hpp
-        src/main/jni/libslic3r/GCode/PrintExtents.cpp
-        src/main/jni/libslic3r/GCode/PrintExtents.hpp
-        src/main/jni/libslic3r/GCodeReader.cpp
-        src/main/jni/libslic3r/GCodeReader.hpp
-        src/main/jni/libslic3r/GCode/RetractWhenCrossingPerimeters.cpp
-        src/main/jni/libslic3r/GCode/RetractWhenCrossingPerimeters.hpp
-        src/main/jni/libslic3r/GCode/SeamPlacer.cpp
-        src/main/jni/libslic3r/GCode/SeamPlacer.hpp
-        src/main/jni/libslic3r/GCode/SmallAreaInfillFlowCompensator.cpp
-        src/main/jni/libslic3r/GCode/SmallAreaInfillFlowCompensator.hpp
-        src/main/jni/libslic3r/GCode/SpiralVase.cpp
-        src/main/jni/libslic3r/GCode/SpiralVase.hpp
-        src/main/jni/libslic3r/GCode/ThumbnailData.cpp
-        src/main/jni/libslic3r/GCode/ThumbnailData.hpp
-        src/main/jni/libslic3r/GCode/Thumbnails.cpp
-        src/main/jni/libslic3r/GCode/Thumbnails.hpp
-        src/main/jni/libslic3r/GCode/ToolOrdering.cpp
-        src/main/jni/libslic3r/GCode/ToolOrdering.hpp
-        src/main/jni/libslic3r/GCode/WipeTower2.cpp
-        src/main/jni/libslic3r/GCode/WipeTower2.hpp
-        src/main/jni/libslic3r/GCode/WipeTower.cpp
-        src/main/jni/libslic3r/GCode/WipeTower.hpp
-        src/main/jni/libslic3r/GCodeWriter.cpp
-        src/main/jni/libslic3r/GCodeWriter.hpp
-        src/main/jni/libslic3r/Geometry/ArcWelder.hpp
-        src/main/jni/libslic3r/Geometry/ArcWelder.cpp
-        src/main/jni/libslic3r/Geometry/Bicubic.hpp
-        src/main/jni/libslic3r/Geometry/Circle.cpp
-        src/main/jni/libslic3r/Geometry/Circle.hpp
-        src/main/jni/libslic3r/Geometry/ConvexHull.cpp
-        src/main/jni/libslic3r/Geometry/ConvexHull.hpp
-        src/main/jni/libslic3r/Geometry.cpp
-        src/main/jni/libslic3r/Geometry/Curves.hpp
-        src/main/jni/libslic3r/Geometry.hpp
-        src/main/jni/libslic3r/Geometry/MedialAxis.cpp
-        src/main/jni/libslic3r/Geometry/MedialAxis.hpp
-        src/main/jni/libslic3r/Geometry/Voronoi.cpp
-        src/main/jni/libslic3r/Geometry/Voronoi.hpp
-        src/main/jni/libslic3r/Geometry/VoronoiOffset.cpp
-        src/main/jni/libslic3r/Geometry/VoronoiOffset.hpp
-        src/main/jni/libslic3r/Geometry/VoronoiUtilsCgal.cpp
-        src/main/jni/libslic3r/Geometry/VoronoiUtilsCgal.hpp
-        src/main/jni/libslic3r/Geometry/VoronoiUtils.cpp
-        src/main/jni/libslic3r/Geometry/VoronoiUtils.hpp
-        src/main/jni/libslic3r/Geometry/VoronoiVisualUtils.hpp
-        src/main/jni/libslic3r/Int128.hpp
-        src/main/jni/libslic3r/KDTreeIndirect.hpp
-        src/main/jni/libslic3r/Layer.cpp
-        src/main/jni/libslic3r/Layer.hpp
-        src/main/jni/libslic3r/LayerRegion.cpp
-        src/main/jni/libslic3r/libslic3r.cpp
-        src/main/jni/libslic3r/libslic3r.h
-        src/main/jni/libslic3r/Line.cpp
-        src/main/jni/libslic3r/Line.hpp
-        src/main/jni/libslic3r/LocalesUtils.cpp
-        src/main/jni/libslic3r/LocalesUtils.hpp
-        src/main/jni/libslic3r/MarchingSquares.hpp
-        src/main/jni/libslic3r/Measure.cpp
-        src/main/jni/libslic3r/Measure.hpp
-        src/main/jni/libslic3r/MeasureUtils.hpp
-        src/main/jni/libslic3r/MeshSplitImpl.hpp
-        src/main/jni/libslic3r/MinAreaBoundingBox.cpp
-        src/main/jni/libslic3r/MinAreaBoundingBox.hpp
-        src/main/jni/libslic3r/MinimumSpanningTree.cpp
-        src/main/jni/libslic3r/MinimumSpanningTree.hpp
-        src/main/jni/libslic3r/miniz_extension.cpp
-        src/main/jni/libslic3r/miniz_extension.hpp
-        src/main/jni/libslic3r/ModelArrange.cpp
-        src/main/jni/libslic3r/ModelArrange.hpp
-        src/main/jni/libslic3r/Model.cpp
-        src/main/jni/libslic3r/Model.hpp
-        src/main/jni/libslic3r/MTUtils.hpp
-        src/main/jni/libslic3r/MultiMaterialSegmentation.cpp
-        src/main/jni/libslic3r/MultiMaterialSegmentation.hpp
-        src/main/jni/libslic3r/MultiPoint.cpp
-        src/main/jni/libslic3r/MultiPoint.hpp
-        src/main/jni/libslic3r/MutablePolygon.cpp
-        src/main/jni/libslic3r/MutablePolygon.hpp
-        src/main/jni/libslic3r/MutablePriorityQueue.hpp
-        src/main/jni/libslic3r/NormalUtils.cpp
-        src/main/jni/libslic3r/NormalUtils.hpp
-        src/main/jni/libslic3r/MeshBoolean.cpp
-        src/main/jni/libslic3r/MeshBoolean.hpp
-        src/main/jni/libslic3r/CutSurface.cpp
-        src/main/jni/libslic3r/CutSurface.hpp
-        src/main/jni/libslic3r/TryCatchSignal.cpp
-        src/main/jni/libslic3r/TryCatchSignal.hpp
-        src/main/jni/libslic3r/IntersectionPoints.cpp
-        src/main/jni/libslic3r/IntersectionPoints.hpp
-        src/main/jni/libslic3r/OpenVDBUtils.cpp
-        src/main/jni/libslic3r/OpenVDBUtils.hpp
-        src/main/jni/libslic3r/Triangulation.cpp
-        src/main/jni/libslic3r/Triangulation.hpp
-        src/main/jni/libslic3r/NSVGUtils.cpp
-        src/main/jni/libslic3r/NSVGUtils.hpp
-        src/main/jni/libslic3r/ObjectID.cpp
-        src/main/jni/libslic3r/ObjectID.hpp
-        src/main/jni/libslic3r/Optimize/BruteforceOptimizer.hpp
-        src/main/jni/libslic3r/Optimize/NLoptOptimizer.hpp
-        src/main/jni/libslic3r/Optimize/Optimizer.hpp
-        src/main/jni/libslic3r/ParameterUtils.cpp
-        src/main/jni/libslic3r/ParameterUtils.hpp
-        src/main/jni/libslic3r/pchheader.cpp
-        src/main/jni/libslic3r/pchheader.hpp
-        src/main/jni/libslic3r/PerimeterGenerator.cpp
-        src/main/jni/libslic3r/PerimeterGenerator.hpp
-        src/main/jni/libslic3r/PlaceholderParser.cpp
-        src/main/jni/libslic3r/PlaceholderParser.hpp
-        src/main/jni/libslic3r/Platform.cpp
-        src/main/jni/libslic3r/Platform.hpp
-        src/main/jni/libslic3r/PNGReadWrite.cpp
-        src/main/jni/libslic3r/PNGReadWrite.hpp
-        src/main/jni/libslic3r/Point.cpp
-        src/main/jni/libslic3r/Point.hpp
-        src/main/jni/libslic3r/Polygon.cpp
-        src/main/jni/libslic3r/Polygon.hpp
-        src/main/jni/libslic3r/PolygonTrimmer.cpp
-        src/main/jni/libslic3r/PolygonTrimmer.hpp
-        src/main/jni/libslic3r/Polyline.cpp
-        src/main/jni/libslic3r/Polyline.hpp
-        src/main/jni/libslic3r/PresetBundle.cpp
-        src/main/jni/libslic3r/PresetBundle.hpp
-        src/main/jni/libslic3r/Preset.cpp
-        src/main/jni/libslic3r/Preset.hpp
-        src/main/jni/libslic3r/PrincipalComponents2D.cpp
-        src/main/jni/libslic3r/PrincipalComponents2D.hpp
-        src/main/jni/libslic3r/PrintApply.cpp
-        src/main/jni/libslic3r/PrintBase.cpp
-        src/main/jni/libslic3r/PrintBase.hpp
-        src/main/jni/libslic3r/MaterialType.cpp
-        src/main/jni/libslic3r/MaterialType.hpp
-        src/main/jni/libslic3r/PrintConfig.cpp
-        src/main/jni/libslic3r/PrintConfig.hpp
-        src/main/jni/libslic3r/Print.cpp
-        src/main/jni/libslic3r/Print.hpp
-        src/main/jni/libslic3r/PrintObject.cpp
-        src/main/jni/libslic3r/PrintObjectSlice.cpp
-        src/main/jni/libslic3r/PrintRegion.cpp
-        src/main/jni/libslic3r/ProjectTask.cpp
-        src/main/jni/libslic3r/ProjectTask.hpp
-        src/main/jni/libslic3r/QuadricEdgeCollapse.cpp
-        src/main/jni/libslic3r/QuadricEdgeCollapse.hpp
-        src/main/jni/libslic3r/Semver.cpp
-        src/main/jni/libslic3r/ShortEdgeCollapse.cpp
-        src/main/jni/libslic3r/ShortEdgeCollapse.hpp
-        src/main/jni/libslic3r/ShortestPath.cpp
-        src/main/jni/libslic3r/ShortestPath.hpp
-        src/main/jni/libslic3r/SLA/AGGRaster.hpp
-        src/main/jni/libslic3r/SLA/BoostAdapter.hpp
-        src/main/jni/libslic3r/SLA/Clustering.cpp
-        src/main/jni/libslic3r/SLA/Clustering.hpp
-        src/main/jni/libslic3r/SLA/ConcaveHull.cpp
-        src/main/jni/libslic3r/SLA/ConcaveHull.hpp
-        src/main/jni/libslic3r/SLA/Concurrency.hpp
-        src/main/jni/libslic3r/SLA/Hollowing.cpp
-        src/main/jni/libslic3r/SLA/Hollowing.hpp
-        src/main/jni/libslic3r/SLA/IndexedMesh.cpp
-        src/main/jni/libslic3r/SLA/IndexedMesh.hpp
-        src/main/jni/libslic3r/SLA/JobController.hpp
-        src/main/jni/libslic3r/SLA/Pad.cpp
-        src/main/jni/libslic3r/SLA/Pad.hpp
-        src/main/jni/libslic3r/SLAPrint.cpp
-        src/main/jni/libslic3r/SLAPrint.hpp
-        src/main/jni/libslic3r/SLAPrintSteps.cpp
-        src/main/jni/libslic3r/SLAPrintSteps.hpp
-        src/main/jni/libslic3r/SLA/RasterBase.cpp
-        src/main/jni/libslic3r/SLA/RasterBase.hpp
-        src/main/jni/libslic3r/SLA/RasterToPolygons.cpp
-        src/main/jni/libslic3r/SLA/RasterToPolygons.hpp
-        src/main/jni/libslic3r/SLA/ReprojectPointsOnMesh.hpp
-        src/main/jni/libslic3r/SLA/Rotfinder.cpp
-        src/main/jni/libslic3r/SLA/Rotfinder.hpp
-        src/main/jni/libslic3r/SLA/SpatIndex.cpp
-        src/main/jni/libslic3r/SLA/SpatIndex.hpp
-        src/main/jni/libslic3r/SLA/SupportPointGenerator.cpp
-        src/main/jni/libslic3r/SLA/SupportPointGenerator.hpp
-        src/main/jni/libslic3r/SLA/SupportPoint.hpp
-        src/main/jni/libslic3r/SLA/SupportTreeBuilder.cpp
-        src/main/jni/libslic3r/SLA/SupportTreeBuilder.hpp
-        src/main/jni/libslic3r/SLA/SupportTreeBuildsteps.cpp
-        src/main/jni/libslic3r/SLA/SupportTreeBuildsteps.hpp
-        src/main/jni/libslic3r/SLA/SupportTree.cpp
-        src/main/jni/libslic3r/SLA/SupportTree.hpp
-        src/main/jni/libslic3r/SLA/SupportTreeMesher.cpp
-        src/main/jni/libslic3r/SLA/SupportTreeMesher.hpp
-        src/main/jni/libslic3r/SlicesToTriangleMesh.cpp
-        src/main/jni/libslic3r/SlicesToTriangleMesh.hpp
-        src/main/jni/libslic3r/SlicingAdaptive.cpp
-        src/main/jni/libslic3r/SlicingAdaptive.hpp
-        src/main/jni/libslic3r/Slicing.cpp
-        src/main/jni/libslic3r/Slicing.hpp
-        src/main/jni/libslic3r/Support/SupportCommon.cpp
-        src/main/jni/libslic3r/Support/SupportCommon.hpp
-        src/main/jni/libslic3r/Support/SupportLayer.hpp
-        src/main/jni/libslic3r/Support/SupportMaterial.cpp
-        src/main/jni/libslic3r/Support/SupportMaterial.hpp
-        src/main/jni/libslic3r/Support/SupportParameters.hpp
-        src/main/jni/libslic3r/Support/SupportSpotsGenerator.cpp
-        src/main/jni/libslic3r/Support/SupportSpotsGenerator.hpp
-        src/main/jni/libslic3r/Support/TreeModelVolumes.cpp
-        src/main/jni/libslic3r/Support/TreeModelVolumes.hpp
-        src/main/jni/libslic3r/Support/TreeSupport3D.cpp
-        src/main/jni/libslic3r/Support/TreeSupport3D.hpp
-        src/main/jni/libslic3r/Support/TreeSupportCommon.hpp
-        src/main/jni/libslic3r/Support/TreeSupport.cpp
-        src/main/jni/libslic3r/Support/TreeSupport.hpp
-        src/main/jni/libslic3r/SurfaceCollection.cpp
-        src/main/jni/libslic3r/SurfaceCollection.hpp
-        src/main/jni/libslic3r/Surface.cpp
-        src/main/jni/libslic3r/Surface.hpp
-        src/main/jni/libslic3r/SurfaceMesh.hpp
-        src/main/jni/libslic3r/SVG.cpp
-        src/main/jni/libslic3r/SVG.hpp
-        src/main/jni/libslic3r/Technologies.hpp
-        src/main/jni/libslic3r/Tesselate.cpp
-        src/main/jni/libslic3r/Tesselate.hpp
-        src/main/jni/libslic3r/TextConfiguration.hpp
-        src/main/jni/libslic3r/Thread.cpp
-        src/main/jni/libslic3r/Thread.hpp
-        src/main/jni/libslic3r/Time.cpp
-        src/main/jni/libslic3r/Time.hpp
-        src/main/jni/libslic3r/Timer.cpp
-        src/main/jni/libslic3r/Timer.hpp
-        src/main/jni/libslic3r/TriangleMesh.cpp
-        src/main/jni/libslic3r/TriangleMesh.hpp
-        src/main/jni/libslic3r/TriangleMeshSlicer.cpp
-        src/main/jni/libslic3r/TriangleMeshSlicer.hpp
-        src/main/jni/libslic3r/TriangleSelector.cpp
-        src/main/jni/libslic3r/TriangleSelector.hpp
-        src/main/jni/libslic3r/TriangleSetSampling.cpp
-        src/main/jni/libslic3r/TriangleSetSampling.hpp
-        src/main/jni/libslic3r/TriangulateWall.cpp
-        src/main/jni/libslic3r/TriangulateWall.hpp
-        src/main/jni/libslic3r/utils.cpp
-        src/main/jni/libslic3r/Utils.hpp
-        src/main/jni/libslic3r/VariableWidth.cpp
-        src/main/jni/libslic3r/VariableWidth.hpp
-        src/main/jni/libslic3r/Zipper.cpp
-        src/main/jni/libslic3r/Zipper.hpp
-        src/main/jni/libslic3r/FilamentGroup.hpp
-        src/main/jni/libslic3r/FilamentGroup.cpp
-        src/main/jni/libslic3r/FilamentGroupUtils.hpp
-        src/main/jni/libslic3r/FilamentGroupUtils.cpp
-        src/main/jni/libslic3r/GCode/ToolOrderUtils.hpp
-        src/main/jni/libslic3r/GCode/ToolOrderUtils.cpp
-        src/main/jni/libslic3r/FlushVolPredictor.hpp
-        src/main/jni/libslic3r/FlushVolPredictor.cpp
+        # libnest2d is NOT built here: its only in-tree user was the deleted
+        # 2.x Arrange (its libslic3r backend needs 2.x ExPolygon). Arrange
+        # returns via upstream slic3r-biz-arrange in #211.
 
-        src/main/jni/libnest2d/src/libnest2d.cpp
-
-        src/main/jni/bbl/Orient.cpp
+        # compat/Orient.cpp is NOT built here: it serves the farm/app JNI
+        # (emboss orientation) and needs the 3.0 Domain/Biz port (#211).
+        # It compiles in the app farm target once ported.
 
         # engine_compat.cpp provides the single nanosvg implementation and
         # stub definitions for unvendored backends (draco/mcut).
@@ -1202,16 +794,260 @@ target_compile_definitions(slic3r PUBLIC -DUSE_TBB -DTBB_USE_CAPTURED_EXCEPTION=
         -DLIBNEST2D_OPTIMIZER_nlopt -DLIBNEST2D_THREADING_tbb -DLIBNEST2D_STATIC -DENABLE_OPENGL_ES -DSLIC3R_OPENGL_ES
         -DUSE_CPP11_REGEX)
 
+# Bring in the fetched 3.0 headers' source-only implementation unit: symbol
+# definitions for Domain::Model/ModelObject/ModelVolume et al are compiled in
+# upstream `libslic3r`, not as headers, so our app needs the actual TU set.
+# We add it unconditionally; CMake dedupes duplicate source entries by path.
+file(GLOB_RECURSE SLIC3R_IMPL_CPP ${PRUSA_SRC}/src/libslic3r/src/libslic3r/*.cpp)
+# Mirror upstream: src/libslic3r/CMakeLists.txt comments ArrangeHelper out
+# (it includes the nonexistent libslic3r/MultipleBeds.hpp and nothing else
+# references it), GCodeSender is dead serial-port code nothing references
+# (needs boost::noncopyable transitively + clashes with Android termios2),
+# and Format/PrintRequest.cpp is commented out upstream — drop all three so
+# the recursive glob builds exactly what upstream builds.
+list(REMOVE_ITEM SLIC3R_IMPL_CPP
+    ${PRUSA_SRC}/src/libslic3r/src/libslic3r/ArrangeHelper.cpp
+    ${PRUSA_SRC}/src/libslic3r/src/libslic3r/Format/PrintRequest.cpp
+    ${PRUSA_SRC}/src/libslic3r/src/libslic3r/GCodeSender.cpp)
+# Upstream module implementations (Domain::Model, FileLoadingLogic, ...): the
+# legacy glob covers only src/libslic3r. Glob the module trees too — none
+# contain GUI code. Exclusions: other-OS platform files, the render test
+# module, the standalone seqarrange tool, and the openssl-needing network TUs
+# (nothing in the slice path references them; re-add with OpenSSL staging if
+# the link ever demands them).
+file(GLOB_RECURSE SLIC3R_MODULE_SRC
+    ${PRUSA_SRC}/src/slic3r-domain/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-shared/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-base/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-biz-algorithms/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-biz-arrange/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-biz-cgal-algorithms/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-biz-parser/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-gcode-reader/src/*.cpp
+    ${PRUSA_SRC}/src/slic3r-platform/src/*.cpp
+    ${PRUSA_SRC}/src/libpgcode/src/*.cpp
+    # Upstream classic ClipperLib with TBB scalable_allocator typedefs — the
+    # 3.0 biz-algorithms signatures (ClipperLib::Area(vector<Vec,scalable_alloc>)
+    # etc.) only resolve against this implementation; the vendored 2.x copy
+    # (std allocator, no remaining consumers) is dropped from the build.
+    ${PRUSA_SRC}/bundled_deps/clipper/src/*.cpp)
+# NOTE: libseqarrange excluded (needs z3++.h, absent); its only user is the
+# excluded ArrangeHelper. biz-crypto excluded (needs OpenSSL headers).
+# YamlAdapterLibfyaml.cpp + YamlAdapterYamlCpp.cpp excluded:
+# SLIC3R_YAML_RYML is the selected backend (add_definitions above);
+# upstream's ryml file set compiles only YamlAdapterRyml — the other
+# adapters (libfyaml.h absent / yaml-cpp lib not built) are dead TUs the
+# whole-archive link would otherwise force-resolve.
+# PlatformInfo_emscripten.cpp excluded: unguarded duplicate definition of
+# Slic3r::PlatformInfo (same as _unix.cpp); whole-archive link surfaces it —
+# Android/bionic wants the _unix.cpp uname variant.
+# EmbossJob.cpp re-added (was batch-excluded with the Plater-needing Emboss
+# UI TUs): upstream compiles it in the unconditional headless file set and
+# Biz/Format/SVG's load_svg calls Emboss::create_projection, defined there.
+# slic3r-platform/src globbed for the same reason (upstream builds it
+# headless): EmbossJob and other Biz TUs call PlatformServices, whose
+# implementation lives there; the Slic3r/App/ regex still drops its
+# canvas/animation half.
+# Preset/Bundle.cpp: the LIVE implementation is slic3r-domain's
+# Slic3r/Domain/Preset/Bundle.cpp (PresetInteractor calls
+# Domain::Preset::Bundle::find_printer_preset et al.). The slic3r-shared
+# Biz/Preset/Bundle.cpp leftover is commented out in upstream's file list
+# and includes a nonexistent header — exclude ONLY the Biz path (a bare
+# Preset/Bundle regex also killed the live Domain TU).
+# SHA256Linux.cpp re-added: the live UserAccount TUs call Biz::sha256;
+# its OpenSSL dependency is staged from the prusa30-openssl cache.
+# Emboss/TextPresetManager.cpp + SingleInstanceCheckerLock.cpp excluded:
+# only App/ and app-desktop TUs (all excluded/unglobbed) reference them —
+# dead in the .so, and they drag AppServices/AppInstanceMessageHandler.
+# HttpCurlFactory.cpp re-added: patch 0011 turns it into the __ANDROID__
+# no-op HttpFactory::initialize() (HttpCurl.cpp itself still excluded —
+# the curl implementation never builds for NDK).
+list(FILTER SLIC3R_MODULE_SRC EXCLUDE REGEX "Win32|win32|Mac\\.cpp|Slic3r/App/|sequential_decimator|HttpCurl\\.cpp|AppInstanceMessageHandlerLinux\\.cpp|AppInstanceMessageHandlerFactoryLinux\\.cpp|RemovableDriveMonitorLinux\\.cpp|RemovableDriveServiceLinux\\.cpp|TryCatchSignalSEH\\.cpp|Emboss/TextShapeProvider\\.cpp|Emboss/TextLines\\.cpp|Emboss/SurfaceDrag\\.cpp|Emboss/TextPresetManager\\.cpp|SingleInstanceCheckerLock\\.cpp|Biz/Preset/Bundle\\.cpp|Format/3mf/BuildTicket\\.cpp|Preset/AbstractConfigManipulation\\.cpp|YamlAdapterLibfyaml\\.cpp|YamlAdapterYamlCpp\\.cpp|PlatformInfo_emscripten\\.cpp")
+# CustomParametersHandling.cpp captures structured bindings in OpenMP
+# regions, which NDK Clang rejects. Compile just this TU without OpenMP
+# (pragmas ignored -> serial execution, same results).
+set_source_files_properties(
+    ${PRUSA_SRC}/src/libslic3r/src/libslic3r/CustomParametersHandling.cpp
+    PROPERTIES COMPILE_OPTIONS -fno-openmp)
+# Upstream compiles bundled clipper.cpp TWICE (bundled_deps/clipper/
+# CMakeLists.txt): plain -> namespace ClipperLib, and with
+# CLIPPERLIB_USE_XYZ=1 -> namespace ClipperLib_Z (Z-coordinate variant
+# used by SupportCommon/Brim/Arachne/SLA). The module glob builds the
+# plain variant into libslic3r_core; compile the Z variant as an object
+# library and merge it in — distinct namespaces, no symbol clash.
+add_library(clipper_z OBJECT ${PRUSA_SRC}/bundled_deps/clipper/src/clipper.cpp)
+target_compile_definitions(clipper_z PRIVATE CLIPPERLIB_USE_XYZ=1)
+target_include_directories(clipper_z PRIVATE
+    ${PRUSA_SRC}/bundled_deps/clipper/include
+    ${PRUSA_SRC}/bundled_deps/int128
+    ${PRUSA_SRC}/src/slic3r-domain/include
+    ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/eigen/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/include)
+add_library(libslic3r_core STATIC ${SLIC3R_IMPL_CPP} ${SLIC3R_MODULE_SRC}
+    $<TARGET_OBJECTS:clipper_z>
+    # Vendored pugixml (see engine/prusa30/vendor/pugixml/README): upstream
+    # 3mf/BuildTicket.cpp needs its symbols, not just headers.
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/vendor/pugixml/pugixml.cpp)
+# Order the BGCode export headers (generate_export_header) before any core TU:
+# upstream GCode.cpp pulls <binarize/binarize.hpp> -> <binarize/export.h>,
+# which only exists once its target's prebuild step runs.
+add_dependencies(libslic3r_core BGCode_core BGCode_binarize BGCode_convert)
+target_include_directories(libslic3r_core PRIVATE
+    ${PRUSA_SRC}/src/libslic3r/include
+    ${PRUSA_SRC}/src/libslic3r/src
+    ${PRUSA_SRC}/src/libseqarrange/include
+    ${PRUSA_SRC}/bundled_deps
+    ${PRUSA_SRC}/bundled_deps/admesh
+    ${PRUSA_SRC}/bundled_deps/clipper/include
+    ${PRUSA_SRC}/bundled_deps/semver
+    ${PRUSA_SRC}/bundled_deps/localesutils
+    ${PRUSA_SRC}/src/slic3r-domain/include
+    ${PRUSA_SRC}/src/slic3r-base/include
+    ${PRUSA_SRC}/src/slic3r-biz-algorithms/include
+    ${PRUSA_SRC}/src/slic3r-biz-arrange/include
+    ${PRUSA_SRC}/src/slic3r-shared/include
+    ${PRUSA_SRC}/src/slic3r-render/include
+    ${PRUSA_SRC}/src/slic3r-biz-cgal-algorithms/include
+    ${PRUSA_SRC}/src/slic3r-biz-parser/include
+    ${PRUSA_SRC}/src/slic3r-gcode-reader/include
+    ${PRUSA_SRC}/src/slic3r-jthread/include
+    ${PRUSA_SRC}/src/libpgcode/include
+    ${PRUSA_SRC}/src/slic3r-platform/include
+    ${PRUSA_SRC}/src/slic3r-domain/src
+    ${PRUSA_SRC}/src/slic3r-shared/src
+    ${PRUSA_SRC}/src/slic3r-base/src
+    ${PRUSA_SRC}/src/slic3r-biz-algorithms/src
+    ${PRUSA_SRC}/src/slic3r-biz-arrange/src
+    ${PRUSA_SRC}/src/slic3r-biz-cgal-algorithms/src
+    ${PRUSA_SRC}/src/slic3r-biz-parser/src
+    ${PRUSA_SRC}/src/slic3r-gcode-reader/src
+    ${PRUSA_SRC}/src/libpgcode/src
+    ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/main/jniImports/oneTBB/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/main/jniImports/boost/include
+    ${PRUSA_GEN}
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/eigen/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/spdlog/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/fmt/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/cereal/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/nlohmann_json/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/sol2/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/expected/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/magic_enum/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/assert/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/nanosvg/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/rangev3/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tracy
+    ${PRUSA_SRC}/bundled_deps/ankerl
+    ${PRUSA_SRC}/bundled_deps/qoi
+    ${PRUSA_SRC}/bundled_deps/stb_image
+    ${PRUSA_SRC}/bundled_deps/stb_dxt
+    ${PRUSA_SRC}/bundled_deps/libnest2d/include
+    src/main/jni/libnest2d/include
+    src/main/jni/LibBGCode
+    src/main/jni/qhull
+    src/main/jni/libigl
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/mixer/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/ryml/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/yamlcpp/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/vendor/pugixml
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/libdeflate/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/openssl/include
+    ${PRUSA_SRC}/bundled_deps/int128
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/main/jniImports/gmp/include/${ANDROID_ABI}
+    src/main/jni/miniz
+    src/main/jni/libpng
+    src/main/jni/libjpeg-turbo
+    src/main/jni/nlopt/api
+    src/main/jni/expat
+    src/main/jni/fast_float
+    src/main/jni/glu-libtess/include
+    src/main/jni/semver
+    src/main/jni)
+
+# libassert (staged fresh by CI into prusa30/jniImports/assert): upstream 3.0
+# Assert.hpp needs its symbols at link time (slic3r-base links
+# libassert::assert upstream). Glob the staged archives (libassert.a +
+# libcpptrace.a) so the final .so is self-contained.
+file(GLOB ASSERT_STATIC_LIBS ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/assert/lib/*.a)
+file(GLOB MIXER_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/mixer/lib*/libprusa_fdm_mixer.a)
+file(GLOB LIBDEFLATE_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/libdeflate/lib*/libdeflate.a)
+# fmt 12.1.0 (SPDLOG_FMT_EXTERNAL): the staged headers only compile the
+# fmt::v12 calls; the definitions live in the freshly built libfmt.a.
+file(GLOB FMT_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/fmtlib/lib*/libfmt.a)
+# ryml 0.10.0 (SLIC3R_YAML_RYML): YamlAdapterRyml's c4::yml calls need the
+# compiled rapidyaml + vendored c4core archives; c4core must link after
+# libryml.a (archive order: it resolves ryml's own references).
+file(GLOB RYML_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/ryml/lib/libryml.a)
+file(GLOB C4CORE_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/ryml/lib/libc4core.a)
+# OpenSSL 4.0.1 (prusa30-openssl cache): SHA256Linux's Biz::sha256 uses
+# libcrypto's EVP digest API; libssl links after it (it resolves crypto).
+file(GLOB CRYPTO_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/openssl/lib/libcrypto.a)
+file(GLOB SSL_STATIC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/openssl/lib/libssl.a)
+# --whole-archive around libslic3r_core: the farm JNI bridge (libfarm.so)
+# links against libslic3r.so and resolves the 3.0 Slic3r::Domain/Biz API at
+# link time. A plain archive pull would drag in only the members something
+# inside the .so already references — every module only the app uses
+# (Domain::Model, FileLoadingLogic, Biz::Cut, ...) never enters the link and
+# the bridge fails with undefined symbols. The deleted 2.x build compiled
+# its sources straight into the shared target, exporting everything;
+# whole-archive restores exactly that.
+target_link_libraries(slic3r PRIVATE
+        -Wl,--whole-archive
+        libslic3r_core
+        -Wl,--no-whole-archive
+        ${ASSERT_STATIC_LIBS} ${MIXER_STATIC_LIB} ${LIBDEFLATE_STATIC_LIB} ${FMT_STATIC_LIB}
+        ${RYML_STATIC_LIB} ${C4CORE_STATIC_LIB} ${CRYPTO_STATIC_LIB} ${SSL_STATIC_LIB})
+
 target_include_directories(slic3r PRIVATE
         src/main/jni
-        src/main/jni/libslic3r
+        ${PRUSA_SRC}/src/libslic3r/include
+        ${PRUSA_SRC}/src/libslic3r/src
+        ${PRUSA_SRC}/bundled_deps
+        ${PRUSA_SRC}/bundled_deps/admesh
+        ${PRUSA_SRC}/bundled_deps/clipper/include
+        ${PRUSA_SRC}/bundled_deps/localesutils
+        ${PRUSA_SRC}/bundled_deps/semver
+        ${PRUSA_SRC}/bundled_deps/semver
+        ${PRUSA_SRC}/src/slic3r-domain/include
+        ${PRUSA_SRC}/src/slic3r-base/include
+        ${PRUSA_SRC}/src/slic3r-biz-algorithms/include
+        ${PRUSA_SRC}/src/slic3r-biz-arrange/include
+        ${PRUSA_SRC}/src/slic3r-shared/include
+        ${PRUSA_SRC}/src/slic3r-render/include
+        ${PRUSA_SRC}/src/slic3r-biz-cgal-algorithms/include
+        ${PRUSA_SRC}/src/slic3r-biz-parser/include
+        ${PRUSA_SRC}/src/slic3r-gcode-reader/include
+        ${PRUSA_SRC}/src/slic3r-jthread/include
+        ${PRUSA_SRC}/src/libpgcode/include
+        ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/eigen/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/spdlog/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/fmt/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/cereal/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/nlohmann_json/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/sol2/include
+
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/expected/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/headers/magic_enum/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/assert/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/nanosvg/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tracy
+        ${PRUSA_SRC}/bundled_deps/ankerl
+        ${PRUSA_SRC}/bundled_deps/qoi
+        ${PRUSA_SRC}/bundled_deps/stb_image
+        ${PRUSA_SRC}/bundled_deps/stb_dxt
+        src/main/jni/libnest2d/include
+        ${PRUSA_GEN}
         src/main/jni/openvdb
         src/main/jni/mpfr
         src/main/jni/zlib
         src/main/jni/libpng
         src/main/jni/libjpeg-turbo
         src/main/jni/semver
-        src/main/jni/eigen
+        build/eigen-3.4.0/include
         src/main/jni/fast_float
         src/main/jni/expat
         src/main/jni/heatshrink
@@ -1241,6 +1077,7 @@ target_include_directories(slic3r PRIVATE
         src/main/jni/nlopt/api
         src/main/jni/libnest2d/include
         src/main/jni/libvgcode/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/prusa30/jniImports/tbb/include
         src/main/jniImports/oneTBB/include
         src/main/jniImports/boost/include
         src/main/jniImports/gmp/include/${ANDROID_ABI}

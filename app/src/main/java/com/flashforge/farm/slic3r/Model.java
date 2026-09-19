@@ -280,7 +280,9 @@ public class Model {
                 for (int i = 0; i < pal.length; i++) colors[i] = pal[i] & 0xFFFFFF;
             }
         }
-        return new GCodeProcessorResult(Native.model_slice(pointer, configPath, gcodePath, listener, numFilaments, colors, calibMode, calibStart, calibEnd, calibStep));
+        return SandboxSlice.sliceOrLocal(FarmApp.INSTANCE, this, configPath,
+                new File(gcodePath), listener,
+                numFilaments, colors, calibMode, calibStart, calibEnd, calibStep);
     }
 
     public void export3mf(String configPath, String _3mfPath) throws Slic3rRuntimeError {

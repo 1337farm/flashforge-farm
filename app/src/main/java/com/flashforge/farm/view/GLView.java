@@ -258,7 +258,7 @@ public class GLView extends GLSurfaceView implements IThemeView {
             path.addRoundRect(offsetX, offsetY, getWidth() - offsetX, getHeight() - offsetY, rad, rad, Path.Direction.CW);
 
             canvas.save();
-            canvas.clipPath(path, Region.Op.DIFFERENCE);
+            canvas.clipOutPath(path);
             canvas.drawColor(ThemesRepo.getColor(android.R.attr.windowBackground));
             canvas.restore();
 
@@ -318,7 +318,7 @@ public class GLView extends GLSurfaceView implements IThemeView {
                     invalidBedText.setTextSize(ViewUtils.dp(16));
                     invalidBedText.setColor(ThemesRepo.getColor(android.R.attr.textColorSecondary));
                     invalidBedText.setTypeface(Typeface.DEFAULT);
-                    invalidBedDescriptionLayout = new StaticLayout(getContext().getString(R.string.BedConfigurationErrorDesc), invalidBedText, getWidth() - ViewUtils.dp(32), Layout.Alignment.ALIGN_CENTER, 1, 0, false);
+                    invalidBedDescriptionLayout = StaticLayout.Builder.obtain(getContext().getString(R.string.BedConfigurationErrorDesc), 0, getContext().getString(R.string.BedConfigurationErrorDesc).length(), invalidBedText, getWidth() - ViewUtils.dp(32)).setAlignment(Layout.Alignment.ALIGN_CENTER).setLineSpacing(0, 1).setIncludePad(false).build();
                 }
 
                 int realTextSize = ViewUtils.dp(22);

@@ -1,0 +1,265 @@
+#!/usr/bin/env bash
+# Stage the PrusaSlicer 3.0 native dependencies for the Android NDK build.
+#
+# This is the 3.0 counterpart to scripts/build_all_deps_android.sh (legacy). It
+# stages into engine/prusa30/jniImports/ so the PrusaSlicer 3.0 engine/deps under
+# engine/src/main/jniImports are untouched and the shipping app keeps building.
+#
+# Headless-only header libs (cereal/json/spdlog/fmt/sol2/eigen) are downloaded,
+# sha256-verified, and staged here. The COMPILED deps (Boost 1.86.0, OCCT
+# V7_6_1, oneTBB v2021.12.0, CGAL v5.6.2, OpenVDB v11.0.0, Lua 5.4.8,
+# GMP 6.2.1/MPFR, NLopt 2.5.0) are pinned in engine/prusa30/deps-manifest.json
+# and ported from build_all_deps_android.sh in the CI loop (see the compiled-deps
+# note at the bottom). Exact pins are extracted from upstream deps/*.cmake by
+# scripts/vendor_prusaslicer30.py — nothing is guessed.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+STAGE_ROOT="${STAGE_ROOT:-$(pwd)/engine/prusa30/jniImports}"
+WORK_DIR="${WORK_DIR:-/tmp/build_prusa30_deps}"
+mkdir -p "$STAGE_ROOT" "$WORK_DIR"
+
+# Retrying download with mirror fallback (mirrors the deps script).
+fetch() {
+    local out="$1"; shift
+    local url i
+    for url in "$@"; do
+        for i in 1 2 3; do
+            if curl -fsSL --connect-timeout 20 --max-time 300 \
+                    --retry 2 --retry-all-errors -o "$out" "$url" \
+               && [ -s "$out" ]; then
+                return 0
+            fi
+            echo "--- [fetch] attempt $i/3 failed: $url ---" >&2
+            sleep "$((i * 5))"
+        done
+    done
+    echo "--- [fetch] ERROR: all mirrors failed for $out ---" >&2
+    rm -f "$out"
+    return 1
+}
+
+sha256_verify() {
+    local file="$1" want="$2"
+    local got
+    got="$(sha256sum "$file" | cut -d' ' -f1)"
+    if [ "$got" != "$want" ]; then
+        echo "--- [verify] sha256 mismatch for $file (want $want got $got) ---" >&2
+        return 1
+    fi
+}
+
+# Download + extract a zip/tarball and copy its include tree into the stage.
+# usage: stage_include <name> <url> <sha256> <archive> <src-include-glob>...
+stage_include() {
+    local name="$1" url="$2" sha="$3" archive="$4"; shift 4
+    local dl="$WORK_DIR/$archive"
+    fetch "$dl" "$url"
+    sha256_verify "$dl" "$sha"
+    local dir="$WORK_DIR/$name"
+    rm -rf "$dir"; mkdir -p "$dir"
+    case "$archive" in
+        *.zip)  unzip -q -o "$dl" -d "$dir" ;;
+        *.tar.gz|*.tgz|*.tar.bz2|*.tar.xz) tar xf "$dl" -C "$dir" ;;
+        *) echo "unknown archive type: $archive" >&2; return 1 ;;
+    esac
+    local dest="$STAGE_ROOT/$name/include"
+    mkdir -p "$dest"
+    local src
+    for src in "$@"; do
+        local found
+        # Prefer the canonical `<archive>/include/<src>` tree; fall back to any
+        # depth of `<src>` for deps (e.g. Eigen) whose headers are not under
+        # include/. Avoid matching the staging dir itself.
+        found="$(find "$dir" -type d -path "*/include/$src" | sort | head -1)"
+        if [ -z "$found" ]; then
+            found="$(find "$dir" -mindepth 2 -type d -path "*/$src" | sort | head -1)"
+        fi
+        if [ -z "$found" ]; then
+            echo "--- [stage] WARN: include tree '$src' not found for $name ---" >&2
+            continue
+        fi
+        cp -r "$found" "$dest/"
+    done
+    echo "--- [stage] $name -> $dest ---"
+}
+
+# ---------------------------------------------------------------------------
+# Header-only dependencies (exact pins from upstream deps/*.cmake)
+# ---------------------------------------------------------------------------
+stage_include cereal "https://github.com/USCiLab/cereal/archive/refs/tags/v1.3.2.zip" \
+    e72c3fa8fe3d531247773e346e6824a4744cc6472a25cf9b30599cd52146e2ae \
+    cereal.zip "cereal"
+
+stage_include nlohmann_json "https://github.com/nlohmann/json/archive/refs/tags/v3.12.0.zip" \
+    34660b5e9a407195d55e8da705ed26cc6d175ce5a6b1fb957e701fb4d5b04022 \
+    json.zip "nlohmann"
+
+stage_include spdlog "https://github.com/gabime/spdlog/archive/refs/tags/v1.15.3.zip" \
+    b74274c32c8be5dba70b7006c1d41b7d3e5ff0dff8390c8b6390c1189424e094 \
+    spdlog.zip "spdlog"
+
+stage_include fmt "https://github.com/fmtlib/fmt/releases/download/12.1.0/fmt-12.1.0.zip" \
+    695fd197fa5aff8fc67b5f2bbc110490a875cdf7a41686ac8512fb480fa8ada7 \
+    fmt.zip "fmt"
+
+stage_include sol2 "https://github.com/ThePhD/sol2/archive/refs/tags/v3.5.0.zip" \
+    b43e539415956960055f62a9d328fec3fd1ad4f272d6206631b9f022b0b12678 \
+    sol2.zip "sol"
+
+stage_include eigen "https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.zip" \
+    eba3f3d414d2f8cba2919c78ec6daab08fc71ba2ba4ae502b7e5d4d99fc02cda \
+    eigen.zip "Eigen" "unsupported"
+
+stage_include expected "https://github.com/TartanLlama/expected/archive/refs/tags/v1.1.0.zip" \
+    4b2a347cf5450e99f7624247f7d78f86f3adb5e6acd33ce307094e9507615b78 \
+    expected.zip "tl"
+
+stage_include magic_enum "https://github.com/Neargye/magic_enum/archive/refs/tags/v0.9.7.zip" \
+    e293afdaf4d5918bc145903bccff06d28b3ed437f1ac8414ace9e8a769a9e470 \
+    magic_enum.zip "magic_enum"
+
+# NanoSVG (fltk fork with nsvgRasterizeXY): header-only nanosvg.h +
+# nanosvgrast.h, consumed as NanoSVG::nanosvg + NanoSVG::nanosvgrast via
+# find_package(NanoSVG) (CONFIG only). Upstream includes spell
+# <nanosvg/nanosvg.h>, so stage under include/nanosvg/.
+NSVG_VER="abcd277ea45e9098bed752cf9c6875b533c0892f"
+NSVG_URL="https://github.com/fltk/nanosvg/archive/${NSVG_VER}.zip"
+NSVG_SHA="e859938fbaee4b351bd8a8b3d3c7a75b40c36885ce00b73faa1ce0b98aa0ad34"
+NSVG_DL="$WORK_DIR/nanosvg.zip"
+fetch "$NSVG_DL" "$NSVG_URL"
+sha256_verify "$NSVG_DL" "$NSVG_SHA"
+rm -rf "$WORK_DIR/nanosvg"; mkdir -p "$WORK_DIR/nanosvg"
+unzip -q -o "$NSVG_DL" -d "$WORK_DIR/nanosvg"
+NSVG_SRC="$(find "$WORK_DIR/nanosvg" -name nanosvg.h | head -1 | xargs dirname)"
+if [ -z "$NSVG_SRC" ]; then
+    echo "--- [stage] ERROR: nanosvg.h not found ---" >&2
+    exit 1
+fi
+mkdir -p "$STAGE_ROOT/nanosvg/include/nanosvg"
+cp "$NSVG_SRC/nanosvg.h" "$NSVG_SRC/nanosvgrast.h" "$STAGE_ROOT/nanosvg/include/nanosvg/"
+mkdir -p "$STAGE_ROOT/nanosvg/lib/cmake/NanoSVG"
+cat > "$STAGE_ROOT/nanosvg/lib/cmake/NanoSVG/NanoSVGConfig.cmake" <<'EOF'
+# Staged NanoSVG headers (header-only, no lib to link).
+if(NOT TARGET NanoSVG::nanosvg)
+  add_library(NanoSVG::nanosvg INTERFACE IMPORTED)
+  set_target_properties(NanoSVG::nanosvg PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../../include")
+endif()
+if(NOT TARGET NanoSVG::nanosvgrast)
+  add_library(NanoSVG::nanosvgrast INTERFACE IMPORTED)
+  set_target_properties(NanoSVG::nanosvgrast PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../../include")
+endif()
+EOF
+
+# cereal is header-only, but upstream find_package(cereal 1.3.2) needs a
+# CONFIG package: its header-fallback bakes a relative `include` dir that
+# only works inside a source tree, and CHECK_INCLUDE_FILE_CXX never sees
+# our staged prefix. Provide a minimal config exposing cereal::cereal.
+mkdir -p "$STAGE_ROOT/cereal/lib/cmake/cereal"
+cat > "$STAGE_ROOT/cereal/lib/cmake/cereal/cereal-config.cmake" <<'EOF'
+# Staged cereal v1.3.2 headers (header-only, no lib to link).
+if(NOT TARGET cereal::cereal)
+  add_library(cereal::cereal INTERFACE IMPORTED)
+  set_target_properties(cereal::cereal PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../../include")
+endif()
+EOF
+cat > "$STAGE_ROOT/cereal/lib/cmake/cereal/cereal-config-version.cmake" <<'EOF'
+set(PACKAGE_VERSION "1.3.2")
+if(PACKAGE_FIND_VERSION VERSION_GREATER PACKAGE_VERSION)
+  set(PACKAGE_VERSION_COMPATIBLE FALSE)
+else()
+  set(PACKAGE_VERSION_COMPATIBLE TRUE)
+  if(PACKAGE_FIND_VERSION VERSION_EQUAL PACKAGE_VERSION)
+    set(PACKAGE_VERSION_EXACT TRUE)
+  endif()
+endif()
+EOF
+
+# Same for Eigen 3.4.0: bundled_deps/slic3r-domain-types calls
+# find_package(Eigen3) (CONFIG only — no Find module ships it), so provide
+# a minimal config exposing Eigen3::Eigen over the staged headers.
+mkdir -p "$STAGE_ROOT/eigen/lib/cmake/eigen3"
+cat > "$STAGE_ROOT/eigen/lib/cmake/eigen3/Eigen3Config.cmake" <<'EOF'
+# Staged Eigen 3.4.0 headers (header-only, no lib to link).
+if(NOT TARGET Eigen3::Eigen)
+  add_library(Eigen3::Eigen INTERFACE IMPORTED)
+  set_target_properties(Eigen3::Eigen PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../../include")
+endif()
+EOF
+cat > "$STAGE_ROOT/eigen/lib/cmake/eigen3/Eigen3ConfigVersion.cmake" <<'EOF'
+set(PACKAGE_VERSION "3.4.0")
+if(PACKAGE_FIND_VERSION VERSION_GREATER PACKAGE_VERSION)
+  set(PACKAGE_VERSION_COMPATIBLE FALSE)
+else()
+  set(PACKAGE_VERSION_COMPATIBLE TRUE)
+  if(PACKAGE_FIND_VERSION VERSION_EQUAL PACKAGE_VERSION)
+    set(PACKAGE_VERSION_EXACT TRUE)
+  endif()
+endif()
+EOF
+
+# Same for tl-expected v1.1.0 (slic3r-base links tl::expected): header-only,
+# CONFIG-only consumption. Target name per upstream: tl::expected.
+mkdir -p "$STAGE_ROOT/expected/lib/cmake/tl-expected"
+cat > "$STAGE_ROOT/expected/lib/cmake/tl-expected/tl-expected-config.cmake" <<'EOF'
+# Staged tl-expected v1.1.0 headers (header-only, no lib to link).
+if(NOT TARGET tl::expected)
+  add_library(tl::expected INTERFACE IMPORTED)
+  set_target_properties(tl::expected PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../../include")
+endif()
+EOF
+cat > "$STAGE_ROOT/expected/lib/cmake/tl-expected/tl-expected-config-version.cmake" <<'EOF'
+set(PACKAGE_VERSION "1.1.0")
+if(PACKAGE_FIND_VERSION VERSION_GREATER PACKAGE_VERSION)
+  set(PACKAGE_VERSION_COMPATIBLE FALSE)
+else()
+  set(PACKAGE_VERSION_COMPATIBLE TRUE)
+  if(PACKAGE_FIND_VERSION VERSION_EQUAL PACKAGE_VERSION)
+    set(PACKAGE_VERSION_EXACT TRUE)
+  endif()
+endif()
+EOF
+
+# Same for spdlog v1.15.3 (slic3r-base links spdlog::spdlog): upstream builds
+# it with SPDLOG_FMT_EXTERNAL=ON against its fmt, so expose the staged
+# headers header-only (SPDLOG_HEADER_ONLY) with external fmt, linked to our
+# staged compiled fmt::fmt. No lib to compile here.
+mkdir -p "$STAGE_ROOT/spdlog/lib/cmake/spdlog"
+cat > "$STAGE_ROOT/spdlog/lib/cmake/spdlog/spdlogConfig.cmake" <<'EOF'
+# Staged spdlog v1.15.3 headers, header-only + external fmt (mirrors
+# upstream SPDLOG_FMT_EXTERNAL=ON; SPDLOG_COMPILED_LIB intentionally unset
+# everywhere so all TUs share one header-only instantiation).
+if(NOT TARGET spdlog::spdlog)
+  add_library(spdlog::spdlog INTERFACE IMPORTED)
+  set_target_properties(spdlog::spdlog PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../../include"
+    INTERFACE_COMPILE_DEFINITIONS "SPDLOG_HEADER_ONLY;SPDLOG_FMT_EXTERNAL"
+    INTERFACE_LINK_LIBRARIES "fmt::fmt")
+endif()
+EOF
+cat > "$STAGE_ROOT/spdlog/lib/cmake/spdlog/spdlogConfigVersion.cmake" <<'EOF'
+set(PACKAGE_VERSION "1.15.3")
+if(PACKAGE_FIND_VERSION VERSION_GREATER PACKAGE_VERSION)
+  set(PACKAGE_VERSION_COMPATIBLE FALSE)
+else()
+  set(PACKAGE_VERSION_COMPATIBLE TRUE)
+  if(PACKAGE_FIND_VERSION VERSION_EQUAL PACKAGE_VERSION)
+    set(PACKAGE_VERSION_EXACT TRUE)
+  endif()
+endif()
+EOF
+
+echo "======================================================================="
+echo " PrusaSlicer 3.0 header-only deps staged under $STAGE_ROOT"
+echo ""
+echo " COMPILED deps still pending (pinned in engine/prusa30/deps-manifest.json):"
+echo "   Boost 1.86.0 | OCCT V7_6_1 (downgrade) | oneTBB v2021.12.0"
+echo "   CGAL v5.6.2 | OpenVDB v11.0.0 | Lua 5.4.8 | GMP 6.2.1 | MPFR 3.1.6"
+echo "   NLopt 2.5.0 | OpenSSL/CURL/EXPAT (headless may not need CURL/OpenSSL)"
+echo " Ported from scripts/build_all_deps_android.sh in the CI loop."
+echo "======================================================================="

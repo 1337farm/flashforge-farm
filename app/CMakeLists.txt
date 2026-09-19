@@ -1,4 +1,4 @@
-# FarmApp — thin JNI bridge around the shared OrcaSlicer engine.
+# FarmApp — thin JNI bridge around the shared PrusaSlicer engine.
 #
 # The engine (libslic3r C++ source + its full header tree) lives in the
 # top-level engine/ folder of this repository, cleanly separated from the
@@ -17,6 +17,8 @@
 #   src/main/jni/           <- engine C++ source + headers (compiled from here;
 #                              the app resolves headers against this same tree,
 #                              so bridge and .so are always in ABI lockstep)
+#   build/prusaslicer-src/  <- ISSUE-210: fetched 3.0 core (libslic3r headers;
+#                              vendored src/main/jni/libslic3r/ deleted)
 #   src/main/jniImports/    <- staged dep headers (boost, oneTBB, gmp)
 #   src/main/occt/          <- staged OCCT headers
 #   output/<ABI>/libslic3r.so <- engine build output (imported below)
@@ -29,17 +31,24 @@
 cmake_minimum_required(VERSION 3.10)
 project(FarmApp)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(ENGINE_ROOT ${CMAKE_SOURCE_DIR}/../engine)
 set(ENGINE_JNI ${ENGINE_ROOT}/src/main/jni)
+# ISSUE-210: fetched PrusaSlicer 3.0 tree (engine/prusa30/fetch_prusaslicer.sh,
+# PRUSA_REF pin; configured headless per prusa30-headless.yml:
+# cmake -S engine/build/prusaslicer-src -B build/prusa30 -DSLIC3R_GUI=OFF).
+set(PRUSA_SRC ${ENGINE_ROOT}/build/prusaslicer-src)
+# Generated 3.0 version header (see engine/CMakeLists.txt).
+set(PRUSA_GEN "${CMAKE_CURRENT_BINARY_DIR}/prusa-generated")
+configure_file(${ENGINE_ROOT}/cmake/Version.hpp.in ${PRUSA_GEN}/Slic3r/Version.hpp COPYONLY)
 set(ENGINE_OUTPUT ${ENGINE_ROOT}/output)
 set(SRC ${CMAKE_SOURCE_DIR}/src/main)
 set(JNI_IMPORTS ${ENGINE_ROOT}/src/main/jniImports)
 set(OCCT_ROOT ${ENGINE_ROOT}/src/main/occt)
 
-# --- the OrcaSlicer engine (libslic3r.so built from engine/ in this repo) --
+# --- the PrusaSlicer engine (libslic3r.so built from engine/ in this repo) --
 add_library(slic3r SHARED IMPORTED)
 set_target_properties(slic3r PROPERTIES IMPORTED_LOCATION
         ${ENGINE_OUTPUT}/${ANDROID_ABI}/libslic3r.so)
@@ -53,8 +62,16 @@ set_target_properties(slic3r PROPERTIES IMPORTED_LOCATION
 add_library(farm SHARED
         src/main/jni/farm/farm_native.cpp
         src/main/jni/farm/farm_crashdump.cpp
+        src/main/jni/farm/farm_progress.cpp
         ${ENGINE_JNI}/render/GLModel.cpp
         ${ENGINE_JNI}/render/GLShader.cpp)
+
+add_library(farm_prusa30_jni STATIC
+        ${ENGINE_ROOT}/prusa30/farm_driver.cpp)
+# The driver TU links into libfarm: farm_native.cpp calls farm::slice_to_gcode.
+# STATIC so the archive member is pulled at libfarm's link — no second .so to
+# package or load (the previous SHARED orphan left the symbol undefined).
+target_link_libraries(farm PRIVATE farm_prusa30_jni)
 
 # Compile against the engine's own source tree (ABI-lockstep) + staged deps.
 # The engine keeps its src/main/jni tree as the single header source, so
@@ -68,12 +85,45 @@ file(GLOB ENGINE_INCLUDE_SUBDIRS "${ENGINE_JNI}/*/")
 # (and any sibling the engine excludes) so the flattened roots stay safe.
 list(FILTER ENGINE_INCLUDE_SUBDIRS EXCLUDE REGEX "/CGAL/?$")
 target_include_directories(farm PRIVATE
-        ${ENGINE_JNI}                       # libslic3r/, bbl/, render/, expat/, clipper/, cereal/, ...
+        ${PRUSA_SRC}/bundled_deps/clipper/include  # 3.0 TBB-allocator clipper; MUST precede ENGINE_JNI or the vendored 2.x clipper/ shadows it (ClipperUtils.hpp PolyPath assign fails)
+        ${ENGINE_JNI}                       # render/, expat/, cereal/, ...
+        ${PRUSA_SRC}/src/libslic3r/include  # ISSUE-210: 3.0 core headers (vendored libslic3r/ deleted)
+        ${ENGINE_ROOT}/prusa30
+        ${ENGINE_ROOT}/prusa30/jni_bridge
+        ${PRUSA_SRC}/src/libslic3r/src
+        ${PRUSA_SRC}/bundled_deps/admesh
+        ${PRUSA_SRC}/bundled_deps/localesutils
+        ${PRUSA_SRC}/bundled_deps/semver
+        ${PRUSA_SRC}/bundled_deps/ankerl
+        ${PRUSA_SRC}/src/slic3r-domain/include
+        ${PRUSA_SRC}/src/slic3r-base/include
+        ${PRUSA_SRC}/src/slic3r-biz-algorithms/include
+        ${PRUSA_SRC}/src/slic3r-biz-arrange/include
+        ${PRUSA_SRC}/src/slic3r-shared/include
+        ${PRUSA_SRC}/src/slic3r-biz-cgal-algorithms/include
+        ${PRUSA_SRC}/src/slic3r-biz-parser/include
+        ${PRUSA_SRC}/src/slic3r-gcode-reader/include
+        ${PRUSA_SRC}/src/slic3r-jthread/include
+        ${PRUSA_SRC}/src/libpgcode/include
+        ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
+        ${ENGINE_ROOT}/build/headers/eigen/include
+        ${ENGINE_ROOT}/build/headers/spdlog/include
+        ${ENGINE_ROOT}/build/headers/fmt/include
+        ${ENGINE_ROOT}/build/headers/cereal/include
+        ${ENGINE_ROOT}/build/headers/nlohmann_json/include
+        ${ENGINE_ROOT}/build/headers/sol2/include
+        ${ENGINE_ROOT}/build/headers/expected/include
+        ${ENGINE_ROOT}/build/headers/magic_enum/include
+        ${PRUSA_GEN}
+        ${ENGINE_ROOT}/prusa30/jniImports/assert/include  # staged libassert (3.0 Assert.hpp)
+        ${ENGINE_ROOT}/prusa30/jniImports/nanosvg/include
+        ${ENGINE_ROOT}/prusa30/jniImports/tbb/include
         ${ENGINE_INCLUDE_SUBDIRS}               # flattened sys-style includes (<expat.h>, <nlopt.h>, ...)
         ${ENGINE_JNI}/render                # flat render headers: GLModel.hpp, GLShader.hpp, bed_utils.hpp
         ${ENGINE_JNI}/libvgcode/include     # vgcode flat include: Viewer.hpp
         ${ENGINE_JNI}/libigl                # <igl/unproject.h>, <igl/copyleft/cgal/...>
         ${ENGINE_JNI}/libnest2d/include     # <libnest2d/...>
+        ${ENGINE_JNI}/LibBGCode
         ${JNI_IMPORTS}/oneTBB/include           # <tbb/...>, <oneapi/tbb/...>
         ${JNI_IMPORTS}/boost/include            # <boost/...>
         ${JNI_IMPORTS}/gmp/include/${ANDROID_ABI}  # <gmp.h>, <gmpxx.h>, <mpfr.h>
@@ -81,11 +131,58 @@ target_include_directories(farm PRIVATE
 )
 
 target_compile_options(farm PRIVATE -fsigned-char)
+target_compile_options(farm_prusa30_jni PRIVATE -fsigned-char)
+
+target_include_directories(farm_prusa30_jni PRIVATE
+        ${ENGINE_ROOT}/prusa30
+        ${PRUSA_SRC}/src/libslic3r/include
+        ${PRUSA_SRC}/src/libslic3r/src
+        ${PRUSA_SRC}/src/slic3r-domain/include
+        ${PRUSA_SRC}/src/slic3r-base/include
+        ${PRUSA_SRC}/src/slic3r-biz-algorithms/include
+        ${PRUSA_SRC}/src/slic3r-biz-arrange/include
+        ${PRUSA_SRC}/src/slic3r-shared/include
+        ${PRUSA_SRC}/src/slic3r-biz-cgal-algorithms/include
+        ${PRUSA_SRC}/src/slic3r-biz-parser/include
+        ${PRUSA_SRC}/src/slic3r-gcode-reader/include
+        ${PRUSA_SRC}/src/slic3r-jthread/include
+        ${PRUSA_SRC}/src/libpgcode/include
+        ${PRUSA_SRC}/bundled_deps/admesh
+        ${PRUSA_SRC}/bundled_deps/localesutils
+        ${PRUSA_SRC}/bundled_deps/semver
+        ${PRUSA_SRC}/bundled_deps/clipper/include
+        ${PRUSA_SRC}/bundled_deps/ankerl
+        ${PRUSA_SRC}/bundled_deps/slic3r-domain-types/include
+        ${ENGINE_ROOT}/build/headers/eigen/include
+        ${ENGINE_ROOT}/build/headers/spdlog/include
+        ${ENGINE_ROOT}/build/headers/fmt/include
+        ${ENGINE_ROOT}/build/headers/cereal/include
+        ${ENGINE_ROOT}/build/headers/nlohmann_json/include
+        ${ENGINE_ROOT}/build/headers/sol2/include
+        ${ENGINE_ROOT}/build/headers/expected/include
+        ${ENGINE_ROOT}/build/headers/magic_enum/include
+        ${ENGINE_ROOT}/prusa30/jniImports/assert/include
+        ${ENGINE_ROOT}/prusa30/jniImports/nanosvg/include
+        ${ENGINE_ROOT}/prusa30/jniImports/tbb/include
+        ${ENGINE_JNI}/libnest2d/include
+        ${ENGINE_JNI}/LibBGCode
+        ${PRUSA_GEN}
+        ${JNI_IMPORTS}/boost/include
+        ${JNI_IMPORTS}/oneTBB/include
+        ${JNI_IMPORTS}/gmp/include/${ANDROID_ABI}
+)
 target_compile_definitions(farm PRIVATE
         -DUSE_TBB -DTBB_USE_CAPTURED_EXCEPTION=0 -DLIBNEST2D_GEOMETRIES_libslic3r
         -DLIBNEST2D_OPTIMIZER_nlopt -DLIBNEST2D_THREADING_tbb -DLIBNEST2D_STATIC
         -DENABLE_OPENGL_ES -DSLIC3R_OPENGL_ES -DUSE_CPP11_REGEX
+        -DJSON_USE_IMPLICIT_CONVERSIONS=0
+        -DSPDLOG_FMT_EXTERNAL
+        -DSLIC3R_YAML_RYML
         -DSLIC3R_VERSION=${SLIC3R_VERSION} -DSLIC3R_BUILD_ID=${SLIC3R_BUILD_ID})
+target_compile_definitions(farm_prusa30_jni PRIVATE
+        -DJSON_USE_IMPLICIT_CONVERSIONS=0
+        -DSPDLOG_FMT_EXTERNAL
+        -DSLIC3R_YAML_RYML)
 
 # libfarm is a shared lib: any Boost/TBB/OCCT/GMP symbol it references resolves
 # from libslic3r.so and the dependencies it loads. Link the engine + JNI log.
@@ -115,4 +212,16 @@ target_link_libraries(farm PRIVATE
         m
         dl
         ${UNWIND_ARCHIVE}
+)
+
+# The prusa30 driver TU (farm_prusa30_jni archive, pulled at this link) uses
+# 3.0's Assert.hpp, whose core libassert runtime is NOT exported by
+# libslic3r.so (only per-type template instantiations are). Link the apk
+# job's freshly staged libassert archives here so -Wl,--no-undefined holds.
+file(GLOB BRIDGE_ASSERT_STATIC_LIBS ${ENGINE_ROOT}/prusa30/jniImports/assert/lib/*.a)
+target_link_libraries(farm PRIVATE ${BRIDGE_ASSERT_STATIC_LIBS})
+
+target_link_libraries(farm_prusa30_jni PRIVATE
+        slic3r
+        ${log-lib}
 )

@@ -30,11 +30,21 @@ ENGINE_LIBS_DIR="$(bash "$REPO/scripts/tests/engine_repro/build_harness.sh" "$EN
 
 echo "engine under test: $ENGINE_LIBS_DIR/libslic3r.so"
 sha256sum "$ENGINE_LIBS_DIR/libslic3r.so" 2>/dev/null | awk '{print "engine sha256:", $1}'
+if [ -f "$ENGINE_LIBS_DIR/.engine_src" ]; then
+    echo "engine src: $(cat "$ENGINE_LIBS_DIR/.engine_src") (want $(git -C "$REPO" rev-parse HEAD:engine 2>/dev/null || echo ?))"
+fi
+
+# libslic3r.so links libgmp/libgmpxx/libmpfr which are staged next to the
+# engine's jniLibs (engine/src/main/jniLibs/<ABI>), not next to the engine
+# output. Include both so the harness links without manual LD setup.
+DEPS_LIBS_DIR="$REPO/engine/src/main/jniLibs/$(basename "$ENGINE_LIBS_DIR")"
+HARNESS_LD_PATH="$ENGINE_LIBS_DIR${DEPS_LIBS_DIR:+:$DEPS_LIBS_DIR}"
+[ -d "$DEPS_LIBS_DIR" ] || HARNESS_LD_PATH="$ENGINE_LIBS_DIR"
 
 run() {
     local name="$1" expect="$2"; shift 2
     local log="$REG/.run.log"
-    LD_LIBRARY_PATH="$ENGINE_LIBS_DIR" "$HARNESS" "$@" >"$log" 2>&1
+    LD_LIBRARY_PATH="$HARNESS_LD_PATH" "$HARNESS" "$@" >"$log" 2>&1
     local rc=$?
     if [ "$rc" -eq "$expect" ]; then
         echo "PASS  $name (exit $rc)"
@@ -62,6 +72,31 @@ run "vector_comma_join_fixed.ini (fixed editor output)" 0 "$REG/vector_comma_joi
 # 3) The legacy ';'-joined vector must still be rejected (guards the engine's
 #    separator contract so an old/mismatched editor cannot silently load).
 run "vector_semicolon_join_broken.ini (legacy editor output)" 2 "$REG/vector_semicolon_join_broken.ini" || fails=$((fails+1))
+
+# 4) Reported 3D-Benchy STL slice on the Flashforge AD5M profile
+#    (0.20mm Standard, Generic PLA, prime tower, auto_brim, Cool Plate)
+#    threw bare ConfigOptionEnumGeneric incompatible-type on a pre-#42
+#    engine. Fixture now carries the runtime machine-limit vectors from
+#    farm_crash_c92115550c. Must apply+validate clean.
+run "user_benchy_ad5m.ini (reported slice config)" 0 "$REG/user_benchy_ad5m.ini" || fails=$((fails+1))
+
+# 5) ConfigOptionEnumsGenericTempl::set() copy semantics, direct. The on-device
+#    "Assigning an incompatible type" (2026-09-09) fires because the coEnums
+#    copy used dynamic_cast, which fails across the libfarm/libslic3r DSO
+#    boundary (duplicated template typeinfo). The fix copies via static_cast on
+#    the shared ConfigOptionInts base; this case guards the copy (incl. the
+#    Templ<true>/<false> cross-variant path) and the type-mismatch throw.
+run "enum-set-check (RTTI-free coEnums copy)" 0 --enum-set-check || fails=$((fails+1))
+
+# 5) Same reported Benchy config against the real STL with paint-relevant
+#    filament counts. The app only resizes per-filament vectors when painting
+#    or palette state requests N > 1; exercise that branch explicitly because
+#    a mismatch there would surface later than config load.
+for benchy_filaments in 1 2 8; do
+  run "user_benchy_ad5m.ini + 3DBenchy.stl filaments=$benchy_filaments" 0 \
+    "$REG/user_benchy_ad5m.ini" "/sdcard/Download/3DBenchy.stl" "$benchy_filaments" \
+    || fails=$((fails+1))
+done
 
 echo
 if [ "$fails" -gt 0 ]; then

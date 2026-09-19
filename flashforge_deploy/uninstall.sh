@@ -11,6 +11,7 @@ echo "[*] Starting Flashforge Iroh Uninstallation"
 # 1. Kill any running iroh processes
 echo "[*] Terminating any active Iroh node daemons..."
 killall iroh 2>/dev/null || true
+killall farm-agent 2>/dev/null || true
 
 # 2. Flush and remove iptables rules
 echo "[*] Reverting network isolation profile on wlan0..."
@@ -30,6 +31,7 @@ if [ -f "/tmp/iroh" ]; then
     echo "[*] Removing volatile memory binary: /tmp/iroh"
     rm -f "/tmp/iroh"
 fi
+rm -f /tmp/phone-*.addr /tmp/phone-*.addr.paired /tmp/farm-agent /tmp/pairing.sh 2>/dev/null || true
 
 # 5. Restore the original start_app.sh backup if available
 if [ -f "$START_APP_SCRIPT.backup" ]; then
@@ -40,7 +42,7 @@ if [ -f "$START_APP_SCRIPT.backup" ]; then
 elif [ -f "$START_APP_SCRIPT" ]; then
     echo "[*] No backup found. Cleaning autostart hooks from $START_APP_SCRIPT..."
     FIREWALL_SCRIPT="$IROH_PERSISTENT_DIR/firewall.sh"
-    grep -vF "$START_COMMAND" "$START_APP_SCRIPT" | grep -vF "$FIREWALL_SCRIPT" > "$START_APP_SCRIPT.tmp"
+    grep -vF "$START_COMMAND" "$START_APP_SCRIPT" | grep -vF "$FIREWALL_SCRIPT" | grep -vF "pairing.sh" > "$START_APP_SCRIPT.tmp"
 
     # Remove empty lines that might have been left over
     sed -i '/^[[:space:]]*$/d' "$START_APP_SCRIPT.tmp"

@@ -16,7 +16,10 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO / ".github/workflows/native-engine-build.yml"
-PINNED_CHECKS = {"engine", "apk"}
+PRUSA30_WORKFLOW = REPO / ".github/workflows/prusa30-headless.yml"
+PINNED_CHECKS = {
+    "engine", "apk", "prusa30-changes", "prusa30-gate",
+}
 MAX_JOB_NAME = 12
 
 
@@ -39,7 +42,6 @@ def main():
     wf = yaml.safe_load(WORKFLOW.read_text())
     jobs = wf.get("jobs", {})
     names = {jid: (j.get("name") or jid) for jid, j in jobs.items()}
-
     for jid, name in names.items():
         shown = name
         matrix = jobs[jid].get("strategy", {}).get("matrix", {}).get("include", [])
@@ -49,12 +51,36 @@ def main():
         if len(shown) > MAX_JOB_NAME:
             failures.append(f"job display name too long ({len(shown)}): {jid} -> {shown!r}")
 
+    prusawf = yaml.safe_load(PRUSA30_WORKFLOW.read_text())
+    prusajobs = prusawf.get("jobs", {})
+    prusanames = {jid: (j.get("name") or jid) for jid, j in prusajobs.items()}
+
     required = ruleset_contexts()
-    print(f"job names: {sorted(names.values())}")
+    print(f"native job names: {sorted(names.values())}")
+    print(f"prusa30 job names: {sorted(prusanames.values())}")
     print(f"required checks: {sorted(required)}")
     for ctx in required:
-        if ctx not in names.values():
-            failures.append(f"required check {ctx!r} matches no job name")
+        if ctx not in list(names.values()) + list(prusanames.values()):
+            failures.append(f"required check {ctx!r} matches no job name in either workflow")
+
+    gate_id = next(
+        (jid for jid, j in prusajobs.items() if (j.get("name") or jid) == "prusa30-gate"),
+        None,
+    )
+    if gate_id is None:
+        failures.append("prusa30-headless.yml must define a job named 'prusa30-gate'")
+    else:
+        gate_needs = prusajobs[gate_id].get("needs", [])
+        prusa30_only = [
+            jid
+            for jid in prusajobs
+            if jid != gate_id and jid != "prusa30-changes"
+        ]
+        missing = set(prusa30_only) - set(gate_needs)
+        if missing:
+            failures.append(
+                f"prusa30-gate must needs: every heavy stage; missing: {sorted(missing)}"
+            )
 
     # OCCT static-link guard: OCCT must be statically linked into libslic3r.so
     # (engine imports .a archives, gc-sections'd) — it must NOT be packaged or
@@ -145,10 +171,10 @@ def main():
         {},
     )
     rel_run = str(rel.get("run", ""))
-    if "readelf -d" not in rel_run or "libTK" not in rel_run or "'Orca Slicer'" not in rel_run:
+    if "readelf -d" not in rel_run or "libTK" not in rel_run or "'CNumericLocalesSetter'" not in rel_run:
         failures.append(
             "engine release-reuse step must run the full quality gate (size, "
-            "no libTK runtime DT_NEEDED, Orca Slicer/Arachne/gmp/mpfr markers) "
+            "no libTK runtime DT_NEEDED, CNumericLocalesSetter/ClipperLib/gmp/mpfr markers) "
             "so a stale .so falls through to a fresh build"
         )
     if "engine_src" not in rel_run or "HEAD:engine" not in rel_run:
@@ -313,15 +339,9 @@ def main():
             "default ~1MB new Thread() stack overflows in Slic3r::Print::apply"
         )
     farm = (REPO / "app/src/main/jni/farm/farm_native.cpp").read_text()
-    m = re.search(
-        r"Java_com_flashforge_farm_slic3r_Native_model_1slice.*?^}",
-        farm, re.S | re.M)
-    body = m.group(0) if m else ""
-    if "make_unique<Print>()" not in body or "make_unique<DynamicPrintConfig>()" not in body:
-        failures.append(
-            "model_slice must heap-allocate Print/DynamicPrintConfig "
-            "(make_unique); stack locals eat the slice thread's stack"
-        )
+    # (2.x heap-allocation lesson retired with the vendored tree: model_slice
+    # is a 3.0 stub until #212 lands the IPrint port. Re-add an equivalent
+    # guard — e.g. no large 3.0 objects by value on the slice thread — then.)
 
     # AutoDispatch dataSync guard: Android 15+ (targetSdk 35) caps dataSync
     # FGS at 6h/24h and kills the app two ways — running past the cap without
@@ -415,17 +435,16 @@ def main():
             "to clean up pre-consolidation pile-ups"
         )
 
-    # coEnums cross-variant guard: ConfigOptionEnumsGenericTempl<true> and
-    # <false> are distinct C++ classes sharing the coEnums tag, so set() must
-    # not dynamic_cast across variants (nullptr->values faults at +8;
-    # 2026-09-07 farm-slice SIGSEGV, fault 0x8, in Templ<false>::set <-
-    # apply_only <- Print::apply). Copy via the shared ConfigOptionInts base.
-    cfg = (REPO / "engine/src/main/jni/libslic3r/Config.hpp").read_text()
-    if "dynamic_cast<const ConfigOptionInts *>(rhs)" not in cfg:
+    # No vendored 2.x tree: engine/src/main/jni/libslic3r/ (Config.hpp,
+    # Config.cpp, PrintObject.cpp) was deleted in the 3.0 replace-in-place
+    # (#210); upstream 3.0 is fetched at build time, never vendored. The
+    # RTTI-free-copy / key-annotated-error / enum-diagnostics lessons below
+    # applied to patched vendored code — re-add equivalents against
+    # engine/prusa30/patches/ if a 3.0 regression ever needs them.
+    if (REPO / "engine/src/main/jni/libslic3r").exists():
         failures.append(
-            "ConfigOptionEnumsGenericTempl::set must copy via the shared "
-            "ConfigOptionInts base (cross-variant Templ<true>/<false> "
-            "dynamic_cast yields nullptr and faults at +8)"
+            "vendored 2.x tree must stay deleted (3.0 is fetched, not "
+            "vendored); re-adding engine/src/main/jni/libslic3r reopens #209"
         )
 
     # Crash-log append guard: the Downloads document must accumulate across
@@ -439,16 +458,7 @@ def main():
             "per export replaces history instead of appending"
         )
 
-    # apply_only diagnostics guard: a bare "incompatible type" from deep in
-    # Print::apply names no key and previously never reached any log
-    # (2026-09-07 slice failure). apply_only must rethrow with the key.
-    conf = (REPO / "engine/src/main/jni/libslic3r/Config.cpp").read_text()
-    if "apply_only '" not in conf:
-        failures.append(
-            "ConfigBase::apply_only must rethrow set() failures with the key "
-            "name (\"apply_only '<key>': ...\"); keyless config errors are "
-            "undiagnosable"
-        )
+    # (apply_only key-annotation lesson retired with the vendored tree; see above.)
 
     # Slice-error logging guard: slice/config failures surface only in a
     # dialog today; they must also append to farm_crash.log via
@@ -459,28 +469,9 @@ def main():
             '"slice", ...) so slice errors reach farm_crash.log, not just a dialog'
         )
 
-    # Region-application diagnostics guard: apply_to_print_region_config does
-    # direct my_opt->set() outside apply_only, so it needs the same key
-    # annotation — it was the remaining keyless "incompatible type" site
-    # (2026-09-07 slice failure).
-    pobj = (REPO / "engine/src/main/jni/libslic3r/PrintObject.cpp").read_text()
-    if "apply_to_print_region_config '" not in pobj:
-        failures.append(
-            "apply_to_print_region_config must rethrow set() failures with "
-            "the key name; keyless region config errors are undiagnosable"
-        )
+    # (region key-annotation lesson retired with the vendored tree; see above.)
 
-    # Enum set() diagnostics guard: both enum set() implementations must
-    # append the dst/src C++ classes (config_type_pair_msg) to the
-    # incompatible-type error — the bare message plus a missing key made the
-    # 2026-09-07 slice failure unidentifiable (demangle offline with c++filt).
-    cfgh = (REPO / "engine/src/main/jni/libslic3r/Config.hpp").read_text()
-    if cfgh.count("config_type_pair_msg") < 3:
-        failures.append(
-            "Config.hpp must define config_type_pair_msg and use it in both "
-            "enum set() type-check throws, so config type mismatches name "
-            "both C++ classes"
-        )
+    # (enum diagnostics lesson retired with the vendored tree; see above.)
 
     # Crash-banner version guard: every farm_crash.log entry must stamp the
     # app version + git commit (BuildConfig), so a report is attributable to
@@ -574,50 +565,85 @@ def main():
             "pull_request runs require manual approval)"
         )
 
-# farm-iroh release-reuse must not stage a stale .so: the cdylib output
-    # depends on BOTH the p2p/ tree AND scripts/build_farm_iroh_android.sh,
-    # so the manifest iroh_src key must cover both; the gate mirrors the
-    # publish quality gate (size/arch/uniffi marker). Cheap to compile, so
-    # reuse only short-circuits a verified-build repeat. (2026-09-07.)
-    iroh = jobs.get("build-iroh", {})
-    irel = next(
-        (
-            s for s in iroh.get("steps", [])
-            if isinstance(s, dict) and s.get("name") == "Restore farm-iroh from release (published build reuse)"
-        ),
-        {},
-    )
-    irel_run = str(irel.get("run", ""))
-    if "iroh_src" not in irel_run or "HEAD:p2p" not in irel_run or "build_farm_iroh_android.sh" not in irel_run:
+    # Model-repo removal guards (2026-09-11 rip-out): the model repository stays
+    # deleted. The P2P transport itself is kept for USB reverse-pairing
+    # (docs/usb-pairing.md) via the shared irohbridge AAR.
+    if "build-iroh" in jobs:
         failures.append(
-            "farm-iroh release-reuse step must compare manifest iroh_src "
-            "against HEAD:p2p + scripts/build_farm_iroh_android.sh and rebuild "
-            "on mismatch; the sha/size/marker gate alone reuses a stale .so"
+            "workflow must not define a build-iroh job (farm-iroh crate removed)"
         )
-    if "AArch64" not in irel_run or "checksum_func_connect" not in irel_run:
+    if "publish-models" in jobs:
         failures.append(
-            "farm-iroh release-reuse step must run the full quality gate "
-            "(size, AArch64, checksum_func_connect uniffi marker) so a stale "
-            ".so falls through to a fresh build"
+            "workflow must not define a publish-models job "
+            "(models/ seed dir + scripts/publish-models.sh deleted)"
         )
-    ipub = next(
-        (
-            s for s in iroh.get("steps", [])
-            if isinstance(s, dict) and s.get("name") == "Publish farm-iroh release"
-        ),
-        {},
-    )
-    if "iroh_src" not in str(ipub.get("run", "")):
+    wf_text = WORKFLOW.read_text()
+    for needle in ("farm-iroh", "libfarm_iroh", "build_farm_iroh",
+                   "publish-models", "models-latest", "ModelRepo", "modelrepo"):
+        if needle in wf_text:
+            failures.append(
+                f"workflow must not reference {needle!r} "
+                "(model-repo stack removed; P2P transport stays for pairing)"
+            )
+            break
+    irohbridge_aar = "com.example.irohapp:irohbridge"
+    if irohbridge_aar not in gradle:
         failures.append(
-            "Publish farm-iroh release must record iroh_src (HEAD:p2p + build "
-            "script) in iroh-manifest.json, or reuse can never detect source "
-            "changes"
+            "app/build.gradle must depend on com.example.irohapp:irohbridge "
+            "(shared P2P engine AAR: pairing accept/dial)"
         )
-    if "refs/heads/main" not in str(ipub.get("if", "")):
+    for needle in ("computer.iroh", "net.java.dev.jna", "security-crypto"):
+        if needle in gradle:
+            failures.append(
+                f"app/build.gradle must not reference {needle!r} "
+                "(farm-iroh/computer.iroh removed)"
+            )
+            break
+    # net-i2p-crypto-eddsa is allowed: pure-Java Ed25519 used only for
+    # phone node-identity derivation (NodeIdentity), not P2P transport.
+    root_gradle = (REPO / "build.gradle").read_text()
+    if "iroh-android-native" not in root_gradle or "GH_PACKAGES_TOKEN" not in root_gradle:
         failures.append(
-            "Publish farm-iroh release must gate on refs/heads/main only "
-            "(rolling release; PR builds upload artifacts instead)"
+            "root build.gradle must declare the GitHub Packages maven repo for "
+            "1337farm/iroh-android-native with GH_PACKAGES_USER/GH_PACKAGES_TOKEN credentials"
         )
+    if apk_job.get("permissions", {}).get("packages") != "read":
+        failures.append(
+            "package-apk must grant packages: read (GITHUB_TOKEN needs it "
+            "to resolve the irohbridge AAR from GitHub Packages)"
+        )
+    for gone in (
+        "app/src/main/java/com/flashforge/farm/modelrepo",
+        "app/src/main/java/com/flashforge/farm/iroh",
+        "app/src/test/java/com/flashforge/farm/modelrepo",
+        "app/src/main/java/com/flashforge/farm/fragment/ModelRepoFragment.java",
+        "app/src/main/java/com/flashforge/farm/fragment/ModelPublishFragment.java",
+        "models",
+        "scripts/publish-models.sh",
+        "scripts/migrate_models_to_iroh.py",
+        "scripts/gen_admin_key.py",
+        "scripts/SEED_RUNBOOK.md",
+        "p2p",
+        "scripts/build_farm_iroh_android.sh",
+        "app/src/main/kotlin/com/flashforge/farm/iroh/IrohSpike.kt",
+    ):
+        if (REPO / gone).exists():
+            failures.append(
+                f"{gone} must stay deleted (P2P/model-repo stack removed)"
+            )
+
+    # Deploy-kit asset sync guard: the app ships byte-identical copies of the
+    # printer scripts from flashforge_deploy/ — editing one side only bricks
+    # provisioning or silently ships a stale script.
+    for name in ("flashforge_init.sh", "uninstall.sh"):
+        a = (REPO / "flashforge_deploy" / name).read_bytes()
+        b = (REPO / "app/src/main/assets" / name).read_bytes()
+        if a != b:
+            failures.append(
+                f"flashforge_deploy/{name} and app/src/main/assets/{name} "
+                "must stay byte-identical (app ships the deploy copy)"
+            )
+            break
 
     # Per-build log-file guard: each build must append to its own Downloads
     # document (name carries the build commit) instead of every crash cycle
@@ -635,15 +661,10 @@ def main():
             "and prune legacy/other-build docs by name comparison"
         )
 
-    # Slice-verbosity guards: failures must carry actionable context — the
-    # native catch attaches a per-key config inventory (def type + actual
-    # C++ class), and the Java slice catch logs paths/thread/memory. A bare
-    # message + stack alone could not identify the 2026-09-07 config culprit.
-    if 'describe_slice_config(*config)' not in farm_native or '__cxa_demangle' not in farm_native:
-        failures.append(
-            "model_slice catch must attach describe_slice_config inventory "
-            "(demangled per-key classes) so config failures are diagnosable offline"
-        )
+    # Slice-verbosity guards: failures must carry actionable context.
+    # (The describe_slice_config-inventory guard retired with the 2.x slice
+    # path; re-add a 3.0 equivalent — e.g. ConfigPack key inventory on
+    # IPrint errors — when #212 lands the port.)
     if 'thread=" + Thread.currentThread' not in bed:
         failures.append(
             "BedFragment slice failure must log paths/thread/memory context, "

@@ -29,8 +29,7 @@ public class GLShadersManager {
             SHADER_PRINTBED = "printbed",
             SHADER_TOOLPATHS_COG = "toolpaths_cog",
             SHADER_VARIABLE_LAYER_HEIGHT = "variable_layer_height",
-            SHADER_WIREFRAME = "wireframe",
-            SHADER_FARM_INTRO = "farm_intro";
+            SHADER_WIREFRAME = "wireframe";
 
     @StringDef(value = {
             SHADER_BACKGROUND,
@@ -44,12 +43,10 @@ public class GLShadersManager {
             SHADER_IMGUI,
             SHADER_MM_CONTOUR,
             SHADER_MM_GOURAUD,
-            SHADER_GOURAUD,
             SHADER_PRINTBED,
             SHADER_TOOLPATHS_COG,
             SHADER_VARIABLE_LAYER_HEIGHT,
-            SHADER_WIREFRAME,
-            SHADER_FARM_INTRO
+            SHADER_WIREFRAME
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ShaderType {}

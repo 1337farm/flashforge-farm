@@ -1,0 +1,27 @@
+# 0003: FindNLopt must not re-root staged-prefix searches under the NDK sysroot.
+# The Android toolchain sets CMAKE_FIND_ROOT_PATH_MODE_*=ONLY, so absolute PATHS
+# get prefixed with the sysroot and staged finds miss. FindBoost works around this
+# with NO_CMAKE_FIND_ROOT_PATH; apply the same to NLopt's lib+header finds.
+diff --git a/cmake/modules/FindNLopt.cmake b/cmake/modules/FindNLopt.cmake
+--- a/cmake/modules/FindNLopt.cmake
++++ b/cmake/modules/FindNLopt.cmake
+@@ -76,7 +76,8 @@
+ 	find_library(NLopt_LIBS
+ 		NAMES ${_NLopt_LIB_NAMES}
+ 		PATHS ${NLopt_LIBRARY_DIR}
+-		NO_DEFAULT_PATH)
++		NO_DEFAULT_PATH
++		NO_CMAKE_FIND_ROOT_PATH)
+ 	if(NOT NLopt_LIBS)
+ 		set(NLopt_FOUND FALSE)
+ 		set(NLopt_ERROR_REASON "${NLopt_ERROR_REASON} Cannot find NLopt library '${_NLopt_LIB_NAMES}' in '${NLopt_LIBRARY_DIR}'.")
+@@ -87,7 +88,8 @@
+ 	find_file(_NLopt_HEADER_FILE
+ 		NAMES ${_NLopt_HEADER_FILE_NAME}
+ 		PATHS ${NLopt_INCLUDE_DIR}
+-		NO_DEFAULT_PATH)
++		NO_DEFAULT_PATH
++		NO_CMAKE_FIND_ROOT_PATH)
+ 	if(NOT _NLopt_HEADER_FILE)
+ 		set(NLopt_FOUND FALSE)
+ 		set(NLopt_ERROR_REASON "${NLopt_ERROR_REASON} Cannot find NLopt header file '${_NLopt_HEADER_FILE_NAME}' in '${NLopt_INCLUDE_DIR}'.")

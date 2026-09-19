@@ -85,7 +85,7 @@ Mostly works; **outer walls only take painted color ~30–44%** even when fully 
 
 ## OTHER PENDING
 - **Cut tool** (task #6): planes, dowels, connectors. Not started.
-- **Handy calibration models** (task #4): `CalibrationModelsMenu` loads `assets/models/<key>.stl` (3dbenchy, xyz_cube, bunny, fox, box, cone, cylinder, pyramid, sphere). May want more bundled.
+- **Handy calibration models** (task #4): ~~`CalibrationModelsMenu` loads `assets/models/<key>.stl` (3dbenchy, xyz_cube, bunny, fox, box, cone, cylinder, pyramid, sphere). May want more bundled.~~ Removed 2026-09-11 with the model-repo rip-out; the Calibrations menu keeps pressure-advance entries only.
 
 ## DONE earlier (don't redo)
 - Performance button (8sp); perf keeps bottom layers + never culls overhangs/bridges (`ViewerImpl.cpp`: removed BridgeInfill from culled `is_internal`); perf OFF by default.

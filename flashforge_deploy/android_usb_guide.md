@@ -87,6 +87,8 @@ Once you have the `Uri` representing the USB root, use `DocumentFile` to create 
 2. `flashforge_init.sh` (The main deployment script)
 3. `uninstall.sh` (The removal script)
 4. `mode.txt` (Contains either "RAM" or "PERSISTENT")
+5. `iroh_key.priv` (The printer identity key)
+6. `phone-<printer>-<phonesuffix>.addr` (Reverse-pairing payload: this phone's NodeId + one-time token so the printer can dial back first — see docs/usb-pairing.md)
 
 ```kotlin
 import android.net.Uri

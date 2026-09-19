@@ -5,6 +5,10 @@
 
 #include "gzguts.h"
 
+#ifndef _WIN32
+#  include <unistd.h> /* read/close (hard error under Clang 17, NDK r26) */
+#endif
+
 /* Use read() to load a buffer -- return -1 on error, otherwise 0.  Read from
    state->fd, and update state->eof, state->err, and state->msg as appropriate.
    This function needs to loop on read(), since read() is not guaranteed to

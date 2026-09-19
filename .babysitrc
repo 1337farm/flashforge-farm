@@ -1,0 +1,15 @@
+# .babysitrc values for flashforge-farm (KEY=VALUE, sourced by babysit-pr.sh
+# from 1337farm/pr-babysitter; install: curl -fsSL
+# https://raw.githubusercontent.com/1337farm/pr-babysitter/v1/babysit-pr.sh,
+# and by scripts/babysit.sh for its --workflow/APK defaults).
+# CLI flags (--artifact=… etc.) override these.
+APK_ARTIFACT="FlashForgeFarm-Debug-APK"
+APK_STAGE_DIR=".babysit-apks"
+MAIN_WORKFLOW="native-engine-build.yml"
+PRUSA30_WORKFLOW="prusa30-headless.yml"
+RELEASE_TAG="farm-apk-latest"
+# Prune is scoped to --apk output dirs (only script downloads live there),
+# so keep the apk pattern broad but the log pattern exact: farm crash
+# exports are farm_crash_<commit>.log; a bare *.log would eat unrelated logs.
+APK_GLOB="FlashForgeFarm_*.apk"
+LOG_GLOB="farm_crash_*.log"

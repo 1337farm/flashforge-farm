@@ -21,6 +21,7 @@ import com.flashforge.farm.boot.AppBoot;
 import com.flashforge.farm.boot.CheckUpdateJsonTask;
 import com.flashforge.farm.boot.ClearModelCacheTask;
 import com.flashforge.farm.boot.LoadSlic3rConfigTask;
+import com.flashforge.farm.boot.PairingTask;
 import com.flashforge.farm.boot.PrefsTask;
 import com.flashforge.farm.boot.PrintConfigWarmupTask;
 import com.flashforge.farm.boot.TrueTimeTask;
@@ -59,6 +60,7 @@ public class FarmApp extends Application {
     // 5+ = other calibration modes
     public static int PENDING_CALIB_MODE = 0;
     public static double PENDING_CALIB_START = 0, PENDING_CALIB_END = 0, PENDING_CALIB_STEP = 0;
+    public static String PENDING_CALIB_ITEM = null;
 
     public static void clearLiveDiffs() {
         LIVE_DIFF_PRINTER.values.clear();
@@ -82,6 +84,13 @@ public class FarmApp extends Application {
     public void onCreate() {
         super.onCreate();
         INSTANCE = this;
+        // Issue #47: the Application object is also created inside
+        // isolatedProcess services (slice sandbox), which have no
+        // filesystem/network permissions. Skip all startup work there; the
+        // sandbox service needs nothing beyond the loaded Application.
+        if (android.os.Build.VERSION.SDK_INT >= 28 && android.os.Process.isIsolated()) {
+            return;
+        }
         exportPendingCrashesToDownloads();
         AppBoot.run(Arrays.asList(
                 new PrefsTask(),
@@ -91,13 +100,14 @@ public class FarmApp extends Application {
                 new PrintConfigWarmupTask(),
                 new CheckUpdateJsonTask(),
                 new ClearModelCacheTask(),
-                new LoadSlic3rConfigTask()
+                new LoadSlic3rConfigTask(),
+                new PairingTask()
         ));
         Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
             StringWriter sw = new StringWriter();
             PrintWriter pw = new PrintWriter(sw);
             pw.println("=== Java uncaught exception ===");
-            pw.println("thread: " + t.getName() + " (" + t.getId() + ")");
+            pw.println("thread: " + t.getName() + " (" + t.threadId() + ")");
             pw.println("time  : " + new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
                     .format(new java.util.Date()));
             pw.println("device: " + android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL +
@@ -167,7 +177,14 @@ public class FarmApp extends Application {
             // Persist to Downloads immediately: a report must never wait for
             // an app restart to be visible. Best-effort; never mask the crash.
             try {
-                exportPendingCrashesToDownloads();
+        exportPendingCrashesToDownloads();
+        // Install the native signal handler NOW, not lazily on first slice:
+        // a crash before any Native.* reference would otherwise leave no log.
+        try {
+            com.flashforge.farm.slic3r.Native.ensureLoaded();
+        } catch (Throwable t) {
+            android.util.Log.e("FarmApp", "native load failed", t);
+        }
             } catch (Exception ignored) {
             }
         } catch (Exception ignored) {

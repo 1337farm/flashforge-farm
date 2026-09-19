@@ -1,4 +1,4 @@
-// Minimal stub for libnoise — OrcaSlicer Mobile Android build
+// Minimal stub for libnoise — PrusaSlicer Mobile Android build
 // Provides just enough API surface for FuzzySkin.cpp to compile
 #ifndef LIBNOISE_NOISE_H_
 #define LIBNOISE_NOISE_H_

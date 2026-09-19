@@ -1,0 +1,14 @@
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 98fa530..48736a5 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -43,7 +43,8 @@ if (SLIC3R_GUI)
+         add_subdirectory(slic3r-shared-wx)
+     endif()
+ else()
+-    message(FATAL_ERROR "Non-GUI build is not supported yet.")
++    # Headless (Non-GUI) build: the headless module set above is already added
++    # unconditionally. Android slice core only — no GUI app shell.
+ endif ()
+ 
+ if (SLIC3R_BUILD_TESTS)

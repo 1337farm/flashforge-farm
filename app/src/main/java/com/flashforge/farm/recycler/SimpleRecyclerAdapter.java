@@ -11,7 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class SimpleRecyclerAdapter extends RecyclerView.Adapter {
+public class SimpleRecyclerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private Map<Class<?>, Integer> viewType = new HashMap<>();
     private Map<Integer, SimpleRecyclerItem> viewCreator = new HashMap<>();
     private int lastType;
@@ -24,10 +24,10 @@ public class SimpleRecyclerAdapter extends RecyclerView.Adapter {
         return new RecyclerView.ViewHolder(viewCreator.get(viewType).onCreateView(parent.getContext())) {};
     }
 
-    /** @noinspection unchecked*/
+    @SuppressWarnings("unchecked")
     @Override
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
-        items.get(position).onBindView(holder.itemView);
+        ((SimpleRecyclerItem<android.view.View>) items.get(position)).onBindView(holder.itemView);
     }
 
     @Override
@@ -36,8 +36,8 @@ public class SimpleRecyclerAdapter extends RecyclerView.Adapter {
     }
 
     @SuppressLint("NotifyDataSetChanged")
-    public void setItems(List<SimpleRecyclerItem> items) {
-        this.items = items;
+    public void setItems(List<? extends SimpleRecyclerItem> items) {
+        this.items = new ArrayList<SimpleRecyclerItem>(items);
         notifyDataSetChanged();
     }
 

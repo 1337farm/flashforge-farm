@@ -39,6 +39,7 @@ public class PrintConfigDef {
     private final static Map<Pair<Class<?>, String>, Field> fieldMap = new HashMap<Pair<Class<?>, String>, Field>() {
         @Nullable
         @Override
+        @SuppressWarnings("unchecked")
         public Field get(@Nullable Object key) {
             Field f = super.get(key);
             if (f == null) {
@@ -77,7 +78,7 @@ public class PrintConfigDef {
         }
     }
 
-    private static final java.util.Map<String, String> ORCA_LABELS = new java.util.HashMap<String, String>() {{
+    private static final java.util.Map<String, String> PRUSA_LABELS = new java.util.HashMap<String, String>() {{
         // Wall / perimeter renames
         put("perimeters",                          "Wall loops");
         put("extra_perimeters",                    "Extra walls");
@@ -157,13 +158,13 @@ public class PrintConfigDef {
     public static PrintConfigDef getInstance() {
         if (instance == null) {
             Native.get_print_config_def(instance = new PrintConfigDef());
-            applyOrcaLabels(instance);
+            applyPrusaLabels(instance);
         }
         return instance;
     }
 
-    private static void applyOrcaLabels(PrintConfigDef def) {
-        for (java.util.Map.Entry<String, String> entry : ORCA_LABELS.entrySet()) {
+    private static void applyPrusaLabels(PrintConfigDef def) {
+        for (java.util.Map.Entry<String, String> entry : PRUSA_LABELS.entrySet()) {
             ConfigOptionDef opt = def.options.get(entry.getKey());
             if (opt != null) {
                 opt.label = entry.getValue();

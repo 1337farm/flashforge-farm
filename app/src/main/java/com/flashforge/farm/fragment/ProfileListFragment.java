@@ -212,7 +212,7 @@ import com.flashforge.farm.view.ProfileDropdownView;
                 boolean drawn = false;
                 for (int i = 0; i < getChildCount(); i++) {
                     View ch = getChildAt(i);
-                    int pos = getChildViewHolder(ch).getAdapterPosition();
+                    int pos = getChildViewHolder(ch).getBindingAdapterPosition();
                     if (pos == -1 || ch.getAlpha() < 1) continue;
 
                     boolean top = currentList.get(pos).title != null || currentList.get(pos).hasSpecialType();
@@ -249,7 +249,7 @@ import com.flashforge.farm.view.ProfileDropdownView;
                 if (startI != -1) {
                     View ch = getChildAt(startI);
                     View last = getChildAt(getChildCount() - 1);
-                    boolean bottom = getChildViewHolder(last).getAdapterPosition() == getAdapter().getItemCount() - 1;
+                    boolean bottom = getChildViewHolder(last).getBindingAdapterPosition() == getAdapter().getItemCount() - 1;
 
                     c.drawRoundRect(0, ch.getTop() + ch.getTranslationY(), getWidth(), bottom ? ViewUtils.lerp(ch.getBottom(), last.getBottom(), last.getAlpha()) : getHeight() + ViewUtils.dp(32), ViewUtils.dp(32), ViewUtils.dp(32), bgPaint);
                     drawn = true;
@@ -273,7 +273,7 @@ import com.flashforge.farm.view.ProfileDropdownView;
             }
         };
         recyclerView.setItemAnimator(new CubicBezierItemAnimator());
-        recyclerView.setAdapter(new RecyclerView.Adapter() {
+        recyclerView.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             private final static int TYPE_TITLE = 0, TYPE_SIMPLE = 2;
 
             private Map<Class<?>, Integer> viewType = new HashMap<>();
@@ -298,6 +298,7 @@ import com.flashforge.farm.view.ProfileDropdownView;
             }
 
             @Override
+            @SuppressWarnings({"unchecked", "rawtypes"})
             public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position, @NonNull List payloads) {
                 if (payloads.contains(ROTATION_PAYLOAD)) {
                     CategoryHolderView holderView = (CategoryHolderView) holder.itemView;
@@ -323,10 +324,11 @@ import com.flashforge.farm.view.ProfileDropdownView;
                     }
                     return;
                 }
-                super.onBindViewHolder(holder, position, payloads);
+                super.onBindViewHolder(holder, position, new java.util.ArrayList<>(payloads));
             }
 
             @SuppressLint("RecyclerView")
+            @SuppressWarnings({"unchecked", "rawtypes"})
             @Override
             public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
                 ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) holder.itemView.getLayoutParams();
@@ -339,7 +341,7 @@ import com.flashforge.farm.view.ProfileDropdownView;
 default: {
                         OptionElement el = currentList.get(position).optionEl;
                         el.boundIndex = position;
-                        el.simpleItem.onBindView(holder.itemView);
+                        bindSimpleItem(el.simpleItem, holder.itemView);
                         break;
                     }
                     case TYPE_TITLE: {
@@ -361,9 +363,9 @@ default: {
 
                             boolean unfold = !unfolded.get(w.categoryIndex, false);
                             unfolded.put(w.categoryIndex, unfold);
-                            notifyItemChanged(holder.getAdapterPosition(), ROTATION_PAYLOAD);
+                            notifyItemChanged(holder.getBindingAdapterPosition(), ROTATION_PAYLOAD);
 
-                            int i = holder.getAdapterPosition() + 1;
+                            int i = holder.getBindingAdapterPosition() + 1;
                             List<OptionWrapper> l = categoryElements.get(w.categoryIndex);
                             if (l != null) {
                                 if (unfold) {
@@ -407,6 +409,11 @@ default: {
             public int getItemCount() {
                 return currentList.size();
             }
+
+            @SuppressWarnings({"unchecked", "rawtypes"})
+            private void bindSimpleItem(SimpleRecyclerItem item, View view) {
+                item.onBindView(view);
+            }
         });
         setConfigItems(getConfigItems());
         ll.addView(recyclerView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
@@ -434,7 +441,7 @@ default: {
             if (sb.length() > 0) {
                 ScrollView scrollView = new ScrollView(ctx);
                 TextView subtitle = new TextView(ctx);
-                subtitle.setTextAppearance(ctx, com.google.android.material.R.style.MaterialAlertDialog_Material3_Body_Text);
+                androidx.core.widget.TextViewCompat.setTextAppearance(subtitle, com.google.android.material.R.style.MaterialAlertDialog_Material3_Body_Text);
                 subtitle.setTextColor(ThemesRepo.getColor(android.R.attr.textColorSecondary));
                 subtitle.setText(sb.toString());
                 subtitle.setPadding(ViewUtils.dp(24), ViewUtils.dp(12), ViewUtils.dp(24), ViewUtils.dp(12));
@@ -815,7 +822,7 @@ default: {
                         if (!TextUtils.isEmpty(msg)) {
                             ScrollView scrollView = new ScrollView(ctx);
                             TextView subtitle = new TextView(ctx);
-                            subtitle.setTextAppearance(ctx, com.google.android.material.R.style.MaterialAlertDialog_Material3_Body_Text);
+                            androidx.core.widget.TextViewCompat.setTextAppearance(subtitle, com.google.android.material.R.style.MaterialAlertDialog_Material3_Body_Text);
                             subtitle.setTextColor(ThemesRepo.getColor(android.R.attr.textColorSecondary));
                             subtitle.setText(msg);
                             subtitle.setPadding(ViewUtils.dp(24), ViewUtils.dp(12), ViewUtils.dp(24), ViewUtils.dp(12));

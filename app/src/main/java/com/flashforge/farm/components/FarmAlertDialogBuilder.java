@@ -1,6 +1,8 @@
 package com.flashforge.farm.components;
 
 import android.annotation.SuppressLint;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.database.DataSetObserver;
@@ -12,6 +14,7 @@ import android.view.ViewGroup;
 import android.widget.ListAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -32,6 +35,28 @@ public class FarmAlertDialogBuilder extends MaterialAlertDialogBuilder {
 
     public FarmAlertDialogBuilder(@NonNull Context context, int overrideThemeResId) {
         super(context, overrideThemeResId);
+    }
+
+    public static void copyToClipboard(@NonNull Context context, @NonNull CharSequence text) {
+        ClipboardManager cm = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+        if (cm != null) {
+            cm.setPrimaryClip(ClipData.newPlainText("error", text));
+            Toast.makeText(context, R.string.ErrorCopied, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    public static AlertDialog showError(@NonNull Context context, @NonNull CharSequence title, @Nullable CharSequence message) {
+        CharSequence msg = message == null ? "" : message;
+        return new FarmAlertDialogBuilder(context)
+                .setTitle(title)
+                .setMessage(msg)
+                .setNeutralButton(R.string.ErrorCopy, (d, w) -> copyToClipboard(context, title + "\n" + msg))
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
+    }
+
+    public static AlertDialog showError(@NonNull Context context, int titleResId, @Nullable CharSequence message) {
+        return showError(context, context.getString(titleResId), message);
     }
 
     @NonNull

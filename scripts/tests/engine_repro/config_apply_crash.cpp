@@ -171,10 +171,44 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    // Direct exercise of ConfigOptionEnumsGenericTempl::set(), the site of the
+    // on-device "Assigning an incompatible type" throw (2026-09-09). The fix
+    // copies via static_cast on the shared ConfigOptionInts base instead of
+    // dynamic_cast, because the two DSOs (libfarm.so / libslic3r.so) each
+    // compile their own typeinfo for the template — a cross-boundary
+    // dynamic_cast fails even for identical typeid names. Same-DSO this sanity
+    // check verifies the copy semantics (incl. the Templ<true>/<false>
+    // cross-variant case) survive the change.
+    if (ini_path == "--enum-set-check") {
+        ConfigOptionEnumsGenericTempl<false> dst_nullable;
+        ConfigOptionEnumsGenericTempl<true>  src_variant;   // cross-variant copy
+        ConfigOptionEnumsGenericTempl<false> dst_multi;
+        src_variant.values = { 1, 2, 3 };
+        dst_nullable.values = { 9 };
+        dst_multi.values = { 7, 8 };
+
+        ConfigOption* p = &src_variant;
+        dst_nullable.set(p);   // ConfigOption* indirection: no static_cast at call
+        if (dst_nullable.values != std::vector<int>({1, 2, 3})) {
+            std::fprintf(stderr, "REPRO_ERROR enum set cross-variant copy failed\n");
+            return 2;
+        }
+        ConfigOptionEnumsGenericTempl<false> self;
+        ConfigOption* q = &self;
+        self.values = { 42 };
+        dst_multi.set(q);
+        if (dst_multi.values != std::vector<int>({42})) {
+            std::fprintf(stderr, "REPRO_ERROR enum set same-type copy failed\n");
+            return 2;
+        }
+        log_marker("enum-set-check OK (cross-variant + same-type)");
+        return 0;
+    }
+
     // Positional: [model.stl] [filaments]; explicit: --3mf <file> (mirrors the
     // JNI model_read_from_file path), --stl <file>, and --scope 'key=value'
     // (repeatable) which injects a per-OBJECT config entry the same way a
-    // Bambu 3MF's model metadata does (DynamicPrintConfig::set_deserialize).
+    // legacy 3MF's model metadata does (DynamicPrintConfig::set_deserialize).
     std::string stl_path;
     std::string mf3_path;
     std::vector<std::pair<std::string, std::string>> scope_entries;
@@ -263,7 +297,7 @@ int main(int argc, char** argv) {
             log_marker("synthetic box object added: %zu volume(s)", obj->volumes.size());
         }
 
-        // Inject per-object config entries the way a Bambu 3MF's model
+        // Inject per-object config entries the way a legacy 3MF's model
         // metadata does (DynamicPrintConfig::set_deserialize, enabling the
         // same substitutions the JNI uses inside Model::read_from_file).
         if (!scope_entries.empty() && model.objects.empty()) {

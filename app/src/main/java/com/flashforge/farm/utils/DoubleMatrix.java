@@ -42,7 +42,7 @@ import androidx.annotation.NonNull;
 public class DoubleMatrix {
 
     /** Temporary memory for operations that need temporary matrix data. */
-    private static final ThreadLocal<double[]> ThreadTmp = new ThreadLocal() {
+    private static final ThreadLocal<double[]> ThreadTmp = new ThreadLocal<double[]>() {
         @Override protected double[] initialValue() {
             return new double[32];
         }

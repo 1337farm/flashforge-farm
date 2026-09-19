@@ -32,13 +32,16 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.activity.OnBackPressedCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
-import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.dynamicanimation.animation.FloatValueHolder;
 import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
@@ -105,9 +108,8 @@ public class SetupActivity extends AppCompatActivity {
     public final static String EXTRA_ADD_PRINTER = "add_printer";
 
     private final static String TAG = "SetupActivity";
-    private final static int REQUEST_CODE_IMPORT_SETUP_PROFILE = 1001;
 
-    private static final String ORCA_ASSET_DIR = "orca_profiles";
+    private static final String PROFILE_ASSET_DIR = "profiles";
 
     private final static int PROFILES_INDEX = 2;
 
@@ -145,9 +147,26 @@ public class SetupActivity extends AppCompatActivity {
         client.setLoggingEnabled(false);
     }
 
+    private final ActivityResultLauncher<Intent> profilePickerLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            r -> { if (r.getResultCode() == Activity.RESULT_OK && r.getData() != null) loadProfileFromPicker(r.getData().getData()); });
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (pager.getCurrentItem() == PROFILES_INDEX + 1 && profilesItem != null && profilesItem.useCustomProfile) {
+                    pager.setCurrentItem(1, true);
+                } else if (pager.getCurrentItem() > 0) {
+                    pager.setCurrentItem(pager.getCurrentItem() - 1, true);
+                } else {
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                }
+            }
+        });
         EdgeToEdge.enable(this);
 
         about = getIntent().getBooleanExtra(EXTRA_ABOUT, false);
@@ -351,32 +370,24 @@ public class SetupActivity extends AppCompatActivity {
 
         fl.addView(pager, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         ViewCompat.setOnApplyWindowInsetsListener(fl, (v2, insets) -> {
-            Insets systemBars = insets.getSystemWindowInsets();
+            androidx.core.graphics.Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             pager.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) title.getLayoutParams();
             params.leftMargin = systemBars.left;
             params.topMargin = systemBars.top;
             params.rightMargin = systemBars.right;
             params.bottomMargin = systemBars.bottom;
-            return insets.consumeSystemWindowInsets();
+            return WindowInsetsCompat.CONSUMED;
         });
         setContentView(fl);
 
         // Pre-populate FlashForge Farm as the only bundled profile source
-        ProfilesRepo orcaRepo = new ProfilesRepo();
-        orcaRepo.name = getString(R.string.AppName);
-        orcaRepo.description = getString(R.string.RepoBundledProfilesDescription);
-        orcaRepo.localAssets = true;
-        orcaRepo.checked = true;
-        repos.add(orcaRepo);
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_CODE_IMPORT_SETUP_PROFILE && resultCode == Activity.RESULT_OK && data != null) {
-            loadProfileFromPicker(data.getData());
-        }
+        ProfilesRepo profileRepo = new ProfilesRepo();
+        profileRepo.name = getString(R.string.AppName);
+        profileRepo.description = getString(R.string.RepoBundledProfilesDescription);
+        profileRepo.localAssets = true;
+        profileRepo.checked = true;
+        repos.add(profileRepo);
     }
 
     private void openProfilePicker() {
@@ -390,7 +401,7 @@ public class SetupActivity extends AppCompatActivity {
                 "application/zip"
         });
         try {
-            startActivityForResult(intent, REQUEST_CODE_IMPORT_SETUP_PROFILE);
+            profilePickerLauncher.launch(intent);
         } catch (Exception e) {
             new FarmAlertDialogBuilder(this)
                     .setTitle(R.string.MenuFileImportProfilesFailed)
@@ -414,14 +425,14 @@ public class SetupActivity extends AppCompatActivity {
 
         String lowerName = fileName.toLowerCase(Locale.ROOT);
         Toast.makeText(this, "Loading profile…", Toast.LENGTH_SHORT).show();
-        if (isOrcaBundleFile(lowerName)) {
-            loadOrcaProfileBundle(uri);
+        if (isProfileBundleFile(lowerName)) {
+            loadProfileBundle(uri);
             return;
         }
         if (!lowerName.endsWith(".ini")) {
             new FarmAlertDialogBuilder(this)
                     .setTitle(R.string.MenuFileImportProfilesFailed)
-                    .setMessage("Choose an Orca .orca_printer/.orca_filament profile or an exported .ini profile.")
+                    .setMessage("Choose an .prusa_printer/.prusa_filament profile or an exported .ini profile.")
                     .setPositiveButton(android.R.string.ok, null)
                     .show();
             return;
@@ -439,16 +450,16 @@ public class SetupActivity extends AppCompatActivity {
         });
     }
 
-    private boolean isOrcaBundleFile(String fileName) {
-        return fileName.endsWith(".orca_printer") || fileName.endsWith(".orca_filament") || fileName.endsWith(".orca_process") || fileName.endsWith(".zip");
+    private boolean isProfileBundleFile(String fileName) {
+        return fileName.endsWith(".prusa_printer") || fileName.endsWith(".prusa_filament") || fileName.endsWith(".prusa_process") || fileName.endsWith(".zip");
     }
 
-    private void loadOrcaProfileBundle(Uri uri) {
+    private void loadProfileBundle(Uri uri) {
         IOUtils.IO_POOL.submit(() -> {
             File copiedArchive = null;
-            File extractDir = new File(FarmApp.getModelCacheDir(), "setup_orca_conv_" + UUID.randomUUID());
+            File extractDir = new File(FarmApp.getModelCacheDir(), "setup_profile_conv_" + UUID.randomUUID());
             try {
-                copiedArchive = File.createTempFile("setup_orca_conv_", ".zip", FarmApp.getModelCacheDir());
+                copiedArchive = File.createTempFile("setup_profile_conv_", ".zip", FarmApp.getModelCacheDir());
                 try (InputStream in = getContentResolver().openInputStream(uri);
                      FileOutputStream fos = new FileOutputStream(copiedArchive)) {
                     if (in == null) {
@@ -465,18 +476,18 @@ public class SetupActivity extends AppCompatActivity {
                     throw new IOException("Failed to create temporary extraction directory");
                 }
 
-                String manifest = Native.orca_bundle_read(copiedArchive.getAbsolutePath(), extractDir.getAbsolutePath());
+                String manifest = Native.profile_bundle_read(copiedArchive.getAbsolutePath(), extractDir.getAbsolutePath());
                 if (manifest == null) {
-                    throw new IOException("Failed to read Orca profile bundle");
+                    throw new IOException("Failed to read profile bundle");
                 }
 
                 JSONObject root = new JSONObject(manifest);
                 JSONObject bundle = new JSONObject(root.getString("bundle_structure_json"));
                 if (!bundle.optString("bundle_type", "").endsWith("config bundle")) {
-                    throw new IOException(getString(R.string.OrcaConversionNotAConfigBundle));
+                    throw new IOException(getString(R.string.ProfileConversionNotAConfigBundle));
                 }
 
-                saveImportedProfile(convertOrcaBundleToConfig(root));
+                saveImportedProfile(convertProfileBundleToConfig(root));
             } catch (Exception e) {
                 showProfileImportError(e);
             } finally {
@@ -489,7 +500,7 @@ public class SetupActivity extends AppCompatActivity {
         });
     }
 
-    private Slic3rConfigWrapper convertOrcaBundleToConfig(JSONObject root) throws Exception {
+    private Slic3rConfigWrapper convertProfileBundleToConfig(JSONObject root) throws Exception {
         JSONObject bundle = new JSONObject(root.getString("bundle_structure_json"));
 
         HashMap<String, String> files = new HashMap<>();
@@ -507,7 +518,7 @@ public class SetupActivity extends AppCompatActivity {
             for (int i = 0; i < arr.length(); i++) {
                 String name = arr.getString(i);
                 names.add(name);
-                stripped.add(stripOrcaProfileName(name));
+                stripped.add(stripProfileName(name));
             }
             addInstalledProfileTitles(stripped, FarmApp.CONFIG != null ? FarmApp.CONFIG.printConfigs : null);
             for (String name : names) {
@@ -524,7 +535,7 @@ public class SetupActivity extends AppCompatActivity {
             for (int i = 0; i < arr.length(); i++) {
                 String name = arr.getString(i);
                 names.add(name);
-                stripped.add(stripOrcaProfileName(name));
+                stripped.add(stripProfileName(name));
             }
             addInstalledProfileTitles(stripped, FarmApp.CONFIG != null ? FarmApp.CONFIG.filamentConfigs : null);
             for (String name : names) {
@@ -541,7 +552,7 @@ public class SetupActivity extends AppCompatActivity {
             for (int i = 0; i < arr.length(); i++) {
                 String name = arr.getString(i);
                 names.add(name);
-                stripped.add(stripOrcaProfileName(name));
+                stripped.add(stripProfileName(name));
             }
             addInstalledProfileTitles(stripped, FarmApp.CONFIG != null ? FarmApp.CONFIG.printerConfigs : null);
             for (String name : names) {
@@ -554,7 +565,7 @@ public class SetupActivity extends AppCompatActivity {
         return w;
     }
 
-    private String stripOrcaProfileName(String path) {
+    private String stripProfileName(String path) {
         int slash = path.indexOf('/');
         int start = slash >= 0 ? slash + 1 : 0;
         int end = path.lastIndexOf('.');
@@ -707,18 +718,18 @@ public class SetupActivity extends AppCompatActivity {
         IOUtils.IO_POOL.execute(() -> {
             List<Slic3rConfigWrapper> vendorProfiles = new ArrayList<>();
             try {
-                String[] files = getAssets().list(ORCA_ASSET_DIR);
+                String[] files = getAssets().list(PROFILE_ASSET_DIR);
                 if (files != null) {
                     Arrays.sort(files);
                     for (String file : files) {
                         if (!file.endsWith(".ini")) {
                             continue;
                         }
-                        try (InputStream in = getAssets().open(ORCA_ASSET_DIR + "/" + file)) {
+                        try (InputStream in = getAssets().open(PROFILE_ASSET_DIR + "/" + file)) {
                             Slic3rConfigWrapper cfg = new Slic3rConfigWrapper(in);
                             vendorProfiles.add(cfg);
                         } catch (IOException e) {
-                            Log.w(TAG, "Failed to load local Orca profile asset " + file, e);
+                            Log.w(TAG, "Failed to load local profile asset " + file, e);
                         }
                     }
                 }
@@ -779,17 +790,6 @@ public class SetupActivity extends AppCompatActivity {
 
             items.add(new FinishItem());
             adapter.setItems(items);
-        }
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (pager.getCurrentItem() == PROFILES_INDEX + 1 && profilesItem != null && profilesItem.useCustomProfile) {
-            pager.setCurrentItem(1, true);
-        } else if (pager.getCurrentItem() > 0) {
-            pager.setCurrentItem(pager.getCurrentItem() - 1, true);
-        } else {
-            super.onBackPressed();
         }
     }
 
@@ -955,7 +955,7 @@ public class SetupActivity extends AppCompatActivity {
             loadTitle.setTypeface(ViewUtils.getTypeface(ViewUtils.ROBOTO_MEDIUM));
             loadTextColumn.addView(loadTitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             TextView loadSubtitle = new TextView(ctx);
-            loadSubtitle.setText("Choose an .orca_printer profile file");
+            loadSubtitle.setText("Choose an .prusa_printer profile file");
             loadSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
             loadSubtitle.setTextColor(ThemesRepo.getColor(android.R.attr.textColorSecondary));
             loadTextColumn.addView(loadSubtitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));

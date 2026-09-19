@@ -17,6 +17,8 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
@@ -56,6 +58,7 @@ import com.flashforge.farm.navigation.Fragment;
 import com.flashforge.farm.slic3r.Bed3D;
 import com.flashforge.farm.slic3r.GCodeProcessorResult;
 import com.flashforge.farm.slic3r.Model;
+import com.flashforge.farm.slic3r.SandboxSlice;
 import com.flashforge.farm.slic3r.Slic3rRuntimeError;
 import com.flashforge.farm.theme.ThemesRepo;
 import com.flashforge.farm.utils.Vec3d;
@@ -176,7 +179,12 @@ public class BedFragment extends Fragment {
     }
 
     public void showUnfoldMenu(UnfoldMenu menu, View from) {
-        if (currentUnfoldMenu != null) return;
+        if (menu == null) return;
+        if (currentUnfoldMenu != null) {
+            if (currentUnfoldMenu == menu && menu.isAttached()) return;
+            currentUnfoldMenu.dismiss(true);
+            currentUnfoldMenu = null;
+        }
 
         menu.setOnDismiss(()-> {
             if (menu.isAttached()) return;
@@ -583,7 +591,19 @@ public class BedFragment extends Fragment {
             panelWebView.getSettings().setJavaScriptEnabled(true);
             panelWebView.setWebViewClient(new WebViewClient() {
                 @Override
+                @SuppressWarnings("deprecation")
                 public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
+                    onWebError(description);
+                }
+
+                @Override
+                public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                    if (request.isForMainFrame()) {
+                        onWebError(error.getDescription().toString());
+                    }
+                }
+
+                private void onWebError(CharSequence description) {
                     hasWebError = true;
                     webViewErrDescription.setText(description);
                     panelWebViewError.setVisibility(View.VISIBLE);
@@ -658,7 +678,8 @@ public class BedFragment extends Fragment {
             if (currentMenuSlot == item.getItemId() || isChangingByCode) return true;
             if (isAnimatingMenu) return false;
             if (item.getItemId() == MenuCategory.SLICE_AND_EXPORT.ordinal()) {
-                if (glView.getRenderer().getModel() == null && !DEBUG_VIEWER) {
+                boolean hasCalib = FarmApp.PENDING_CALIB_MODE != 0 && FarmApp.PENDING_CALIB_ITEM != null;
+                if (glView.getRenderer().getModel() == null && !hasCalib && !DEBUG_VIEWER) {
                     new FarmAlertDialogBuilder(ctx)
                             .setTitle(R.string.SliceFailed)
                             .setMessage(R.string.SliceFailedNoModels)
@@ -694,18 +715,22 @@ public class BedFragment extends Fragment {
 
                                 ViewUtils.postOnMainThread(()->{
                                     Bus.SLICING_PROGRESS.postValue(new SlicingProgressEvent(100, ""));
-                                    new FarmAlertDialogBuilder(ctx)
-                                            .setTitle(R.string.SliceFailed)
-                                            .setMessage(e.getMessage())
-                                            .setPositiveButton(android.R.string.ok, null)
-                                            .show();
+                                    FarmAlertDialogBuilder.showError(ctx, R.string.SliceFailed, e.getMessage());
                                 });
                             }
 
                             if (!DEBUG_VIEWER) {
-                                gCodeResult = glView.getRenderer().getModel().slice(cfg.getAbsolutePath(), gcode.getAbsolutePath(), (progress, text) -> Bus.SLICING_PROGRESS.postValue(new SlicingProgressEvent(progress, text)),
+                                com.flashforge.farm.slic3r.Model sliceModel = glView.getRenderer().getModel();
+                                if (sliceModel == null && hasCalib) {
+                                    sliceModel = calibSliceModel(cfg);
+                                }
+                                if (sliceModel == null) {
+                                    throw new com.flashforge.farm.slic3r.Slic3rRuntimeError("no model");
+                                }
+                                gCodeResult = sliceModel.slice(cfg.getAbsolutePath(), gcode.getAbsolutePath(), (progress, text) -> Bus.SLICING_PROGRESS.postValue(new SlicingProgressEvent(progress, text)),
                                         FarmApp.PENDING_CALIB_MODE, FarmApp.PENDING_CALIB_START, FarmApp.PENDING_CALIB_END, FarmApp.PENDING_CALIB_STEP);
                                 FarmApp.PENDING_CALIB_MODE = 0; // consume the calibration after one slice
+                                FarmApp.PENDING_CALIB_ITEM = null;
                                 Bus.SLICING_PROGRESS.postValue(new SlicingProgressEvent(100, ""));
                             } else {
                                 gCodeResult = new GCodeProcessorResult(gcode);
@@ -726,19 +751,19 @@ public class BedFragment extends Fragment {
                             });
                         } catch (Exception e) {
                             Log.e("BedFragment", "Slice failed", e);
-                            Runtime rt = Runtime.getRuntime();
-                            String sliceCtx = "cfg=" + cfg.getAbsolutePath() + " gcode=" + gcode.getAbsolutePath()
-                                    + " thread=" + Thread.currentThread().getName()
-                                    + " mem=" + (rt.totalMemory() - rt.freeMemory()) / 1048576 + "/"
-                                    + rt.maxMemory() / 1048576 + "MB";
-                            FarmApp.writeCrashDump("slice", sliceCtx + "\nslice: " + e + "\n" + Log.getStackTraceString(e));
+                            FarmApp.writeCrashDump("slice", "cfg=" + cfg.getAbsolutePath() + " gcode=" + gcode.getAbsolutePath()
+                                    + " thread=" + Thread.currentThread().getName() + " mem=" + Runtime.getRuntime().freeMemory() / 1048576 + "/" + Runtime.getRuntime().maxMemory() / 1048576 + "MB"
+                                    + "\nslice: " + e + "\n" + Log.getStackTraceString(e));
+                            String buildTag = "";
+                            try {
+                                buildTag = "\n\nbuild " + com.flashforge.farm.BuildConfig.COMMIT
+                                        + " (full log: Downloads/farm_crash_" + com.flashforge.farm.BuildConfig.COMMIT + ".log)";
+                            } catch (Exception ignored) {
+                            }
+                            final String errText = String.valueOf(e.getMessage()) + buildTag;
                             ViewUtils.postOnMainThread(()->{
                                 Bus.SLICING_PROGRESS.postValue(new SlicingProgressEvent(100, ""));
-                                new FarmAlertDialogBuilder(ctx)
-                                        .setTitle(R.string.SliceFailed)
-                                        .setMessage(e.getMessage())
-                                        .setPositiveButton(android.R.string.ok, null)
-                                        .show();
+                                FarmAlertDialogBuilder.showError(ctx, R.string.SliceFailed, errText);
                             });
                         }
                     }, "farm-slice", 8 * 1024 * 1024).start();
@@ -916,6 +941,22 @@ public class BedFragment extends Fragment {
         return glView;
     }
 
+    private com.flashforge.farm.slic3r.Model calibSliceModel(File cfg) throws com.flashforge.farm.slic3r.Slic3rRuntimeError {
+        String id = FarmApp.PENDING_CALIB_ITEM;
+        if (id == null) return null;
+        for (com.flashforge.farm.gallery.ShapeGallery.Item it : com.flashforge.farm.gallery.ShapeGallery.builtins()) {
+            if (id.equals(it.id)) {
+                try {
+                    File f = com.flashforge.farm.gallery.ShapeGallery.fileFor(it);
+                    return com.flashforge.farm.slic3r.SandboxSlice.openModel(f, 1);
+                } catch (Exception e) {
+                    throw new com.flashforge.farm.slic3r.Slic3rRuntimeError(String.valueOf(e.getMessage()));
+                }
+            }
+        }
+        return null;
+    }
+
     public interface ModelLoadCallback {
         void onLoaded(Model loadedModel, int firstNewObject, int addedObjects);
     }
@@ -994,6 +1035,20 @@ public class BedFragment extends Fragment {
         computePlateOrigin(index, cols, bedMax.x - bedMin.x, bedMax.y - bedMin.y, out);
     }
 
+    /** Read a stream fully but bail out (IOException) past a byte cap, mirroring the
+     *  former modelrepo ZipGuard metadata limit (256 KiB) that this code replaced. */
+    private static String readCapped(java.io.InputStream in, long maxBytes) throws java.io.IOException {
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[1024]; long total = 0; int c;
+        while ((c = in.read(buf)) != -1) {
+            total += c;
+            if (total > maxBytes) { in.close(); throw new java.io.IOException("metadata entry exceeds " + maxBytes + " bytes"); }
+            bos.write(buf, 0, c);
+        }
+        in.close();
+        return new String(bos.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+    }
+
     /**
      * Bed size the project file was laid out for, from its embedded printable_area. The world
      * offsets of objects on plate 2+ are multiples of THIS bed's stride — which may differ from
@@ -1003,8 +1058,7 @@ public class BedFragment extends Fragment {
         try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(f)) {
             java.util.zip.ZipEntry en = zip.getEntry("Metadata/project_settings.config");
             if (en == null) return false;
-            org.json.JSONObject cfg = new org.json.JSONObject(
-                    com.flashforge.farm.utils.IOUtils.readString(zip.getInputStream(en), true));
+            org.json.JSONObject cfg = new org.json.JSONObject(readCapped(zip.getInputStream(en), 256L * 1024));
             org.json.JSONArray area = cfg.optJSONArray("printable_area");
             if (area == null || area.length() == 0) return false;
             double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;
@@ -1163,7 +1217,7 @@ public class BedFragment extends Fragment {
             final boolean haveFileBed = readProjectBedSize(f, fileBed);
             for (int i = 0; i < plateCount; i++) {
                 try {
-                    platesModels.set(i, new Model(f, i + 1));
+                    platesModels.set(i, SandboxSlice.openModel(f, i + 1));
                 } catch (Exception e) {
                     android.util.Log.e("BedFragment", "Failed to load plate " + (i + 1), e);
                     platesModels.set(i, new Model());
@@ -1217,7 +1271,7 @@ public class BedFragment extends Fragment {
 
     private void loadModelInternal(File f, boolean preserveProjectLayout, ModelLoadCallback callback) throws Slic3rRuntimeError {
         // Wait, if it's a 3mf project, it already passed plate count, so currentPlateIndex is correct.
-        Model m = new Model(f, currentPlateIndex + 1); // 1-based in JNI for specific plate, or 0 for default
+        Model m = SandboxSlice.openModel(f, currentPlateIndex + 1); // 1-based in JNI for specific plate, or 0 for default
         Model currentModel = getCurrentModel();
         if (currentModel != null && currentModel.getObjectsCount() > 0) {
             glView.queueEvent(new Runnable() {

@@ -1,0 +1,95 @@
+# 0012: Android ships the engine untranslated — no boost::locale library.
+# Boost.Locale cannot build on NDK API 23 (no iconv/ICU backend; patch 0002
+# already dropped the component), but the 3.0 I18N TUs are live: the chain
+# FileLoadingLogic -> _u8 -> boost::locale::translate().str() needs
+# facet_id<message_format>::id, and Translation.cpp instantiates the
+# generator. Under __ANDROID__, return the input strings (the farm app owns
+# localization) and skip every generator/info-facet call. No behavior
+# change on desktop builds.
+diff --git a/src/slic3r-shared/src/Slic3r/Biz/I18N/I18N.cpp b/src/slic3r-shared/src/Slic3r/Biz/I18N/I18N.cpp
+index 146d532..7a5d6cb 100644
+--- a/src/slic3r-shared/src/Slic3r/Biz/I18N/I18N.cpp
++++ b/src/slic3r-shared/src/Slic3r/Biz/I18N/I18N.cpp
+@@ -11,17 +11,31 @@ void set_ui_locale(std::locale/*&*/ new_locale)
+ 
+ std::string _u8(const std::string& s) 
+ { 
++#ifdef __ANDROID__
++    // Android: engine strings stay untranslated (the app owns i18n);
++    // avoids the boost::locale link dependency.
++    return s;
++#else
+     return boost::locale::translate(s.c_str()).str(Slic3r::Biz::g_ui_locale);
++#endif
+ }
+ 
+ std::string _ctx_u8(const std::string& s, const std::string& ctx)
+ { 
++#ifdef __ANDROID__
++    return s;
++#else
+     return boost::locale::translate(ctx.c_str(), s.c_str()).str(Slic3r::Biz::g_ui_locale);
++#endif
+ }
+ 
+ std::string _L_PLURAL_u8(const std::string& single, const std::string& plural, int n)
+ { 
++#ifdef __ANDROID__
++    return n == 1 ? single : plural;
++#else
+     return boost::locale::translate(single.c_str(), plural.c_str(), n).str(Slic3r::Biz::g_ui_locale);
++#endif
+ }
+ 
+ }
+\ No newline at end of file
+diff --git a/src/slic3r-shared/src/Slic3r/Biz/I18N/Translation.cpp b/src/slic3r-shared/src/Slic3r/Biz/I18N/Translation.cpp
+index 68ff14d..5076304 100644
+--- a/src/slic3r-shared/src/Slic3r/Biz/I18N/Translation.cpp
++++ b/src/slic3r-shared/src/Slic3r/Biz/I18N/Translation.cpp
+@@ -43,8 +43,11 @@ static std::string country(const std::string& locale_str)
+ void Translations::init_translations(const boost::filesystem::path& local_dir)
+ {
+     // init locale generator
++#ifndef __ANDROID__
++    // No boost::locale library on the NDK; the engine ships untranslated.
+     m_locale_generator.add_messages_path(local_dir.string());
+     m_locale_generator.add_messages_domain(SLIC3R_APP_KEY);
++#endif
+ 
+     std::set<std::string> lang_tags = load_available_languages(local_dir);
+ 
+@@ -78,6 +81,11 @@ void Translations::init_translations(const boost::filesystem::path& local_dir)
+ 
+ void Translations::init_system_locale_values()
+ {
++#ifdef __ANDROID__
++    // No boost::locale on the NDK: leave m_sys_locale empty; the app
++    // owns localization.
++    return;
++#else
+     boost::locale::generator gen;
+     // Create an object with default locale
+     std::locale base_locale = gen("");
+@@ -88,6 +96,7 @@ void Translations::init_system_locale_values()
+     std::string name = properties.name();
+     m_sys_locale = name.substr(0, name.find_first_of('.'));
+     m_sys_locale_language = properties.language();
++#endif // __ANDROID__
+ }
+ 
+ const std::string Translations::language_description(const std::string& name) const
+@@ -313,7 +322,13 @@ bool Translations::set_best_translation_for_language(const std::string& language
+     m_language_short_info_active = language_info;
+ 
+     // Create new ui locale and save it.
++#ifdef __ANDROID__
++    // No boost::locale generator on the NDK; the identity locale keeps
++    // untranslated strings flowing.
++    set_ui_locale(std::locale::classic());
++#else
+     set_ui_locale(m_locale_generator(m_language_short_info_active->canonical_name + ".UTF-8"));
++#endif
+     return true; 
+ }
+ 

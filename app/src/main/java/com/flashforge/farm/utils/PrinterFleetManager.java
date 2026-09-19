@@ -26,12 +26,24 @@ public class PrinterFleetManager {
         public String loadedFilamentColor;
         public String publicKey;
         public String accessCode;
+        public String model;
+        public String firmwareVersion;
+        /** Bound peer NodeId (printer's iroh identity), learned from the pair-beacon. Null until paired. */
+        public String nodeId;
+        /** Pending one-time pairing token (USB reverse-pairing). Null when not expecting a beacon. */
+        public String pairToken;
+        /** Epoch ms when pairToken expires. 0 when no token pending. */
+        public long pairExpiresAt;
 
         public Printer(String id, String ipOrUrl, String name, String nozzleSize, String loadedFilamentType, String loadedFilamentColor) {
             this(id, ipOrUrl, name, nozzleSize, loadedFilamentType, loadedFilamentColor, generatePublicKey(), generateAccessCode(generatePublicKey()));
         }
 
         public Printer(String id, String ipOrUrl, String name, String nozzleSize, String loadedFilamentType, String loadedFilamentColor, String publicKey, String accessCode) {
+            this(id, ipOrUrl, name, nozzleSize, loadedFilamentType, loadedFilamentColor, publicKey, accessCode, null, null);
+        }
+
+        public Printer(String id, String ipOrUrl, String name, String nozzleSize, String loadedFilamentType, String loadedFilamentColor, String publicKey, String accessCode, String model, String firmwareVersion) {
             this.id = id;
             this.ipOrUrl = ipOrUrl;
             this.name = name;
@@ -40,12 +52,14 @@ public class PrinterFleetManager {
             this.loadedFilamentColor = loadedFilamentColor;
             this.publicKey = publicKey;
             this.accessCode = accessCode;
+            this.model = model;
+            this.firmwareVersion = firmwareVersion;
         }
     }
 
     private static final String ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
-    /** Generate the p2p public identity. Prefers Ed25519 (API 28+); falls back to a
+    /** Generate the printer public identity. Prefers Ed25519 (API 28+); falls back to a
      *  SHA-256-derived identity on older devices so minSdk 21 still works. */
     public static String generatePublicKey() {
         try {

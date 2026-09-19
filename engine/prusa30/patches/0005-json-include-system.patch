@@ -1,0 +1,22 @@
+# 0005: expose staged serialization/enum header dirs globally.
+# find_package(nlohmann_json) / find_package(magic_enum) only run in slic3r-shared
+# (GUI-off headless), yet libslic3r TUs include <nlohmann/json.hpp> and
+# <magic_enum/magic_enum.hpp> (GCode/Thumbnails.cpp); no system copies on NDK.
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -290,6 +290,14 @@
+ # (desktop builds get it from /usr/include via the distro).
+ include_directories(SYSTEM "${NLopt_INCLUDE_DIR}")
+ 
++# Headless NDK: serialization/enum headers are staged, not system imports.
++if(DEFINED JSON_INCLUDE_DIR)
++  include_directories(SYSTEM "${JSON_INCLUDE_DIR}")
++endif()
++if(DEFINED MAGIC_ENUM_INCLUDE_DIR)
++  include_directories(SYSTEM "${MAGIC_ENUM_INCLUDE_DIR}")
++endif()
++
+ include(CheckAndPrintSummary)
+ 
+ add_subdirectory(bundled_deps)

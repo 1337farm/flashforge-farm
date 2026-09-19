@@ -5,7 +5,6 @@ import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.res.Configuration;
-import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -20,12 +19,17 @@ import android.util.SparseArray;
 import android.view.View;
 import android.view.WindowManager;
 
+import androidx.activity.OnBackPressedCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.ColorUtils;
-import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -68,6 +72,7 @@ import com.flashforge.farm.slic3r.Native;
 import com.flashforge.farm.slic3r.Slic3rConfigWrapper;
 import com.flashforge.farm.slic3r.Slic3rRuntimeError;
 import com.flashforge.farm.theme.ThemesRepo;
+import com.flashforge.farm.utils.FarmBackup;
 import com.flashforge.farm.utils.IOUtils;
 import com.flashforge.farm.utils.FilamentSlot;
 import com.flashforge.farm.utils.Prefs;
@@ -75,12 +80,18 @@ import com.flashforge.farm.utils.ViewUtils;
 import com.flashforge.farm.view.SnackbarsLayout;
 
 public class MainActivity extends AppCompatActivity {
-    // Activity result
     public final static int REQUEST_CODE_OPEN_FILE = 1, REQUEST_CODE_EXPORT_GCODE = 2,
                             REQUEST_CODE_IMPORT_PROFILES = 3, REQUEST_CODE_EXPORT_PROFILES = 4,
                             REQUEST_CODE_EXPORT_3MF = 5,
                             REQUEST_CODE_PROVISION_USB = 6, REQUEST_CODE_UNINSTALL_USB = 7,
-                            REQUEST_CODE_IMPORT_MODEL = 8;
+                            REQUEST_CODE_BACKUP = 8, REQUEST_CODE_RESTORE = 9,
+                            REQUEST_CODE_IMPORT_GALLERY = 10;
+    /** Single SAF/file entry point: every file open/save intent routes through here. */
+    private ActivityResultLauncher<Intent> filePickerLauncher;
+    private int pendingFileRequest;
+    /** SAF tree picker for USB provisioning deploy targets. */
+    private ActivityResultLauncher<Intent> usbTreeLauncher;
+    private boolean usbTreeInstall;
 
     private static MainActivity activeInstance;
 
@@ -100,11 +111,43 @@ public class MainActivity extends AppCompatActivity {
     private boolean landscape;
     private UnfoldMenu unfoldMenu;
 
+    /** Launches a SAF/file intent and tags the result with its request code. */
+    public void pickFile(Intent intent, int requestCode) {
+        pendingFileRequest = requestCode;
+        filePickerLauncher.launch(intent);
+    }
+
+    /** Launches the SAF tree picker for USB provisioning deploy targets. */
+    public void pickUsbTree(Intent intent, boolean install) {
+        usbTreeInstall = install;
+        usbTreeLauncher.launch(intent);
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        filePickerLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                r -> { if (r.getResultCode() == Activity.RESULT_OK) onFilePicked(r.getData()); });
+        usbTreeLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                r -> { if (r.getResultCode() == Activity.RESULT_OK) onUsbTreePicked(r.getData(), usbTreeInstall); });
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (unfoldMenu != null) {
+                    unfoldMenu.dismiss();
+                    return;
+                }
+                if (delegate != null && delegate.onBackPressed()) {
+                    return;
+                }
+                setEnabled(false);
+                getOnBackPressedDispatcher().onBackPressed();
+            }
+        });
         startService(new android.content.Intent(this, com.flashforge.farm.api.AutoDispatchService.class));
 
-        super.onCreate(savedInstanceState);
         // No on-load crash screen: crash dumps are pushed straight to Downloads
         // (Java handler at crash exit; native dumps auto-exported on next launch).
         if (FarmApp.CONFIG == null) {
@@ -149,9 +192,9 @@ public class MainActivity extends AppCompatActivity {
             throw new IllegalArgumentException("Delegate hasn't created container view!");
         }
         ViewCompat.setOnApplyWindowInsetsListener(v, (v2, insets) -> {
-            Insets systemBars = insets.getSystemWindowInsets();
+            androidx.core.graphics.Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v2.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
-            return insets.consumeSystemWindowInsets();
+            return WindowInsetsCompat.CONSUMED;
         });
         setContentView(v);
 
@@ -164,37 +207,18 @@ public class MainActivity extends AppCompatActivity {
         landscape = dm.widthPixels > dm.heightPixels;
         View decorView = getWindow().getDecorView();
         decorView.setBackgroundColor(ThemesRepo.getColor(android.R.attr.windowBackground));
-        decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
-        getWindow().setStatusBarColor(Color.TRANSPARENT);
-        getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        WindowInsetsControllerCompat insetsController = WindowCompat.getInsetsController(getWindow(), decorView);
+        insetsController.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             getWindow().getAttributes().layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         }
 
         if (landscape) {
-            int uiOptions = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN;
-            decorView.setSystemUiVisibility(uiOptions);
-
-            decorView.setOnSystemUiVisibilityChangeListener(visibility -> {
-                if ((visibility & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0) {
-                    visibility |= View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN;
-                    int finalVisibility = visibility;
-                    ViewUtils.postOnMainThread(() -> decorView.setSystemUiVisibility(finalVisibility), 500);
-                }
-            });
+            insetsController.hide(WindowInsetsCompat.Type.navigationBars() | WindowInsetsCompat.Type.statusBars());
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                getWindow().setStatusBarContrastEnforced(false);
-                getWindow().setNavigationBarContrastEnforced(false);
-            }
-            if (ColorUtils.calculateLuminance(ThemesRepo.getColor(android.R.attr.windowBackground)) >= 0.9f) {
-                decorView.setSystemUiVisibility(decorView.getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-            } else {
-                decorView.setSystemUiVisibility(decorView.getSystemUiVisibility() & ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-            }
-        }
+        applyStatusBarContrast(decorView);
 
         if (!Objects.equals(Prefs.getLastCommit(), BuildConfig.COMMIT) && FarmApp.hasUpdateInfo) {
             Prefs.setLastCommit();
@@ -216,11 +240,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /** @noinspection ResultOfMethodCallIgnored*/
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-
-        if (resultCode == Activity.RESULT_OK) {
+    private void onFilePicked(@Nullable Intent data) {
+        if (data == null || data.getData() == null) return;
+        int requestCode = pendingFileRequest;
+        pendingFileRequest = 0;
             if (requestCode == MainActivity.REQUEST_CODE_EXPORT_3MF) {
                 Fragment fragment = getNavigationDelegate().getCurrentFragment();
                 if (fragment instanceof BedFragment) {
@@ -306,7 +329,7 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                if (isOrcaBundleFile(fileName)) {
+                if (isProfileBundleFile(fileName)) {
                     loadConvertedProfile(uri);
                     return;
                 }
@@ -329,38 +352,107 @@ public class MainActivity extends AppCompatActivity {
                             .setPositiveButton(android.R.string.ok, null)
                             .show();
                 }
-            } else if (requestCode == MainActivity.REQUEST_CODE_IMPORT_MODEL) {
-                Fragment cur = getNavigationDelegate().getCurrentFragment();
-                if (cur instanceof com.flashforge.farm.fragment.ModelPublishFragment) {
-                    ((com.flashforge.farm.fragment.ModelPublishFragment) cur).handlePickedFile(data);
-                }
-            } else if (requestCode == MainActivity.REQUEST_CODE_PROVISION_USB
-                    || requestCode == MainActivity.REQUEST_CODE_UNINSTALL_USB) {
-                Fragment cur = getNavigationDelegate().getCurrentFragment();
-                if (cur instanceof FleetFragment) {
-                    boolean install = requestCode == MainActivity.REQUEST_CODE_PROVISION_USB;
-                    ((FleetFragment) cur).onUsbDeployResult(data.getData(), install);
-                } else {
+            } else if (requestCode == MainActivity.REQUEST_CODE_BACKUP) {
+                if (data == null || data.getData() == null) return;
+                try {
+                    OutputStream out = getContentResolver().openOutputStream(data.getData());
+                    out.write(FarmBackup.exportJson().getBytes(StandardCharsets.UTF_8));
+                    out.close();
+                    Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.FleetBackupDone));
+                } catch (Exception e) {
                     new FarmAlertDialogBuilder(this)
-                            .setTitle(R.string.MenuFileImportProfilesFailed)
-                            .setMessage(R.string.FleetProvisioningDone)
+                            .setTitle(R.string.FleetBackup)
+                            .setMessage(getString(R.string.FleetBackupFailed, e.toString()))
                             .setPositiveButton(android.R.string.ok, null)
                             .show();
                 }
+            } else if (requestCode == MainActivity.REQUEST_CODE_RESTORE) {
+                if (data == null || data.getData() == null) return;
+                Uri restoreUri = data.getData();
+                IOUtils.IO_POOL.submit(() -> {
+                    try {
+                        InputStream in = getContentResolver().openInputStream(restoreUri);
+                        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+                        byte[] buffer = new byte[10240];
+                        int c; long total = 0;
+                        while ((c = in.read(buffer)) != -1) {
+                            total += c;
+                            if (total > 16L * 1024 * 1024)
+                                throw new IOException("backup file too large");
+                            buf.write(buffer, 0, c);
+                        }
+                        in.close();
+                        FarmBackup.RestoreReport r = FarmBackup.importJson(buf.toString("UTF-8"));
+                        com.flashforge.farm.utils.PairingRuntime.refreshTokens();
+                        ViewUtils.postOnMainThread(() -> {
+                            Fragment cur = getNavigationDelegate().getCurrentFragment();
+                            if (cur instanceof FleetFragment) {
+                                ((FleetFragment) cur).refreshNow();
+                            }
+                            new FarmAlertDialogBuilder(this)
+                                    .setTitle(R.string.FleetRestore)
+                                    .setMessage(getString(R.string.FleetRestoreDone, r.printers, r.queuedJobs,
+                                            r.printProfiles + r.filamentProfiles + r.printerProfiles))
+                                    .setPositiveButton(android.R.string.ok, null)
+                                    .show();
+                        });
+                    } catch (Exception e) {
+                        ViewUtils.postOnMainThread(() ->
+                            new FarmAlertDialogBuilder(this)
+                                    .setTitle(R.string.FleetRestore)
+                                    .setMessage(getString(R.string.FleetRestoreFailed, e.toString()))
+                                    .setPositiveButton(android.R.string.ok, null)
+                                    .show());
+                    }
+                });
+            } else if (requestCode == MainActivity.REQUEST_CODE_IMPORT_GALLERY) {
+                Uri importUri = data.getData();
+                IOUtils.IO_POOL.submit(() -> {
+                    InputStream in = null;
+                    try {
+                        String name = IOUtils.getDisplayName(importUri);
+                        in = getContentResolver().openInputStream(importUri);
+                        com.flashforge.farm.gallery.GalleryStore.importStream(in, name);
+                        ViewUtils.postOnMainThread(() ->
+                                Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuFileShapeGalleryAdded)));
+                    } catch (Exception e) {
+                        ViewUtils.postOnMainThread(() ->
+                            new FarmAlertDialogBuilder(this)
+                                    .setTitle(R.string.MenuFileShapeGalleryAdd)
+                                    .setMessage(getString(R.string.MenuFileShapeGalleryAddFailed) + ": " + e.getMessage())
+                                    .setPositiveButton(android.R.string.ok, null)
+                                    .show());
+                    } finally {
+                        if (in != null) try { in.close(); } catch (IOException ignored) {}
+                    }
+                });
             }
+    }
+
+    private void onUsbTreePicked(@Nullable Intent data, boolean install) {
+        if (data == null || data.getData() == null) return;
+        Fragment cur = getNavigationDelegate().getCurrentFragment();
+        if (cur instanceof FleetFragment) {
+            ((FleetFragment) cur).onUsbDeployResult(data.getData(), install);
+        } else {
+            new FarmAlertDialogBuilder(this)
+                    .setTitle(R.string.MenuFileImportProfilesFailed)
+                    .setMessage(R.string.FleetProvisioningDone)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show();
         }
     }
 
     private void loadConvertedProfile(Uri uri) {
         String tag = UUID.randomUUID().toString();
-        Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(SnackbarsLayout.Type.LOADING, R.string.OrcaConversionPleaseWait).tag(tag));
+        Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(SnackbarsLayout.Type.LOADING, R.string.ProfileConversionPleaseWait).tag(tag));
 
         IOUtils.IO_POOL.submit(() -> {
             File copiedArchive = null;
-            File extractDir = new File(FarmApp.getModelCacheDir(), "orca_conv_" + UUID.randomUUID());
+            File extractDir = new File(FarmApp.getModelCacheDir(), "profile_conv_" + UUID.randomUUID());
             try {
-                copiedArchive = File.createTempFile("orca_conv_", ".zip", FarmApp.getModelCacheDir());
-                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 2, getString(R.string.OrcaConversionCopying)));
+                copiedArchive = File.createTempFile("profile_conv_", ".zip", FarmApp.getModelCacheDir());
+                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 2, getString(R.string.ProfileConversionCopying)));
                 try (InputStream in = getContentResolver().openInputStream(uri);
                      FileOutputStream fos = new FileOutputStream(copiedArchive)) {
                     if (in == null) {
@@ -373,18 +465,18 @@ public class MainActivity extends AppCompatActivity {
                     while ((c = in.read(buffer)) != -1) {
                         fos.write(buffer, 0, c);
                         total += c;
-                        Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, (int) Math.min((total / 1024 / 10), 15), getString(R.string.OrcaConversionCopying)));
+                        Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, (int) Math.min((total / 1024 / 10), 15), getString(R.string.ProfileConversionCopying)));
                     }
                 }
-                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 18, getString(R.string.OrcaConversionReading)));
+                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 18, getString(R.string.ProfileConversionReading)));
 
                 if (!extractDir.mkdirs() && !extractDir.isDirectory()) {
                     throw new IOException("Failed to create temporary extraction directory");
                 }
 
-                String manifest = Native.orca_bundle_read(copiedArchive.getAbsolutePath(), extractDir.getAbsolutePath());
+                String manifest = Native.profile_bundle_read(copiedArchive.getAbsolutePath(), extractDir.getAbsolutePath());
                 if (manifest == null) {
-                    throw new IOException("Failed to read Orca bundle");
+                    throw new IOException("Failed to read profile bundle");
                 }
 
                 JSONObject root = new JSONObject(manifest);
@@ -393,16 +485,16 @@ public class MainActivity extends AppCompatActivity {
                     Bus.DISMISS_SNACKBAR.postValue(new NeedDismissSnackbarEvent(tag));
                     ViewUtils.postOnMainThread(() -> new FarmAlertDialogBuilder(this)
                             .setTitle(R.string.MenuFileImportProfilesFailed)
-                            .setMessage(R.string.OrcaConversionNotAConfigBundle)
+                            .setMessage(R.string.ProfileConversionNotAConfigBundle)
                             .setPositiveButton(android.R.string.ok, null)
                             .show());
                     return;
                 }
 
-                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 20, getString(R.string.OrcaConversionImporting, 0)));
+                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 20, getString(R.string.ProfileConversionImporting, 0)));
 
-                importOrcaBundle(root, p -> Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 20 + (int) (p * 75), getString(R.string.OrcaConversionImporting, 20 + (int) (p * 75)))));
-                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 100, getString(R.string.OrcaConversionImporting, 100)));
+                importProfileBundle(root, p -> Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 20 + (int) (p * 75), getString(R.string.ProfileConversionImporting, 20 + (int) (p * 75)))));
+                Bus.UPDATE_SNACKBAR.postValue(new NeedSnackbarUpdateEvent(tag, 100, getString(R.string.ProfileConversionImporting, 100)));
                 Bus.DISMISS_SNACKBAR.postValue(new NeedDismissSnackbarEvent(tag));
             } catch (IOUtils.MissingProfileException ep) {
                 Bus.DISMISS_SNACKBAR.postValue(new NeedDismissSnackbarEvent(tag));
@@ -435,9 +527,9 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private boolean isOrcaBundleFile(String fileName) {
+    private boolean isProfileBundleFile(String fileName) {
         String lower = fileName.toLowerCase();
-        return lower.endsWith(".orca_printer") || lower.endsWith(".orca_filament") || lower.endsWith(".zip");
+        return lower.endsWith(".prusa_printer") || lower.endsWith(".prusa_filament") || lower.endsWith(".zip");
     }
 
     private boolean is3mfFile(String fileName) {
@@ -725,7 +817,7 @@ public class MainActivity extends AppCompatActivity {
             }
             resolveBundleInherits(w.printerConfigs, w::findPrinter, name -> FarmApp.CONFIG.findPrinter(name));
 
-            // Some Orca/Bambu project 3MFs (including desktop-saved projects with DRC geometry)
+            // Some legacy project 3MFs (including desktop-saved projects with DRC geometry)
             // only store the active settings in Metadata/project_settings.config instead of
             // separate process/filament/machine profile files. Convert that JSON into normal
             // mobile ConfigObjects so the loaded project uses the printer, filament, and print
@@ -828,7 +920,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void importOrcaBundle(JSONObject root, java.util.function.DoubleConsumer onProgress) throws Exception {
+    private void importProfileBundle(JSONObject root, java.util.function.DoubleConsumer onProgress) throws Exception {
         JSONObject bundle = new JSONObject(root.getString("bundle_structure_json"));
 
         HashMap<String, String> files = new HashMap<>();
@@ -1132,7 +1224,7 @@ public class MainActivity extends AppCompatActivity {
                     .show();
             return;
         }
-        if (isOrcaBundleFile(fileName)) {
+        if (isProfileBundleFile(fileName)) {
             loadConvertedProfile(uri);
             return;
         }
@@ -1172,19 +1264,6 @@ public class MainActivity extends AppCompatActivity {
                 }
                 fos.close();
                 in.close();
-                com.flashforge.farm.modelrepo.verify.Verdict v =
-                        com.flashforge.farm.modelrepo.QuarantineClient.check(
-                                MainActivity.this, f);
-                if (!v.allow) {
-                    f.delete();
-                    String why = v.detail.isEmpty() ? v.reason.name() : v.detail;
-                    ViewUtils.postOnMainThread(() -> new FarmAlertDialogBuilder(MainActivity.this)
-                            .setTitle(R.string.MenuFileOpenFileFailed)
-                            .setMessage("File rejected: " + why)
-                            .setPositiveButton(android.R.string.ok, null)
-                            .show());
-                    return;
-                }
                 loadFile(f, false);
             } catch (Exception e) {
                 Log.e("MainActivity", "Failed to write cache file", e);
@@ -1213,13 +1292,7 @@ public class MainActivity extends AppCompatActivity {
         delegate.onApplyTheme();
 
         View decorView = getWindow().getDecorView();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (ColorUtils.calculateLuminance(ThemesRepo.getColor(android.R.attr.windowBackground)) >= 0.9f) {
-                decorView.setSystemUiVisibility(decorView.getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-            } else {
-                decorView.setSystemUiVisibility(decorView.getSystemUiVisibility() & ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-            }
-        }
+        applyStatusBarContrast(decorView);
         decorView.setBackgroundColor(ThemesRepo.getColor(android.R.attr.windowBackground));
     }
 
@@ -1240,24 +1313,17 @@ public class MainActivity extends AppCompatActivity {
         return new MobileNavigationDelegate();
     }
 
+    private void applyStatusBarContrast(View decorView) {
+        WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), decorView);
+        boolean light = ColorUtils.calculateLuminance(ThemesRepo.getColor(android.R.attr.windowBackground)) >= 0.9f;
+        controller.setAppearanceLightStatusBars(light);
+    }
+
     public void showUnfoldMenu(UnfoldMenu menu, View v) {
         if (unfoldMenu != null) return;
         menu.setOnDismiss(() -> unfoldMenu = null);
         menu.show(v, delegate.getOverlayView());
         unfoldMenu = menu;
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (unfoldMenu != null) {
-            unfoldMenu.dismiss();
-            return;
-        }
-        if (delegate.onBackPressed()) {
-            return;
-        }
-
-        super.onBackPressed();
     }
 
     @Override

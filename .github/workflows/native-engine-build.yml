@@ -58,19 +58,60 @@ name: native
 #   released by the next green run.
 #
 # Caching: heavy builds write their outputs both to a primary output cache and
-# to ccache. On re-runs, if the primary cache hits (inputs unchanged) the heavy
-# build step is SKIPPED entirely, keeping re-runs fast.
+# to a compiler cache. The engine compile uses sccache with the distributed GHA
+# backend (forgerig-style): content-addressed, shared across every run, so it
+# hits even after source changes churn the primary cache key. build-dep uses
+# local ccache (its sources are version-pinned, low churn). On re-runs, if the
+# primary cache hits (inputs unchanged) the heavy build step is SKIPPED
+# entirely, keeping re-runs fast.
 on:
   workflow_dispatch:
+    inputs:
+      allow_duplicate:
+        description: 'Bypass duplicate-dispatch guard (default false)'
+        required: false
+        default: 'false'
   push:
     branches: ["main", "master", "security-fix-remove-cloud-code"]
   pull_request:
     branches: ["main", "master"]
 
 env:
-  NDK_VERSION: "23.1.7779620"
+  NDK_VERSION: "26.3.11579264"
+
+concurrency:
+  group: native-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  guard-duplicate-dispatch:
+    name: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.allow_duplicate != 'true'
+    steps:
+      - name: Cancel stale duplicate manual dispatches on same ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          ME="${{ github.run_id }}"
+          REF="${{ github.ref }}"
+          echo "This run: $ME on $REF"
+          # Same-workflow, in-progress/queued manual dispatches on the same ref
+          # (excluding this run) are stale duplicates: cancel them so only the
+          # newest dispatch proceeds. PR/push events are untouched.
+          IDS=$(gh api "repos/${{ github.repository }}/actions/workflows/native-engine-build.yml/runs?branch=${REF#refs/heads/}&event=workflow_dispatch&status=in_progress&per_page=20" \
+            --jq ".workflow_runs[] | select(.id != ($ME | tonumber)) | .id")
+          if [ -z "$IDS" ]; then
+            echo "No stale duplicates; proceeding."
+            exit 0
+          fi
+          for ID in $IDS; do
+            echo "Cancelling stale duplicate dispatch $ID"
+            gh api -X POST "repos/${{ github.repository }}/actions/runs/$ID/cancel" >/dev/null || true
+          done
+          echo "Stale duplicates cancelled; newest dispatch ($ME) proceeds."
   sync-head:
     name: sync
     runs-on: ubuntu-24.04
@@ -118,15 +159,33 @@ jobs:
           # pull_request runs GitHub gates behind manual approval (0 jobs,
           # action_required) — while PAT pushes run as a trusted actor and
           # evaluate normally. PAT pushes also re-trigger the workflow, so
-          # the corrected head is picked up immediately. Falls back to
-          # GITHUB_TOKEN (gated runs, but working sync) until SYNC_PAT exists.
+          # the corrected head is picked up immediately.
+          #
+          # TRUST GATE (2026-09-12 audit): a dead SYNC_PAT (expired/revoked)
+          # is worse than a missing one — the old fallback silently pushed
+          # gated zombies for days before anyone noticed. Verify the PAT
+          # authenticates as the repo owner BEFORE pushing; fail loudly with
+          # rotation instructions otherwise. No GITHUB_TOKEN fallback.
+          # Normalize the identity probe: error documents have no .login
+          # (yield empty), quotes are stripped, first line only — so a dead
+          # PAT and a format quirk can never be confused.
           if [ -n "${{ secrets.SYNC_PAT }}" ]; then
-            echo "pushing sync with SYNC_PAT (trusted actor)"
+            SYNC_WHO="$(GH_TOKEN='${{ secrets.SYNC_PAT }}' gh api user --jq '.login // empty' 2>/dev/null | tr -d '\"' | head -1 || true)"
+          else
+            SYNC_WHO=""
+          fi
+          if [ "$SYNC_WHO" = "${{ github.repository_owner }}" ]; then
+            echo "pushing sync with SYNC_PAT (trusted actor: $SYNC_WHO)"
             PUSH_TOKEN="${{ secrets.SYNC_PAT }}"
           else
-            echo "WARNING: SYNC_PAT secret missing; falling back to GITHUB_TOKEN (runs will need approval)"
-            PUSH_TOKEN="$GH_TOKEN"
+            echo "ERROR: SYNC_PAT does not authenticate as '${{ github.repository_owner }}' (got '${SYNC_WHO:-unreachable}')." >&2
+            echo "The sync push would run as github-actions[bot] and its" >&2
+            echo "pull_request runs would gate behind manual approval." >&2
+            echo "Rotate it: repo owner creates a classic PAT (contents:write," >&2
+            echo "no expiry) and updates the SYNC_PAT repo secret, then re-run." >&2
+            exit 1
           fi
+          PUSH_TOKEN="${{ secrets.SYNC_PAT }}"
           git push "https://x-access-token:${PUSH_TOKEN}@github.com/${{ github.repository }}.git" \
             "HEAD:${{ github.event.pull_request.head.ref }}"
           echo "synced PR head $BEFORE -> $AFTER; pushed corrected head for the next run"
@@ -171,7 +230,6 @@ jobs:
       pull-requests: read
     outputs:
       native: ${{ steps.filter.outputs.native }}
-      iroh: ${{ steps.filter.outputs.iroh }}
     steps:
       - name: Detect native-affecting changes
         id: filter
@@ -181,8 +239,6 @@ jobs:
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             echo "native=true (non-PR: always full build)"
             echo "native=true" >> "$GITHUB_OUTPUT"
-            echo "iroh=true (non-PR: always build farm-iroh)"
-            echo "iroh=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # File list via API: immune to shallow-checkout merge-base issues.
@@ -200,13 +256,6 @@ jobs:
           fi
           if [ "$NATIVE" = "1" ]; then echo "native=true (native inputs changed)"; echo "native=true" >> "$GITHUB_OUTPUT"
           else echo "native=false (no native inputs changed; APK assembles against releases)"; echo "native=false" >> "$GITHUB_OUTPUT"; fi
-          # farm-iroh (custom UniFFI binding): p2p/ source tree or the iroh
-          # build script changing must stage that .so from a fresh build, and
-          # any workflow change re-drives the whole chain anyway.
-          IROH=0
-          echo "$FILES" | grep -qE '^(p2p/|scripts/build_farm_iroh_android.sh|\.github/workflows/native-engine-build.yml)' && IROH=1
-          if [ "$IROH" = "1" ]; then echo "iroh=true (farm-iroh inputs changed)"; echo "iroh=true" >> "$GITHUB_OUTPUT"
-          else echo "iroh=false"; echo "iroh=false" >> "$GITHUB_OUTPUT"; fi
 
   build-dep:
     name: dep-${{ matrix.dep }}
@@ -231,7 +280,7 @@ jobs:
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-      ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/23.1.7779620
+      ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/26.3.11579264
       ABI: arm64-v8a
       API_LEVEL: "23"
     steps:
@@ -359,23 +408,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ccache build-essential cmake ninja-build unzip
 
-      - name: Set up Android SDK / NDK
+      - name: Set up Android SDK env
         if: steps.validate.outputs.need == '1'
-        run: |
-          SDK=/usr/local/lib/android/sdk
-          test -d "$SDK/cmdline-tools" || { echo "ERROR: preinstalled SDK missing at $SDK"; exit 1; }
-          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
-          echo "$SDK/cmdline-tools/latest/bin:$SDK/platform-tools" >> "$GITHUB_PATH"
-          # GITHUB_PATH applies to later steps only; export locally for this step.
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --version
+        uses: 1337farm/actions/setup-android-env@v1
       - name: Install NDK ${{ env.NDK_VERSION }}
         if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37.0" "cmake;3.22.1"
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
           # API 37 ships as android-37.0 only; builds resolve android-37.
           ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
 
@@ -423,7 +467,7 @@ jobs:
           name: dep-build-log-${{ matrix.dep }}
           path: /tmp/build_android_deps_${{ matrix.dep }}.log
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 30
 
       - name: Stage complete OCCT headers
         if: steps.validate.outputs.need == '1' && matrix.dep == 'occt'
@@ -486,9 +530,16 @@ jobs:
       actions: write
     env:
       ABI: arm64-v8a
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      # Distributed compiler cache (GHA backend). The engine cache key churns on
+      # every engine/ change (hashFiles inputs), so a local ccache that only
+      # survives between runs via actions/cache misses whenever sources move —
+      # sccache is content-addressed and shared repo-wide across ALL runs, so
+      # incremental rebuilds hit objects compiled under earlier revisions
+      # (forgerig-style). Requires this job to keep actions: write above.
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_CACHE_SIZE: "6G"
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-      ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/23.1.7779620
+      ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/26.3.11579264
     outputs:
       engine_src: ${{ steps.engine-src.outputs.src }}
     steps:
@@ -543,8 +594,8 @@ jobs:
               SZ="$(stat -c%s "$DL/libslic3r.so" 2>/dev/null || echo 0)"
               if [ "$SZ" -le 10000000 ] \
                  || readelf -d "$DL/libslic3r.so" | grep -q 'libTK' \
-                 || ! strings "$DL/libslic3r.so" | grep -q -F 'Orca Slicer' \
-                 || ! strings "$DL/libslic3r.so" | grep -q -F 'Arachne' \
+                 || ! strings "$DL/libslic3r.so" | grep -q -F 'CNumericLocalesSetter' \
+                 || ! strings "$DL/libslic3r.so" | grep -q -F 'ClipperLib' \
                  || ! readelf -d "$DL/libslic3r.so" | grep -q "libgmp" \
                  || ! readelf -d "$DL/libslic3r.so" | grep -q "libmpfr"; then
                 echo "engine release .so failed quality gate (size/libTK/markers); ignoring and rebuilding"
@@ -595,7 +646,7 @@ jobs:
             SZ="$(stat -c%s "$SO" 2>/dev/null || echo 0)"
             if [ "$SZ" -le 10000000 ] \
                || readelf -d "$SO" | grep -q 'libTK' \
-               || ! strings "$SO" | grep -q -F 'Orca Slicer' \
+               || ! strings "$SO" | grep -q -F 'generated by PrusaSlicer' || grep -q -F 'PrusaSlicer' \
                || ! strings "$SO" | grep -q -F 'Arachne' \
                || ! readelf -d "$SO" | grep -q "libgmp" \
                || ! readelf -d "$SO" | grep -q "libmpfr"; then
@@ -610,58 +661,90 @@ jobs:
           done < "$DL/cands.txt"
           echo "art_hit=$ART" >> "$GITHUB_OUTPUT"
 
+      - name: Restore GMP from release (published build reuse)
+        id: gmp-rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          HIT=0
+          DL="$RUNNER_TEMP/rel-gmp"; mkdir -p "$DL"
+          if gh release download dep-gmp-latest --pattern 'gmp-deps.tar.gz' --pattern 'gmp-manifest.json' \
+               --dir "$DL" --clobber >/dev/null 2>&1; then
+            WANT="$(python3 -c "import json;print(json.load(open('$DL/gmp-manifest.json'))['files']['gmp-deps.tar.gz'])" 2>/dev/null || true)"
+            GOT="$(sha256sum "$DL/gmp-deps.tar.gz" 2>/dev/null | cut -d' ' -f1)"
+            if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
+              tar -xzf "$DL/gmp-deps.tar.gz"
+              HIT=1
+              echo "gmp release verified and staged (already published, no republish)"
+            else
+              echo "gmp release sha mismatch; ignoring"
+            fi
+          else
+            echo "no usable dep-gmp-latest release; continuing"
+          fi
+          echo "hit=$HIT" >> "$GITHUB_OUTPUT"
+
       - name: Set up JDK 17
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
-        run: |
-          curl -fsSL -o /tmp/temurin17.tar.gz "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse"
-          rm -rf /tmp/jdk17 && mkdir -p /tmp/jdk17
-          tar -xzf /tmp/temurin17.tar.gz -C /tmp/jdk17 --strip-components=1
-          rm -f /tmp/temurin17.tar.gz
-          /tmp/jdk17/bin/java -version 2>&1 | head -1
-          echo "JAVA_HOME=/tmp/jdk17" >> "$GITHUB_ENV"
-          echo "/tmp/jdk17/bin" >> "$GITHUB_PATH"
+        uses: 1337farm/actions/setup-jdk@v1
+        with:
+          java-version: '17'
 
-      - name: Set up Android SDK / NDK
-        run: |
-          SDK=/usr/local/lib/android/sdk
-          test -d "$SDK/cmdline-tools" || { echo "ERROR: preinstalled SDK missing at $SDK"; exit 1; }
-          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
-          echo "$SDK/cmdline-tools/latest/bin:$SDK/platform-tools" >> "$GITHUB_PATH"
-          # GITHUB_PATH applies to later steps only; export locally for this step.
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --version
+      - name: Set up Android SDK env
+        uses: 1337farm/actions/setup-android-env@v1
       - name: Install NDK ${{ env.NDK_VERSION }}
+        id: ndk-install
+        # UNCONDITIONAL: Publish engine release's strip needs the LLVM
+        # prebuilt dir's llvm-strip on EVERY path including release/artifact
+        # reuse (2026-09-12: reuse-path dispatches died at the strip on bare
+        # runners). The action is idempotent on warm runners (~seconds when
+        # the NDK is already present).
+        # continue-on-error + retry below: sdkmanager NDK downloads (~2.5GB)
+        # intermittently truncate and die with "Error on ZipFile unknown
+        # archive". A same-runner retry recovers without a full re-run.
+        continue-on-error: true
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Clear stale NDK download (retry prep)
+        if: steps.ndk-install.outcome == 'failure'
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37.0" "cmake;3.22.1"
+          : "${ANDROID_SDK_ROOT:?ANDROID_SDK_ROOT not set}"
+          rm -rf "$ANDROID_SDK_ROOT/.temp" "$ANDROID_SDK_ROOT/ndk/${{ env.NDK_VERSION }}"
+      - name: Install NDK ${{ env.NDK_VERSION }} (retry)
+        if: steps.ndk-install.outcome == 'failure'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
           # API 37 ships as android-37.0 only; builds resolve android-37.
           ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+      - name: Smoke-test NDK compiler
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
           "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android23-clang" --version \
             || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
+          # setup-android-ndk only *downloads* the NDK package; the publish
+          # step's strip needs the LLVM prebuilt dir to actually contain
+          # llvm-strip (2026-09-12: Publish engine release hard-failed at the
+          # strip on a bare reuse-path runner whose NDK lacked it — the .so
+          # was good and the size gate runs AFTER the strip, so a missing
+          # stripper must fail loudly here, never silently ship unstripped).
+          test -x "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" \
+            || { echo "ERROR: llvm-strip missing from installed NDK $ANDROID_NDK_ROOT"; exit 1; }
 
-      - name: Install ccache
+      - name: Setup sccache (distributed compiler cache)
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        uses: 1337farm/actions/setup-sccache@v1
+
+      - name: Write sccache marker env for build step
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ccache
-
-      - name: Restore ccache
-        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
-        uses: actions/cache@v5
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: engine-ccache-${{ runner.os }}-${{ steps.engine-key.outputs.key }}
-          restore-keys: |
-            engine-ccache-${{ runner.os }}-
-
-      - name: Initialize ccache
-        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
-        run: |
-          ccache -M 6G
-          ccache -z
-          ccache --version | head -1
+          sccache --version | head -1
+          echo "sccache ready (GHA backend)"
 
       - name: Restore Boost from release (build needs)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
@@ -740,29 +823,6 @@ jobs:
           }
           echo "all restored deps pass exact-file checks"
 
-      - name: Restore GMP from release (published build reuse)
-        id: gmp-rel
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          HIT=0
-          DL="$RUNNER_TEMP/rel-gmp"; mkdir -p "$DL"
-          if gh release download dep-gmp-latest --pattern 'gmp-deps.tar.gz' --pattern 'gmp-manifest.json' \
-               --dir "$DL" --clobber >/dev/null 2>&1; then
-            WANT="$(python3 -c "import json;print(json.load(open('$DL/gmp-manifest.json'))['files']['gmp-deps.tar.gz'])" 2>/dev/null || true)"
-            GOT="$(sha256sum "$DL/gmp-deps.tar.gz" 2>/dev/null | cut -d' ' -f1)"
-            if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
-              tar -xzf "$DL/gmp-deps.tar.gz"
-              HIT=1
-              echo "gmp release verified and staged (already published, no republish)"
-            else
-              echo "gmp release sha mismatch; ignoring"
-            fi
-          else
-            echo "no usable dep-gmp-latest release; continuing"
-          fi
-          echo "hit=$HIT" >> "$GITHUB_OUTPUT"
-
       - name: Build GMP/MPFR fresh (uncached, ~4 min)
         if: steps.gmp-rel.outputs.hit != '1'
         run: |
@@ -792,10 +852,19 @@ jobs:
         with:
           name: gmp-trees
           path: /tmp/gmp-deps.tar.gz
-          retention-days: 7
+          # 30-day retention: native-PR APK jobs reuse this artifact, and the
+          # post-merge main run's gmp-trees artifact restores from it instead
+          # of rebuilding GMP (protects the merge-time reuse window).
+          retention-days: 30
 
       - name: Publish GMP release
-        if: github.ref == 'refs/heads/main' && steps.gmp-rel.outputs.hit != '1'
+        # Published whenever a fresh build verifies, on ANY branch (like the
+        # build-dep matrix): PR runs that had to rebuild GMP backfill the
+        # rolling tag so later PRs and the post-merge main run restore instead
+        # of paying the ~4min build. Poison-proof: a restored release never
+        # republishes (rel hit => this step skips), and fresh builds pass the
+        # exact-file checks above before anything touches the tag.
+        if: steps.gmp-rel.outputs.hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -813,18 +882,248 @@ jobs:
             --title "GMP/MPFR deps (latest)" \
             --notes "Rolling release of the GMP/MPFR native deps built from source. Re-published whenever the dep rebuilds."
 
+      - name: Fetch PrusaSlicer 3.0 core (vendored tree deleted in #210)
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          bash engine/prusa30/fetch_prusaslicer.sh
+
+      - name: Stage 3.0 header deps (Eigen 3.4 + spdlog/fmt/cereal/json/sol2/expected/magic_enum)
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          bash scripts/stage_headers.sh engine/build/headers
+
+      - name: Build cpptrace+libassert fresh (3.0 Assert.hpp needs libassert)
+        # No cache reuse (mirrors package-apk staging): the engine link needs
+        # libassert.a + headers at prusa30/jniImports/assert (see
+        # engine/CMakeLists.txt ASSERT_STATIC_LIBS).
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          chmod +x scripts/build_prusa30_libassert.sh
+          NDK="$ANDROID_NDK_ROOT" ABI="arm64-v8a" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/assert" \
+            ./scripts/build_prusa30_libassert.sh
+          find engine/prusa30/jniImports/assert -name 'libassert*.a' | grep -q . \
+            || { echo "ERROR: no libassert archive staged"; exit 1; }
+          find engine/prusa30/jniImports/assert -path '*/libassert/assert.hpp' | grep -q . \
+            || { echo "ERROR: libassert headers missing"; exit 1; }
+          echo "libassert staged and verified"
+
+      - name: Stage NanoSVG headers fresh (3.0 EmbossShape needs <nanosvg/nanosvg.h>)
+        # Header-only fltk fork (seconds); same pin/layout as
+        # scripts/build_prusa30_deps.sh so -I matches upstream's include spelling.
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          chmod +x scripts/stage_prusa30_nanosvg.sh
+          STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/nanosvg" \
+            ./scripts/stage_prusa30_nanosvg.sh
+          find engine/prusa30/jniImports/nanosvg -path '*/nanosvg/nanosvg.h' | grep -q . \
+            || { echo "ERROR: nanosvg headers missing"; exit 1; }
+          echo "nanosvg staged and verified"
+
+      - name: Restore oneTBB v2021.12.0 from cache (3.0 needs template tbb::filter)
+        # Same key as the prusa30-headless tbb job: cache is shared repo-wide,
+        # so the headless staging is reused here instead of rebuilding oneTBB.
+        id: tbb2021-cache
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/tbb
+          key: prusa30-tbb-v2021.12.0-${{ hashFiles('scripts/build_prusa30_tbb.sh') }}-ndk${{ env.NDK_VERSION }}-arm64-v8a
+
+      - name: Build oneTBB v2021.12.0 from source (cache miss)
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1' && steps.tbb2021-cache.outputs.cache-hit != 'true'
+        run: |
+          chmod +x scripts/build_prusa30_tbb.sh
+          NDK="$ANDROID_NDK_ROOT" ABI="arm64-v8a" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/tbb" \
+            ./scripts/build_prusa30_tbb.sh
+
+      - name: Verify staged oneTBB v2021.12.0
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          test -f engine/prusa30/jniImports/tbb/include/oneapi/tbb/version.h \
+            || { echo "ERROR: oneTBB 2021 headers missing"; exit 1; }
+          find engine/prusa30/jniImports/tbb -name 'libtbb.a' | grep -q . \
+            || { echo "ERROR: libtbb.a missing"; exit 1; }
+          echo "oneTBB v2021.12.0 staged and verified"
+
+      - name: Restore staged Qhull+mixer from cache (VirtualExtruder needs mixer)
+        # Same key as the prusa30-headless qhullmix job: cache is shared
+        # repo-wide, so the headless staging is reused here.
+        id: qm-cache
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            engine/prusa30/jniImports/qhull
+            engine/prusa30/jniImports/mixer
+          key: prusa30-qhullmix-${{ hashFiles('scripts/build_prusa30_qhull.sh', 'scripts/build_prusa30_mixer.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored Qhull+mixer
+        id: qm-validate
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          NEED=1
+          if [ "${{ steps.qm-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            find engine/prusa30/jniImports/mixer -name 'libprusa_fdm_mixer.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/mixer -path '*/prusa_fdm_mixer/prusa_fdm_mixer.hpp' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Build Qhull + prusa-fdm-mixer from source (cache miss)
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1' && steps.qm-validate.outputs.need == '1'
+        run: |
+          chmod +x engine/prusa30/fetch_prusaslicer.sh scripts/build_prusa30_qhull.sh scripts/build_prusa30_mixer.sh
+          PRUSA_DIR=/tmp/prusa-overlay PRUSA_SHALLOW=1 ./engine/prusa30/fetch_prusaslicer.sh
+          test -f /tmp/prusa-overlay/deps/+prusa_fdm_mixer/CMakeLists.txt \
+            || { echo "ERROR: mixer overlay missing"; exit 1; }
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/qhull" \
+            ./scripts/build_prusa30_qhull.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/mixer" \
+            PRUSA_UP=/tmp/prusa-overlay \
+            ./scripts/build_prusa30_mixer.sh
+          find engine/prusa30/jniImports/mixer -name 'libprusa_fdm_mixer.a' | grep -q . \
+            || { echo "ERROR: no libprusa_fdm_mixer.a staged"; exit 1; }
+          find engine/prusa30/jniImports/mixer -path '*/prusa_fdm_mixer/prusa_fdm_mixer.hpp' | grep -q . \
+            || { echo "ERROR: mixer headers missing"; exit 1; }
+          echo "Qhull + prusa-fdm-mixer staged and verified"
+
+      - name: Stage range-v3 headers fresh (Preset views need <range/v3/...>)
+        # Header-only (seconds); pin mirrors upstream deps/+rangev3/rangev3.cmake.
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          chmod +x scripts/stage_prusa30_rangev3.sh
+          STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/rangev3" \
+            ./scripts/stage_prusa30_rangev3.sh
+          test -f engine/prusa30/jniImports/rangev3/include/range/v3/view/concat.hpp \
+            || { echo "ERROR: range-v3 headers missing"; exit 1; }
+          echo "range-v3 staged and verified"
+
+      - name: Stage YAML headers fresh (Preset IO needs <ryml.hpp>, Config needs yaml-cpp)
+        # Header-only (seconds); pins mirror upstream deps/+ryml/ryml.cmake and
+        # deps/+yamlCpp/yamlCpp.cmake.
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          chmod +x scripts/stage_prusa30_yaml.sh
+          STAGE_ROOT="$(pwd)/engine/prusa30/jniImports" \
+            ./scripts/stage_prusa30_yaml.sh
+          test -f engine/prusa30/jniImports/ryml/include/ryml.hpp \
+            || { echo "ERROR: ryml headers missing"; exit 1; }
+          test -f engine/prusa30/jniImports/yamlcpp/include/yaml-cpp/exceptions.h \
+            || { echo "ERROR: yaml-cpp headers missing"; exit 1; }
+          echo "yaml headers staged and verified"
+
+      - name: Build ryml+c4core fresh (YamlAdapterRyml link needs libryml.a)
+        # Mirrors libdeflate/fmt: no cache reuse by design. Headers alone
+        # cannot provide the c4::yml symbols the whole-archive link
+        # force-resolves from YamlAdapterRyml.o. Same pin as the staged
+        # headers and upstream deps/+ryml; archives land under
+        # jniImports/ryml/lib (link order ryml -> c4core).
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          chmod +x scripts/build_prusa30_ryml.sh
+          ABI="arm64-v8a" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/ryml" \
+            ./scripts/build_prusa30_ryml.sh
+          test -f engine/prusa30/jniImports/ryml/lib/libryml.a \
+            || { echo "ERROR: no libryml.a staged"; exit 1; }
+          echo "ryml staged and verified"
+
+      - name: Restore staged OpenSSL from cache (SHA256 needs libcrypto)
+        # Same key as the prusa30-headless openssl job: the cache is shared
+        # repo-wide, so the engine reuses the staged prefix instead of
+        # rebuilding. SHA256Linux.cpp (live via the UserAccount TUs) calls
+        # Biz::sha256 against libcrypto's EVP API.
+        id: openssl-cache
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/openssl
+          key: prusa30-openssl4.0.1-${{ hashFiles('scripts/build_prusa30_openssl.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored OpenSSL
+        id: openssl-validate
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          NEED=1
+          if [ "${{ steps.openssl-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/openssl/include/openssl/ssl.h || OK=0
+            ls engine/prusa30/jniImports/openssl/lib/libcrypto.a >/dev/null 2>&1 || OK=0
+            ls engine/prusa30/jniImports/openssl/lib/libssl.a >/dev/null 2>&1 || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Build OpenSSL from source (cache miss)
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1' && steps.openssl-validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_openssl.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/openssl" \
+            ./scripts/build_prusa30_openssl.sh
+          test -f engine/prusa30/jniImports/openssl/lib/libcrypto.a \
+            || { echo "ERROR: no libcrypto.a staged"; exit 1; }
+          echo "openssl staged and verified"
+
+      - name: Build libdeflate fresh (3mf needs libdeflate_* symbols)
+        # No cache reuse by design (like libassert/GMP): ~1 min, immune to poisoning.
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          chmod +x scripts/build_prusa30_libdeflate.sh
+          NDK="$ANDROID_NDK_ROOT" ABI="arm64-v8a" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/libdeflate" \
+            ./scripts/build_prusa30_libdeflate.sh
+          find engine/prusa30/jniImports/libdeflate -name 'libdeflate.a' | grep -q . \
+            || { echo "ERROR: no libdeflate.a staged"; exit 1; }
+          find engine/prusa30/jniImports/libdeflate -name 'libdeflate.h' | grep -q . \
+            || { echo "ERROR: libdeflate headers missing"; exit 1; }
+          echo "libdeflate staged and verified"
+
+      - name: Build fmt fresh (SPDLOG_FMT_EXTERNAL link needs libfmt.a)
+        # Mirrors libdeflate: no cache reuse by design (immune to poisoning).
+        # fmt 12.1.0 pin matches the staged headers (scripts/stage_headers.sh);
+        # SPDLOG_FMT_EXTERNAL TUs reference fmt::v12 symbols that headers
+        # alone cannot provide at link time (ld.lld: undefined fmt::v12::*).
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          chmod +x scripts/build_prusa30_fmt.sh
+          ABI="arm64-v8a" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/fmtlib" \
+            ./scripts/build_prusa30_fmt.sh
+          find engine/prusa30/jniImports/fmtlib -name 'libfmt.a' | grep -q . \
+            || { echo "ERROR: no libfmt.a staged"; exit 1; }
+          echo "fmt staged and verified"
+
+      - name: Stage Tracy headers fresh (3.0 ProjectInteractor needs <tracy/Tracy.hpp>)
+        # Profiling is OFF (SLIC3R_ENABLE_PROFILING default), so only the
+        # header is consumed; no TracyClient lib is built. Header-only intlint
+        # staging (seconds), same pin as build_prusa30_tracy.sh.
+        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        run: |
+          chmod +x scripts/build_prusa30_tracy.sh
+          STAGE_ROOT="$(pwd)/engine/prusa30/jniImports" \
+            ABI="arm64-v8a" API_LEVEL="23" \
+            ./scripts/build_prusa30_tracy.sh
+          test -f engine/prusa30/jniImports/tracy/tracy/Tracy.hpp \
+            || { echo "ERROR: tracy/Tracy.hpp missing"; exit 1; }
+          echo "tracy staged and verified"
+
       - name: Build native engine .so from source (standalone CMake)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         run: |
-          export PATH="/usr/lib/ccache:$PATH"
           cmake -S engine -B engine/build \
             -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_STL=c++_shared \
             -DANDROID_PLATFORM=android-23 \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
             "-DSLIC3R_VERSION=\"0.4.6\"" \
             "-DSLIC3R_BUILD_ID=\"4\""
           cmake --build engine/build --target slic3r -j"$(nproc)"
@@ -837,9 +1136,14 @@ jobs:
           echo "so_artifact=$SO" >> "$GITHUB_OUTPUT"
           test -n "$SO" || { echo "FAILED: libslic3r.so not found"; exit 1; }
 
-      - name: Show ccache stats
-        if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
-        run: ccache -s
+      - name: Show sccache stats
+        if: always()
+        run: |
+          sccache --show-stats || true
+          # Flush the server's pending Puts to the GHA backend so a single run
+          # that was skipped (release/artifact reuse) or interrupted still
+          # publishes what it produced.
+          sccache --stop-server 2>/dev/null || true
 
       - name: Upload libslic3r.so artifact
         uses: actions/upload-artifact@v6
@@ -850,7 +1154,10 @@ jobs:
           # via the build-engine job outputs.
           name: libslic3r-${{ steps.engine-src.outputs.src }}
           path: ${{ steps.find-so.outputs.so_artifact }}
-          retention-days: 7
+          # 30-day retention protects the post-merge reuse window: a native PR
+          # that sat open past 7 days otherwise loses its artifact, forcing the
+          # merge-time main run to recompile (or fall back to sccache-only).
+          retention-days: 30
 
       - name: Publish engine release
         if: github.ref == 'refs/heads/main' && steps.engine-rel.outputs.hit != '1'
@@ -871,7 +1178,7 @@ jobs:
           test "$SZ" -gt 10000000 || { echo "ERROR: libslic3r.so too small ($SZ bytes)"; exit 1; }
           readelf -d "$SO" | grep -q "libgmp" || { echo "ERROR: libslic3r.so missing libgmp NEEDED"; exit 1; }
           readelf -d "$SO" | grep -q "libmpfr" || { echo "ERROR: libslic3r.so missing libmpfr NEEDED"; exit 1; }
-          strings "$SO" | grep -q -F 'Orca Slicer' \
+          strings "$SO" | grep -q -F 'generated by PrusaSlicer' || grep -q -F 'PrusaSlicer' \
             || { echo "ERROR: libslic3r.so missing engine marker"; exit 1; }
           strings "$SO" | grep -q -F 'Arachne' \
             || { echo "ERROR: libslic3r.so missing Arachne marker"; exit 1; }
@@ -890,165 +1197,10 @@ jobs:
             --title "Engine libslic3r.so (latest)" \
             --notes "Rolling release of libslic3r.so built from source. Re-published whenever the engine rebuilds."
 
-  build-iroh:
-    name: iroh
-    runs-on: ubuntu-24.04
-    needs: [changes]
-    # farm-iroh: the custom UniFFI cdylib (P2P model-registry transport) built
-    # entirely from source via scripts/build_farm_iroh_android.sh (iroh/-base/
-    # -blobs/-tickets + uniffi 0.32 pinned in p2p/Cargo.toml). No prebuilt
-    # Maven FFI is used. Always runs on main (keeps farm-iroh-latest rolling
-    # and feeds the APK); on PRs when p2p/ or the build script changed, or
-    # when the native chain is already building anyway. Mirrors build-engine's
-    # release-first reuse: verify farm-iroh-latest against the CURRENT
-    # p2p/ tree + build script (manifest iroh_src) and only compile on miss.
-    if: github.ref == 'refs/heads/main' || needs.changes.outputs.iroh == 'true' || needs.changes.outputs.native == 'true'
-    timeout-minutes: 300
-    permissions:
-      contents: write
-    outputs:
-      iroh_src: ${{ steps.iroh-src.outputs.src }}
-    env:
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-      ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/23.1.7779620
-      ABI: arm64-v8a
-    steps:
-      - name: Checkout repository
-        run: |
-          git init -q .
-          git remote add origin "https://github.com/${{ github.repository }}.git"
-          git fetch --depth 100 origin "${{ github.sha }}"
-          git checkout "${{ github.sha }}"
-
-      - name: Compute farm-iroh source key
-        id: iroh-src
-        run: |
-          # Content-addresses the p2p/ tree AND the build script (both change
-          # the .so), for artifact naming, cache keys and manifest freshness.
-          SRC="$(git rev-parse HEAD:p2p | head -1)-$(git rev-parse HEAD:scripts/build_farm_iroh_android.sh | head -1)"
-          echo "src=$SRC"
-          echo "src=$SRC" >> "$GITHUB_OUTPUT"
-
-      - name: Restore farm-iroh from release (published build reuse)
-        id: iroh-rel
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          HIT=0
-          DL="$RUNNER_TEMP/rel-iroh"; mkdir -p "$DL"
-          if gh release download farm-iroh-latest --pattern 'libfarm_iroh.so' --pattern 'iroh-manifest.json' \
-               --dir "$DL" --clobber >/dev/null 2>&1; then
-            SRC="$(git rev-parse HEAD:p2p | head -1)-$(git rev-parse HEAD:scripts/build_farm_iroh_android.sh | head -1)"
-            SRC_WANT="$(python3 -c "import json;print(json.load(open('$DL/iroh-manifest.json')).get('iroh_src',''))" 2>/dev/null || true)"
-            if [ -z "$SRC" ] || [ -z "$SRC_WANT" ] || [ "$SRC" != "$SRC_WANT" ]; then
-              echo "farm-iroh sources changed since release (src=$SRC want=$SRC_WANT); rebuilding"
-            else
-              WANT="$(python3 -c "import json;print(json.load(open('$DL/iroh-manifest.json'))['files']['libfarm_iroh.so'])" 2>/dev/null || true)"
-              GOT="$(sha256sum "$DL/libfarm_iroh.so" 2>/dev/null | cut -d' ' -f1)"
-              SZ="$(stat -c%s "$DL/libfarm_iroh.so" 2>/dev/null || echo 0)"
-              if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ] \
-                 && [ "$SZ" -gt 1000000 ] \
-                 && readelf -h "$DL/libfarm_iroh.so" | grep -q 'AArch64' \
-                 && strings "$DL/libfarm_iroh.so" | grep -q -F 'checksum_func_connect'; then
-                mkdir -p "p2p/output/$ABI"
-                cp "$DL/libfarm_iroh.so" "p2p/output/$ABI/libfarm_iroh.so"
-                HIT=1
-                echo "farm-iroh release verified and staged (quality gate passed, no rebuild)"
-              else
-                echo "farm-iroh release sha/marker gate failed; rebuilding"
-              fi
-            fi
-          else
-            echo "no usable farm-iroh-latest release; continuing"
-          fi
-          echo "hit=$HIT" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Android SDK / NDK
-        if: steps.iroh-rel.outputs.hit != '1'
-        run: |
-          SDK=/usr/local/lib/android/sdk
-          test -d "$SDK/cmdline-tools" || { echo "ERROR: preinstalled SDK missing at $SDK"; exit 1; }
-          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
-          echo "$SDK/cmdline-tools/latest/bin:$SDK/platform-tools" >> "$GITHUB_PATH"
-          # GITHUB_PATH applies to later steps only; export locally for this step.
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --version
-
-      - name: Install NDK ${{ env.NDK_VERSION }}
-        if: steps.iroh-rel.outputs.hit != '1'
-        run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37.0" "cmake;3.22.1"
-          # API 37 ships as android-37.0 only; builds resolve android-37.
-          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
-          "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android23-clang" --version \
-            || { echo "ERROR: NDK compiler broken right after install (flaky runner?)"; exit 1; }
-
-      - name: Restore Rust toolchain + registry cache
-        if: steps.iroh-rel.outputs.hit != '1'
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo
-            ~/.rustup
-          key: iroh-cargo-${{ runner.os }}-${{ hashFiles('p2p/Cargo.lock') }}
-          restore-keys: |
-            iroh-cargo-${{ runner.os }}-
-
-      - name: Build farm-iroh cdylib + generate Kotlin bindings (source, NDK)
-        if: steps.iroh-rel.outputs.hit != '1'
-        run: |
-          chmod +x scripts/build_farm_iroh_android.sh
-          ./scripts/build_farm_iroh_android.sh
-          test -f "p2p/output/$ABI/libfarm_iroh.so" \
-            || { echo "ERROR: build_farm_iroh_android.sh did not stage libfarm_iroh.so"; exit 1; }
-
-      - name: Upload farm-iroh artifact
-        uses: actions/upload-artifact@v6
-        with:
-          # Source-bound name: a later run with identical p2p/ + build-script
-          # sources reuses this validated artifact (see package-apk).
-          name: farm-iroh-${{ steps.iroh-src.outputs.src }}
-          path: p2p/output/${{ env.ABI }}/libfarm_iroh.so
-          retention-days: 7
-
-      - name: Publish farm-iroh release
-        if: github.ref == 'refs/heads/main' && steps.iroh-rel.outputs.hit != '1'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-          OUT="$RUNNER_TEMP/iroh-release"
-          mkdir -p "$OUT"
-          SO="p2p/output/$ABI/libfarm_iroh.so"
-          test -f "$SO" || { echo "ERROR: no libfarm_iroh.so to publish"; exit 1; }
-          # Quality gate: real cdylib is tens of MB, AArch64, and carries the
-          # uniffi checksum symbols the bindings call. Publishes (including
-          # backfill of cache-hit builds) only pass here.
-          SZ="$(stat -c%s "$SO")"
-          test "$SZ" -gt 1000000 || { echo "ERROR: libfarm_iroh.so too small ($SZ bytes)"; exit 1; }
-          readelf -h "$SO" | grep -q 'AArch64' || { echo "ERROR: libfarm_iroh.so not AArch64"; exit 1; }
-          strings "$SO" | grep -q -F 'checksum_func_connect' \
-            || { echo "ERROR: libfarm_iroh.so missing uniffi checksum marker"; exit 1; }
-          echo "libfarm_iroh.so quality OK ($SZ bytes, AArch64, uniffi marker present)"
-          cp "$SO" "$OUT/libfarm_iroh.so"
-          SHA="$(git rev-parse --short=10 HEAD)"
-          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          SUM="$(sha256sum "$OUT/libfarm_iroh.so" | cut -d' ' -f1)"
-          SRC="${{ steps.iroh-src.outputs.src }}"
-          printf '{"commit":"%s","built_at":"%s","abi":"%s","iroh_src":"%s","files":{"libfarm_iroh.so":"%s"}}\n' \
-            "$SHA" "$DATE" "$ABI" "$SRC" "$SUM" > "$OUT/iroh-manifest.json"
-          gh release delete farm-iroh-latest --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
-          gh release create farm-iroh-latest "$OUT/libfarm_iroh.so" "$OUT/iroh-manifest.json" --repo "${{ github.repository }}" \
-            --title "farm-iroh cdylib (latest)" \
-            --notes "Rolling release of libfarm_iroh.so built from source. Re-published whenever the farm-iroh crate rebuilds."
-
   package-apk:
     name: apk
     runs-on: ubuntu-24.04
-    needs: [build-dep, build-engine, build-iroh, changes]
+    needs: [build-dep, build-engine, changes]
     # Skipped upstream jobs (path-filtered native builds) must NOT skip this
     # job: without this gate, GitHub skips the whole APK assembly+test stage
     # whenever deps/engine legitimately skip. Only genuine failure or
@@ -1058,18 +1210,24 @@ jobs:
     # needs.X.result != 'failure' is NOT evaluated when an upstream `needs`
     # job was SKIPPED (not failed) — github silently skips downstream jobs.
     # That silently skipped the whole APK+merge chain on native=false PRs
-    # (e.g. p2p publish kit, no engine/ changes): dep+engine skipped by
+    # (e.g. docs-only PRs, no engine/ changes): dep+engine skipped by
     # path-filter, apk clicked through on the naive form below, and merge
     # never fired. With !cancelled() the state machine actually evaluates
     # the result guards instead of dropping the job.
-    #
-    # build-iroh is allowed to SKIP (p2p untouched) — then farm-iroh is
-    # restored from the farm-iroh-latest release below; only a real failure
-    # or cancellation of that job blocks the APK.
-    if: '!cancelled() && needs.changes.result == ''success'' && needs.build-dep.result != ''failure'' && needs.build-dep.result != ''cancelled'' && needs.build-engine.result != ''failure'' && needs.build-engine.result != ''cancelled'' && needs.build-iroh.result != ''failure'' && needs.build-iroh.result != ''cancelled'''
+    if: '!cancelled() && needs.changes.result == ''success'' && needs.build-dep.result != ''failure'' && needs.build-dep.result != ''cancelled'' && needs.build-engine.result != ''failure'' && needs.build-engine.result != ''cancelled'''
     timeout-minutes: 120
     permissions:
       contents: write
+      packages: read
+      # sccache (bridge compile cache, GHA backend) needs actions cache write.
+      actions: write
+    env:
+      # Gradle gating flag for app/build.gradle: when set, the JNI bridge
+      # compile is wrapped in sccache (distributed GHA backend) so libfarm.so
+      # TU compiles hit across APK jobs.
+      FARM_NATIVE_CACHE: sccache
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_CACHE_SIZE: "4G"
     steps:
       - name: Checkout repository
         run: |
@@ -1079,31 +1237,25 @@ jobs:
           git checkout "${{ github.sha }}"
           git submodule update --init --recursive
 
-      - name: Set up JDK 17
-        run: |
-          curl -fsSL -o /tmp/temurin17.tar.gz "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse"
-          rm -rf /tmp/jdk17 && mkdir -p /tmp/jdk17
-          tar -xzf /tmp/temurin17.tar.gz -C /tmp/jdk17 --strip-components=1
-          rm -f /tmp/temurin17.tar.gz
-          /tmp/jdk17/bin/java -version 2>&1 | head -1
-          echo "JAVA_HOME=/tmp/jdk17" >> "$GITHUB_ENV"
-          echo "/tmp/jdk17/bin" >> "$GITHUB_PATH"
+      - name: Set up JDK 17 (+ gradle cache)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          # Reuses the gradle wrapper distribution + dependency + build caches
+          # across APK jobs (two gradle invocations below; forgerig-style), so
+          # re-runs skip re-downloading deps and re-resolving configuration.
+          cache: gradle
 
-      - name: Set up Android SDK / NDK
-        run: |
-          SDK=/usr/local/lib/android/sdk
-          test -d "$SDK/cmdline-tools" || { echo "ERROR: preinstalled SDK missing at $SDK"; exit 1; }
-          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
-          echo "$SDK/cmdline-tools/latest/bin:$SDK/platform-tools" >> "$GITHUB_PATH"
-          # GITHUB_PATH applies to later steps only; export locally for this step.
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --version
+      - name: Set up Android SDK env
+        uses: 1337farm/actions/setup-android-env@v1
       - name: Install NDK ${{ env.NDK_VERSION }}
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "ndk;${{ env.NDK_VERSION }}" "platforms;android-37.0" "cmake;3.22.1"
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
           # API 37 ships as android-37.0 only; builds resolve android-37.
           ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
 
@@ -1152,6 +1304,60 @@ jobs:
           tar -xzf "$DL/tbb-deps.tar.gz"
           test -d engine/src/main/jniImports/oneTBB/include/tbb || { echo "ERROR: tbb headers missing after extract"; exit 1; }
           echo "oneTBB headers restored from release"
+
+      - name: Fetch PrusaSlicer 3.0 core (farm bridge compiles against it)
+        run: |
+          bash engine/prusa30/fetch_prusaslicer.sh
+          test -d engine/build/prusaslicer-src/src/libslic3r || { echo "ERROR: 3.0 tree missing after fetch"; exit 1; }
+
+      - name: Stage 3.0 header deps (farm bridge needs)
+        run: |
+          bash scripts/stage_headers.sh engine/build/headers
+
+      - name: Build cpptrace+libassert from source (static; 3.0 Assert.hpp needs)
+        # No cache/release reuse by design (like GMP/MPFR): ~minutes, immune
+        # to poisoning, and the package-apk job must not use actions/cache
+        # (CI guard: build-dep skips cache-save on reuse).
+        run: |
+          chmod +x scripts/build_prusa30_libassert.sh
+          NDK="$ANDROID_NDK_ROOT" ABI="arm64-v8a" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/assert" \
+            ./scripts/build_prusa30_libassert.sh
+          find engine/prusa30/jniImports/assert -name 'libassert*.a' | grep -q . \
+            || { echo "ERROR: no libassert archive staged"; exit 1; }
+          find engine/prusa30/jniImports/assert -path '*/libassert/assert.hpp' | grep -q . \
+            || { echo "ERROR: libassert headers missing"; exit 1; }
+          echo "libassert v2.2.1 staged and verified"
+
+      - name: Stage oneTBB v2021.12.0 headers (bridge needs 2021 template tbb headers)
+        # Headers only (seconds): the app links the engine .so, never libtbb.a.
+        # No actions/cache by design (CI guard); pin mirrors build_prusa30_tbb.sh.
+        # Ungated: package-apk always compiles the bridge, even on
+        # non-native (Java-only) PRs where build-engine skips.
+        run: |
+          chmod +x scripts/stage_prusa30_tbb_headers.sh
+          STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/tbb" \
+            ./scripts/stage_prusa30_tbb_headers.sh
+
+      - name: Verify staged oneTBB v2021.12.0 headers
+        run: |
+          test -f engine/prusa30/jniImports/tbb/include/oneapi/tbb/version.h \
+            || { echo "ERROR: oneTBB 2021 headers missing"; exit 1; }
+          echo "oneTBB v2021.12.0 staged and verified"
+
+      - name: Stage NanoSVG headers fresh (bridge EmbossShape needs <nanosvg/nanosvg.h>)
+        # Header-only fltk fork (seconds); same pin/layout as
+        # scripts/build_prusa30_deps.sh. The apk runner is separate from the
+        # engine runner, so this must be staged here too, not reused.
+        # Ungated: package-apk always compiles the bridge, even on
+        # non-native (Java-only) PRs where build-engine skips.
+        run: |
+          chmod +x scripts/stage_prusa30_nanosvg.sh
+          STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/nanosvg" \
+            ./scripts/stage_prusa30_nanosvg.sh
+          find engine/prusa30/jniImports/nanosvg -path '*/nanosvg/nanosvg.h' | grep -q . \
+            || { echo "ERROR: nanosvg headers missing"; exit 1; }
+          echo "nanosvg staged and verified"
 
       - name: Download GMP trees artifact
         if: needs.changes.outputs.native == 'true'
@@ -1232,66 +1438,26 @@ jobs:
           fi
           echo "OK: OCCT statically linked into libslic3r.so; no libTK runtime staged"
 
+      - name: Setup sccache (bridge compile cache)
+        uses: 1337farm/actions/setup-sccache@v1
+
       - name: Grant execute permission
         run: chmod +x gradlew
 
       - name: Verify staged engine .so is genuine
         run: |
           SO=engine/output/arm64-v8a/libslic3r.so
-          strings "$SO" | grep -q -F 'Orca Slicer' \
-            && strings "$SO" | grep -q -F 'Arachne' \
-            && echo "OK: staged engine .so carries engine markers" \
-            || { echo "ERROR: staged engine .so failed marker check"; exit 1; }
+          strings "$SO" | grep -q -F 'CNumericLocalesSetter' \
+          && strings "$SO" | grep -q -F 'ClipperLib' \
+          && echo "OK: staged engine .so carries engine markers" \
+          || { echo "ERROR: staged engine .so failed marker check"; exit 1; }
 
-      - name: Download farm-iroh artifact (source-built / release-verified)
-        if: needs.changes.outputs.native == 'true' || needs.changes.outputs.iroh == 'true'
-        uses: actions/download-artifact@v6
-        with:
-          name: farm-iroh-${{ needs.build-iroh.outputs.iroh_src }}
-          path: /tmp/farm-iroh-artifact
-
-      - name: Restore farm-iroh from release (non-iroh/native runs)
-        if: needs.changes.outputs.native != 'true' && needs.changes.outputs.iroh != 'true'
+      - name: Configure GitHub Packages credentials for irohbridge AAR
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          DL="$RUNNER_TEMP/rel-iroh"; mkdir -p "$DL"
-          if gh release download farm-iroh-latest --pattern 'libfarm_iroh.so' --pattern 'iroh-manifest.json' \
-               --dir "$DL" --clobber >/dev/null 2>&1; then
-            # Source-freshness mirror of the engine release reuse: only a .so
-            # built from the CURRENT p2p/ tree + build script is staged;
-            # otherwise degrade (P2P transport unavailable at runtime) rather
-            # than ship a stale native lib.
-            SRC="$(git rev-parse HEAD:p2p | head -1)-$(git rev-parse HEAD:scripts/build_farm_iroh_android.sh | head -1)"
-            SRC_WANT="$(python3 -c "import json;print(json.load(open('$DL/iroh-manifest.json')).get('iroh_src',''))" 2>/dev/null || true)"
-            if [ -n "$SRC" ] && [ "$SRC" = "$SRC_WANT" ]; then
-              WANT="$(python3 -c "import json;print(json.load(open('$DL/iroh-manifest.json'))['files']['libfarm_iroh.so'])" 2>/dev/null || true)"
-              GOT="$(sha256sum "$DL/libfarm_iroh.so" | cut -d' ' -f1)"
-              if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
-                mkdir -p p2p/output/arm64-v8a
-                cp "$DL/libfarm_iroh.so" p2p/output/arm64-v8a/libfarm_iroh.so
-                echo "farm-iroh restored from release (fresh, sha-verified)"
-                exit 0
-              fi
-              echo "farm-iroh release sha mismatch; degrading (no .so staged)"
-            else
-              echo "farm-iroh release stale for this source; degrading (no .so staged)"
-            fi
-          else
-            echo "no farm-iroh-latest release yet; degrading (no .so staged)"
-          fi
-
-      - name: Verify staged farm-iroh .so
-        run: |
-          SO=p2p/output/arm64-v8a/libfarm_iroh.so
-          if [ -f "$SO" ]; then
-            readelf -h "$SO" | grep -q 'AArch64' || { echo "ERROR: staged libfarm_iroh.so not AArch64"; exit 1; }
-            strings "$SO" | grep -q -F 'checksum_func_connect' \
-              || { echo "ERROR: staged libfarm_iroh.so missing uniffi marker"; exit 1; }
-            echo "OK: staged libfarm_iroh.so genuine ($(stat -c%s "$SO") bytes)"
-          else
-            echo "WARN: no libfarm_iroh.so staged; P2P model transport degrades (IrohModelTransport -> UnavailableException)"
-          fi
+          echo "GH_PACKAGES_USER=${{ github.actor }}" >> "$GITHUB_ENV"
+          echo "GH_PACKAGES_TOKEN=$GH_PACKAGES_TOKEN" >> "$GITHUB_ENV"
 
       - name: Run Android unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace
@@ -1305,7 +1471,13 @@ jobs:
         with:
           name: FlashForgeFarm-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
-          retention-days: 7
+          retention-days: 30
+
+      - name: Show sccache stats
+        if: always()
+        run: |
+          sccache --show-stats || true
+          sccache --stop-server 2>/dev/null || true
 
       - name: Publish APK release
         if: github.ref == 'refs/heads/main'
@@ -1329,35 +1501,14 @@ jobs:
             --title "FlashForge Farm APK (latest)" \
             --notes "Rolling sideloadable debug APK built from source. Re-published on every green build."
 
-  publish-models:
-    name: models
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout repository
-        run: |
-          git init -q .
-          git remote add origin "https://github.com/${{ github.repository }}.git"
-          git fetch --depth 100 origin "${{ github.sha }}"
-          git checkout "${{ github.sha }}"
-
-      - name: Publish sample-models release (deterministic, sha-pinned)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-          chmod +x scripts/publish-models.sh
-          scripts/publish-models.sh --publish
-          echo "models-latest verified (models.zip sha pinned in models/manifest.json)"
-
   automerge:
     name: merge
     runs-on: ubuntu-24.04
     needs: [package-apk]
-    timeout-minutes: 10
+    # 30 min: the dispatch step below polls up to 20 min for the queued
+    # squash to land before refreshing main (GITHUB_TOKEN merges never
+    # trigger the push workflows, so this wait IS main's automatic CI).
+    timeout-minutes: 30
     # !cancelled() is REQUIRED: on native=false PRs package-apk still MUST
     # have run (its own if: guard), but the naive success() default would
     # still drop this job here whenever anything upstream skipped. Merge only
@@ -1383,10 +1534,31 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # A merge made with the default GITHUB_TOKEN does NOT trigger the
-          # push workflow on main (GitHub suppresses event re-triggering from
-          # that token), so without this dispatch the rolling releases
-          # (engine-latest / farm-apk-latest / dep-*-latest) would silently
-          # go stale on every auto-merge. Dispatch refresh deliberately:
-          # farm-apk-latest is only published when github.ref is main.
-          gh workflow run native-engine-build.yml --repo "${{ github.repository }}" --ref main
-          echo "dispatched main pipeline; rolling releases will refresh with the merged changes"
+          # push workflows on main (GitHub suppresses event re-triggering from
+          # that token), so without this dispatch main would get NO CI and the
+          # rolling releases (engine-latest / farm-apk-latest / dep-*-latest)
+          # would silently go stale on every auto-merge. Dispatch refresh
+          # deliberately: farm-apk-latest is only published when github.ref
+          # is main.
+          # --auto only queues the merge: it usually has NOT landed yet when
+          # this step runs, so poll until it does. A one-shot check here
+          # loses the race every time and main silently gets no CI at all
+          # (seen on #206: merge landed minutes after the check skipped).
+          MERGED=""
+          for i in $(seq 1 60); do
+            MERGED=$(gh pr view "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --json state --jq .state || echo UNKNOWN)
+            if [ "$MERGED" = "MERGED" ]; then break; fi
+            sleep 20
+          done
+          if [ "$MERGED" = "MERGED" ]; then
+            gh workflow run native-engine-build.yml --repo "${{ github.repository }}" --ref main
+            echo "PR merged; dispatched main pipeline refresh."
+            # Same GITHUB_TOKEN suppression applies to prusa30-headless.yml
+            # (push trigger): without this, the 3.0 compile-fix loop stalls
+            # on main after every auto-merge (seen 2026-09-12: zero main runs
+            # across #131-#176 despite matching paths).
+            gh workflow run prusa30-headless.yml --repo "${{ github.repository }}" --ref main
+            echo "PR merged; dispatched prusa30-headless on main."
+          else
+            echo "PR not merged within 20 min (state=$MERGED); skipping main dispatch."
+          fi

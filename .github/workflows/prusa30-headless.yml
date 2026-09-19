@@ -1,0 +1,2186 @@
+name: prusa30-headless
+
+# Compile-fix loop for the PrusaSlicer 3.0 bring-up. Fetches the pinned Fetches the pinned
+# upstream tree, applies our headless patch, then configures/builds
+# engine/prusa30 against the Android NDK. Isolated from native-engine-build.yml
+# (which builds the legacy 2.x engine) so the 3.0 bring-up does not break the
+# shipping app. A red run IS the error list that drives the next fix PR.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main", "master"]
+    paths:
+      - "engine/prusa30/**"
+      - "scripts/build_boost.sh"
+      - "scripts/build_prusa30_tbb.sh"
+      - "scripts/build_prusa30_nlopt.sh"
+      - "scripts/build_prusa30_qhull.sh"
+      - "scripts/build_prusa30_mixer.sh"
+      - "scripts/build_prusa30_libassert.sh"
+      - "scripts/build_prusa30_expat.sh"
+      - "scripts/build_prusa30_png.sh"
+      - "scripts/build_prusa30_fmt.sh"
+      - "scripts/build_prusa30_tracy.sh"
+      - "scripts/build_prusa30_gmp.sh"
+      - "scripts/build_prusa30_openssl.sh"
+      - "scripts/build_prusa30_zstd.sh"
+      - "scripts/build_prusa30_blosc.sh"
+      - "scripts/build_prusa30_openvdb.sh"
+      - "scripts/build_prusa30_heatshrink.sh"
+      - "scripts/build_prusa30_libbgcode.sh"
+      - "scripts/build_prusa30_jpeg.sh"
+      - "scripts/build_prusa30_lua.sh"
+      - "scripts/build_prusa30_sol2.sh"
+      - ".github/workflows/prusa30-headless.yml"
+  pull_request:
+    branches: ["main", "master"]
+
+env:
+  # PrusaSlicer 3.0-alpha uses C++20 hard (constexpr std::string, concepts),
+  # which requires libc++ >= 15. NDK r23 ships clang 14 / libc++ 14 and fails
+  # (libslic3r TypeInfo.hpp "constexpr function's return type 'std::string' is
+  # not a literal type"). r26d = clang 17 / libc++ 17. Native engine stays on
+  # its own r23 NDK (legacy 2.x) — this workflow is isolated.
+  NDK_VERSION: "26.3.11579264"
+  PRUSA_REF: "6f510128d7c2e543b62919b74bea7e876f564205"
+  BOOST_VER: "1.86.0"
+  ABI: "arm64-v8a"
+
+jobs:
+  # Runs on EVERY PR (no paths filter): decides whether the heavy stages are
+  # needed. PRs without 3.0 inputs skip them in seconds; the skips satisfy
+  # branch protection ("green if not skipped"). Pushes to main and manual
+  # dispatches always build full (main must validate; no file list to diff).
+  # Job name is prusa30-prefixed: the native workflow already reports a
+  # check named `changes`, and required-check matching is by name.
+  prusa30-changes:
+    name: prusa30-changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      prusa30: ${{ steps.filter.outputs.prusa30 }}
+    steps:
+      - name: Detect prusa30-affecting changes
+        id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "prusa30=true (non-PR: always full build)"
+            echo "prusa30=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # File list via API: immune to shallow-checkout merge-base issues.
+          # No checkout needed at all. Patterns mirror the old paths filter.
+          FILES="$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --paginate --jq '.[].filename')"
+          echo "$FILES" | grep -qE '^(engine/prusa30/|scripts/build_boost\.sh|scripts/build_prusa30_.*\.sh|\.github/workflows/prusa30-headless\.yml)' \
+            && { echo "prusa30=true (3.0 inputs changed)"; echo "prusa30=true" >> "$GITHUB_OUTPUT"; } \
+            || { echo "prusa30=false (no 3.0 inputs changed; heavy stages skip)"; echo "prusa30=false" >> "$GITHUB_OUTPUT"; }
+
+  build-boost:
+    name: boost
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged Boost ${{ env.BOOST_VER }} from cache
+        id: boost-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/boost
+          key: prusa30-boost-${{ env.BOOST_VER }}-${{ hashFiles('scripts/build_boost.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored Boost
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.boost-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            for lib in system filesystem thread regex chrono atomic date_time iostreams nowide; do
+              ls "engine/prusa30/jniImports/boost/lib/$ABI/lib/libboost_${lib}"*.a >/dev/null 2>&1 || OK=0
+            done
+            grep -q "1_86" engine/prusa30/jniImports/boost/include/boost/version.hpp 2>/dev/null || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build Boost ${{ env.BOOST_VER }} from source (FULL)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_boost.sh
+          BOOST_VER="$BOOST_VER" ABI="$ABI" API_LEVEL="23" \
+            JNI_IMPORTS_DIR="$(pwd)/engine/prusa30/jniImports" \
+            ./scripts/build_boost.sh
+
+      - name: Verify staged Boost exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          for lib in system filesystem thread regex chrono atomic date_time iostreams nowide; do
+            ls "engine/prusa30/jniImports/boost/lib/$ABI/lib/libboost_${lib}"*.a >/dev/null \
+              || { echo "ERROR: missing libboost_$lib archive"; exit 1; }
+          done
+          grep -q "1_86" engine/prusa30/jniImports/boost/include/boost/version.hpp \
+            || { echo "ERROR: staged headers are not Boost 1.86"; exit 1; }
+          echo "Boost $BOOST_VER staged and verified"
+
+      - name: Save staged Boost ${{ env.BOOST_VER }}
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/boost
+          key: prusa30-boost-${{ env.BOOST_VER }}-${{ hashFiles('scripts/build_boost.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-tbb:
+    name: tbb
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged oneTBB v2021.12.0 from cache
+        id: tbb-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/tbb
+          key: prusa30-tbb-v2021.12.0-${{ hashFiles('scripts/build_prusa30_tbb.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored oneTBB
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.tbb-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/tbb/include/oneapi/tbb/version.h || OK=0
+            ls engine/prusa30/jniImports/tbb/lib*/cmake/TBB/TBBConfig.cmake >/dev/null 2>&1 \
+              || find engine/prusa30/jniImports/tbb -name TBBConfig.cmake | grep -q . || OK=0
+            find engine/prusa30/jniImports/tbb -name 'libtbb.a' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build oneTBB v2021.12.0 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_tbb.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/tbb" \
+            ./scripts/build_prusa30_tbb.sh
+
+      - name: Verify staged oneTBB exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/tbb/include/oneapi/tbb/version.h \
+            || { echo "ERROR: oneapi/tbb/version.h missing"; exit 1; }
+          find engine/prusa30/jniImports/tbb -name TBBConfig.cmake | grep -q . \
+            || { echo "ERROR: TBBConfig.cmake missing"; exit 1; }
+          find engine/prusa30/jniImports/tbb -name 'libtbb.a' | grep -q . \
+            || { echo "ERROR: no libtbb.a staged"; exit 1; }
+          echo "oneTBB v2021.12.0 staged and verified"
+
+      - name: Save staged oneTBB v2021.12.0
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/tbb
+          key: prusa30-tbb-v2021.12.0-${{ hashFiles('scripts/build_prusa30_tbb.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-nlopt:
+    name: nlopt
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged NLopt v2.5.0 from cache
+        id: nlopt-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/nlopt
+          key: prusa30-nlopt-v2.5.0-${{ hashFiles('scripts/build_prusa30_nlopt.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored NLopt
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.nlopt-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/nlopt/include/nlopt.hpp || OK=0
+            test -f engine/prusa30/jniImports/nlopt/include/nlopt.h || OK=0
+            ls engine/prusa30/jniImports/nlopt/lib/libnlopt_cxx.* >/dev/null 2>&1 || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build NLopt v2.5.0 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_nlopt.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/nlopt" \
+            ./scripts/build_prusa30_nlopt.sh
+
+      - name: Verify staged NLopt exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/nlopt/include/nlopt.hpp \
+            || { echo "ERROR: nlopt.hpp missing"; exit 1; }
+          ls engine/prusa30/jniImports/nlopt/lib/libnlopt_cxx.* >/dev/null \
+            || { echo "ERROR: no libnlopt_cxx staged"; exit 1; }
+          echo "NLopt v2.5.0 staged and verified"
+
+      - name: Save staged NLopt v2.5.0
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/nlopt
+          key: prusa30-nlopt-v2.5.0-${{ hashFiles('scripts/build_prusa30_nlopt.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-expat:
+    name: expat
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged expat R_2_8_2 from cache
+        id: expat-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/expat
+          key: prusa30-expat-R_2_8_2-${{ hashFiles('scripts/build_prusa30_expat.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored expat
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.expat-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/expat/include/expat.h || OK=0
+            find engine/prusa30/jniImports/expat -name 'libexpat.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/expat -name 'expat-config.cmake' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build expat R_2_8_2 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_expat.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/expat" \
+            ./scripts/build_prusa30_expat.sh
+
+      - name: Verify staged expat exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/expat/include/expat.h \
+            || { echo "ERROR: expat.h missing"; exit 1; }
+          find engine/prusa30/jniImports/expat -name 'libexpat.a' | grep -q . \
+            || { echo "ERROR: no libexpat.a staged"; exit 1; }
+          find engine/prusa30/jniImports/expat -name 'expat-config.cmake' | grep -q . \
+            || { echo "ERROR: expat-config.cmake missing"; exit 1; }
+          echo "expat R_2_8_2 staged and verified"
+
+      - name: Save staged expat R_2_8_2
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/expat
+          key: prusa30-expat-R_2_8_2-${{ hashFiles('scripts/build_prusa30_expat.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-pngfmt:
+    name: pngfmt
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged zlib+libpng from cache
+        id: pf-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/pngfmt
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh', 'scripts/build_prusa30_tracy.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored pngfmt
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.pf-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/pngfmt/include/zlib.h || OK=0
+            test -f engine/prusa30/jniImports/pngfmt/include/png.h || OK=0
+            find engine/prusa30/jniImports/pngfmt -name 'libz.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/pngfmt -name 'libpng*.a' | grep -q . || OK=0
+            test -f engine/prusa30/jniImports/pngfmt/include/fmt/core.h || OK=0
+            find engine/prusa30/jniImports/pngfmt -name 'libfmt.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/pngfmt -name 'TracyClient.cpp' -o -name 'libTracyClient.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/pngfmt -name 'TracyConfig.cmake' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build zlib+libpng+fmt+Tracy from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_png.sh scripts/build_prusa30_fmt.sh scripts/build_prusa30_tracy.sh
+          PFX="$(pwd)/engine/prusa30/jniImports/pngfmt"
+          ABI="$ABI" API_LEVEL="23" STAGE_ROOT="$PFX" ./scripts/build_prusa30_png.sh
+          ABI="$ABI" API_LEVEL="23" STAGE_ROOT="$PFX" ./scripts/build_prusa30_fmt.sh
+          ABI="$ABI" API_LEVEL="23" STAGE_ROOT="$PFX" NDK_ZLIB_ROOT="$PFX" ./scripts/build_prusa30_png.sh --libpng-only
+          ABI="$ABI" API_LEVEL="23" STAGE_ROOT="$PFX" ./scripts/build_prusa30_tracy.sh
+
+      - name: Verify staged pngfmt exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/pngfmt/include/zlib.h \
+            || { echo "ERROR: zlib.h missing"; exit 1; }
+          test -f engine/prusa30/jniImports/pngfmt/include/png.h \
+            || { echo "ERROR: png.h missing"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'libz.a' | grep -q . \
+            || { echo "ERROR: no libz.a staged"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'libpng*.a' | grep -q . \
+            || { echo "ERROR: no libpng staged"; exit 1; }
+          test -f engine/prusa30/jniImports/pngfmt/include/fmt/core.h \
+            || { echo "ERROR: fmt/core.h missing"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'libfmt.a' | grep -q . \
+            || { echo "ERROR: no libfmt.a staged"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'TracyClient.cpp' -o -name 'libTracyClient.a' | grep -q . \
+            || { echo "ERROR: no TracyClient staged"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'TracyConfig.cmake' | grep -q . \
+            || { echo "ERROR: no TracyConfig.cmake staged"; exit 1; }
+          echo "pngfmt staged and verified"
+
+      - name: Save staged zlib+libpng+fmt+Tracy
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/pngfmt
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh', 'scripts/build_prusa30_tracy.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-assert:
+    name: assert
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged libassert from cache
+        id: assert-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/assert
+          key: prusa30-assert-${{ hashFiles('scripts/build_prusa30_libassert.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored libassert
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.assert-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            find engine/prusa30/jniImports/assert -name 'libassert*.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/assert -path '*/libassert/assert.hpp' | grep -q . || OK=0
+            find engine/prusa30/jniImports/assert -name 'libassert-config.cmake' -o -name 'libassertConfig.cmake' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build cpptrace+libassert from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_libassert.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/assert" \
+            ./scripts/build_prusa30_libassert.sh
+
+      - name: Verify staged libassert exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          find engine/prusa30/jniImports/assert -name 'libassert*.a' | grep -q . \
+            || { echo "ERROR: no libassert archive staged"; exit 1; }
+          find engine/prusa30/jniImports/assert -path '*/libassert/assert.hpp' | grep -q . \
+            || { echo "ERROR: libassert headers missing"; exit 1; }
+          find engine/prusa30/jniImports/assert -name 'libassert-config.cmake' -o -name 'libassertConfig.cmake' | grep -q . \
+            || { echo "ERROR: no libassert config staged"; exit 1; }
+          echo "libassert v2.2.1 staged and verified"
+
+      - name: Save staged libassert
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/assert
+          key: prusa30-assert-${{ hashFiles('scripts/build_prusa30_libassert.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-qhullmix:
+    name: qhullmix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged Qhull+mixer from cache
+        id: qm-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            engine/prusa30/jniImports/qhull
+            engine/prusa30/jniImports/mixer
+          key: prusa30-qhullmix-${{ hashFiles('scripts/build_prusa30_qhull.sh', 'scripts/build_prusa30_mixer.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored Qhull+mixer
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.qm-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            find engine/prusa30/jniImports/qhull -name 'libqhull*.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/qhull \( -name 'QhullConfig.cmake' -o -name 'qhull-config.cmake' \) | grep -q . || OK=0
+            find engine/prusa30/jniImports/mixer -name 'libprusa_fdm_mixer.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/mixer -name 'prusa_fdm_mixerConfig.cmake' -o -name 'prusa_fdm_mixer-config.cmake' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch PrusaSlicer 3.0 source for mixer overlay
+        if: steps.validate.outputs.need == '1'
+        run: |
+          # mixer build needs upstream's deps/+prusa_fdm_mixer overlay files.
+          # Shallow blob fetch (no full tree checkout needed here).
+          chmod +x engine/prusa30/fetch_prusaslicer.sh
+          PRUSA_REF="$PRUSA_REF" PRUSA_DIR=/tmp/prusa-overlay PRUSA_SHALLOW=1 ./engine/prusa30/fetch_prusaslicer.sh
+          test -f /tmp/prusa-overlay/deps/+prusa_fdm_mixer/CMakeLists.txt \
+            || { echo "ERROR: mixer overlay missing"; exit 1; }
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build Qhull + prusa-fdm-mixer from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_qhull.sh scripts/build_prusa30_mixer.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/qhull" \
+            ./scripts/build_prusa30_qhull.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/mixer" \
+            PRUSA_UP=/tmp/prusa-overlay \
+            ./scripts/build_prusa30_mixer.sh
+
+      - name: Verify staged Qhull+mixer exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          find engine/prusa30/jniImports/qhull -name 'libqhull*.a' | grep -q . \
+            || { echo "ERROR: no qhull static libs staged"; exit 1; }
+          find engine/prusa30/jniImports/qhull \( -name 'QhullConfig.cmake' -o -name 'qhull-config.cmake' \) | grep -q . \
+            || { echo "ERROR: no Qhull config staged"; exit 1; }
+          find engine/prusa30/jniImports/mixer -name 'libprusa_fdm_mixer.a' | grep -q . \
+            || { echo "ERROR: no libprusa_fdm_mixer.a staged"; exit 1; }
+          find engine/prusa30/jniImports/mixer -name 'prusa_fdm_mixerConfig.cmake' -o -name 'prusa_fdm_mixer-config.cmake' | grep -q . \
+            || { echo "ERROR: no mixer config staged"; exit 1; }
+          echo "Qhull + prusa-fdm-mixer staged and verified"
+
+      - name: Save staged Qhull+mixer
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            engine/prusa30/jniImports/qhull
+            engine/prusa30/jniImports/mixer
+          key: prusa30-qhullmix-${{ hashFiles('scripts/build_prusa30_qhull.sh', 'scripts/build_prusa30_mixer.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-gmpcgal:
+    name: gmpcgal
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    needs: [prusa30-changes, build-boost]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged Boost ${{ env.BOOST_VER }} (CGAL configure input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/boost
+          key: prusa30-boost-${{ env.BOOST_VER }}-${{ hashFiles('scripts/build_boost.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Bridge Boost archives into stage/lib (FindBoost search path)
+        run: |
+          mkdir -p engine/prusa30/jniImports/boost/stage/lib
+          for a in engine/prusa30/jniImports/boost/lib/$ABI/lib/libboost_*.a; do
+            ln -sf "../../lib/$ABI/lib/$(basename "$a")" \
+              "engine/prusa30/jniImports/boost/stage/lib/$(basename "$a")"
+          done
+          ls engine/prusa30/jniImports/boost/stage/lib/ | head -5
+
+      - name: Restore staged GMP+MPFR+CGAL from cache
+        id: gmpcgal-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/gmpcgal
+          key: prusa30-gmpcgal-cgal5.6.2-${{ hashFiles('scripts/build_prusa30_gmp.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored GMP+MPFR+CGAL
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.gmpcgal-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/gmpcgal/include/gmp.h || OK=0
+            test -f engine/prusa30/jniImports/gmpcgal/include/gmpxx.h || OK=0
+            test -f engine/prusa30/jniImports/gmpcgal/include/mpfr.h || OK=0
+            ls engine/prusa30/jniImports/gmpcgal/lib/libgmp.so >/dev/null 2>&1 || OK=0
+            ls engine/prusa30/jniImports/gmpcgal/lib/libgmpxx.so >/dev/null 2>&1 || OK=0
+            ls engine/prusa30/jniImports/gmpcgal/lib/libmpfr.so >/dev/null 2>&1 || OK=0
+            find engine/prusa30/jniImports/gmpcgal \( -name 'CGALConfig.cmake' -o -name 'CGAL-config.cmake' \) | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build GMP+MPFR+CGAL from source (shared+static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_gmp.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/gmpcgal" \
+            BOOST_STAGE="$(pwd)/engine/prusa30/jniImports/boost" \
+            ./scripts/build_prusa30_gmp.sh
+
+      - name: Verify staged GMP+MPFR+CGAL exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/gmpcgal/include/gmp.h \
+            || { echo "ERROR: gmp.h missing"; exit 1; }
+          test -f engine/prusa30/jniImports/gmpcgal/include/gmpxx.h \
+            || { echo "ERROR: gmpxx.h missing"; exit 1; }
+          test -f engine/prusa30/jniImports/gmpcgal/include/mpfr.h \
+            || { echo "ERROR: mpfr.h missing"; exit 1; }
+          ls engine/prusa30/jniImports/gmpcgal/lib/libgmp.so >/dev/null \
+            || { echo "ERROR: no libgmp.so staged"; exit 1; }
+          ls engine/prusa30/jniImports/gmpcgal/lib/libgmpxx.so >/dev/null \
+            || { echo "ERROR: no libgmpxx.so staged"; exit 1; }
+          ls engine/prusa30/jniImports/gmpcgal/lib/libmpfr.so >/dev/null \
+            || { echo "ERROR: no libmpfr.so staged"; exit 1; }
+          find engine/prusa30/jniImports/gmpcgal \( -name 'CGALConfig.cmake' -o -name 'CGAL-config.cmake' \) | grep -q . \
+            || { echo "ERROR: no CGAL config staged"; exit 1; }
+          echo "GMP 6.2.1 + MPFR 4.2.0 + CGAL 5.6.2 staged and verified"
+
+      - name: Save staged GMP+MPFR+CGAL
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/gmpcgal
+          key: prusa30-gmpcgal-cgal5.6.2-${{ hashFiles('scripts/build_prusa30_gmp.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-openssl:
+    name: openssl
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged OpenSSL 4.0.1 from cache
+        id: ssl-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/openssl
+          key: prusa30-openssl4.0.1-${{ hashFiles('scripts/build_prusa30_openssl.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored OpenSSL
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.ssl-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/openssl/include/openssl/ssl.h || OK=0
+            grep -q "OPENSSL_VERSION_NUMBER" engine/prusa30/jniImports/openssl/include/openssl/opensslv.h 2>/dev/null || OK=0
+            ls engine/prusa30/jniImports/openssl/lib/libcrypto.a >/dev/null 2>&1 || OK=0
+            ls engine/prusa30/jniImports/openssl/lib/libssl.a >/dev/null 2>&1 || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build OpenSSL 4.0.1 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_openssl.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/openssl" \
+            ./scripts/build_prusa30_openssl.sh
+
+      - name: Verify staged OpenSSL exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/openssl/include/openssl/ssl.h \
+            || { echo "ERROR: ssl.h missing"; exit 1; }
+          grep -q "OPENSSL_VERSION_NUMBER" engine/prusa30/jniImports/openssl/include/openssl/opensslv.h \
+            || { echo "ERROR: staged headers not OpenSSL"; exit 1; }
+          test -f engine/prusa30/jniImports/openssl/lib/libcrypto.a \
+            || { echo "ERROR: libcrypto.a missing"; exit 1; }
+          test -f engine/prusa30/jniImports/openssl/lib/libssl.a \
+            || { echo "ERROR: libssl.a missing"; exit 1; }
+          echo "OpenSSL 4.0.1 staged and verified"
+
+      - name: Save staged OpenSSL 4.0.1
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/openssl
+          key: prusa30-openssl4.0.1-${{ hashFiles('scripts/build_prusa30_openssl.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-zstd:
+    name: zstd
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged zstd 1.5.6 from cache
+        id: zstd-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/zstd
+          key: prusa30-zstd-1.5.6-${{ hashFiles('scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored zstd
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.zstd-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/zstd/include/zstd.h || OK=0
+            find engine/prusa30/jniImports/zstd -name 'libzstd.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/zstd -name zstdConfig.cmake | grep -q . || OK=0
+            grep -rq "zstd::libzstd" engine/prusa30/jniImports/zstd || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build zstd 1.5.6 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_zstd.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/zstd" \
+            ./scripts/build_prusa30_zstd.sh
+
+      - name: Verify staged zstd exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/zstd/include/zstd.h \
+            || { echo "ERROR: zstd.h missing"; exit 1; }
+          find engine/prusa30/jniImports/zstd -name 'libzstd.a' | grep -q . \
+            || { echo "ERROR: no libzstd.a staged"; exit 1; }
+          find engine/prusa30/jniImports/zstd -name zstdConfig.cmake | grep -q . \
+            || { echo "ERROR: zstdConfig.cmake missing"; exit 1; }
+          grep -rq "zstd::libzstd" engine/prusa30/jniImports/zstd \
+            || { echo "ERROR: zstd::libzstd target missing"; exit 1; }
+          echo "zstd 1.5.6 staged and verified"
+
+      - name: Save staged zstd 1.5.6
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/zstd
+          key: prusa30-zstd-1.5.6-${{ hashFiles('scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-blosc:
+    name: blosc
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [prusa30-changes, build-zstd, build-pngfmt]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged zstd 1.5.6 from cache (Blosc build input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/zstd
+          key: prusa30-zstd-1.5.6-${{ hashFiles('scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged zlib+libpng from cache (Blosc build input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/pngfmt
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh', 'scripts/build_prusa30_tracy.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged Blosc 1.21.6 from cache
+        id: blosc-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/blosc
+          key: prusa30-blosc-1.21.6-${{ hashFiles('scripts/build_prusa30_blosc.sh', 'scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored Blosc
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.blosc-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/blosc/include/blosc.h || OK=0
+            find engine/prusa30/jniImports/blosc -name 'libblosc.a' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build Blosc 1.21.6 from source (static, external zlib+zstd)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_blosc.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/blosc" \
+            ZLIB_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
+            ZSTD_ROOT="$(pwd)/engine/prusa30/jniImports/zstd" \
+            ./scripts/build_prusa30_blosc.sh
+
+      - name: Verify staged Blosc exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/blosc/include/blosc.h \
+            || { echo "ERROR: blosc.h missing"; exit 1; }
+          find engine/prusa30/jniImports/blosc -name 'libblosc.a' | grep -q . \
+            || { echo "ERROR: no libblosc.a staged"; exit 1; }
+          echo "Blosc 1.21.6 staged and verified"
+
+      - name: Save staged Blosc 1.21.6
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/blosc
+          key: prusa30-blosc-1.21.6-${{ hashFiles('scripts/build_prusa30_blosc.sh', 'scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-openvdb:
+    name: openvdb
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    needs: [prusa30-changes, build-boost, build-tbb, build-pngfmt, build-zstd, build-blosc]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged Boost ${{ env.BOOST_VER }} from cache (OpenVDB input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/boost
+          key: prusa30-boost-${{ env.BOOST_VER }}-${{ hashFiles('scripts/build_boost.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged oneTBB v2021.12.0 from cache (OpenVDB input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/tbb
+          key: prusa30-tbb-v2021.12.0-${{ hashFiles('scripts/build_prusa30_tbb.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged zlib+libpng from cache (OpenVDB input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/pngfmt
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh', 'scripts/build_prusa30_tracy.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged zstd 1.5.6 from cache (OpenVDB input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/zstd
+          key: prusa30-zstd-1.5.6-${{ hashFiles('scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged Blosc 1.21.6 from cache (OpenVDB input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/blosc
+          key: prusa30-blosc-1.21.6-${{ hashFiles('scripts/build_prusa30_blosc.sh', 'scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged OpenVDB 11.0.0 from cache
+        id: vdb-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/openvdb
+          key: prusa30-openvdb-11.0.0-${{ hashFiles('scripts/build_prusa30_openvdb.sh', 'scripts/build_prusa30_blosc.sh', 'scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored OpenVDB
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.vdb-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/openvdb/include/openvdb/version.h || OK=0
+            find engine/prusa30/jniImports/openvdb -name 'libopenvdb.a' | grep -q . || OK=0
+            grep -q "OPENVDB_USE_BLOSC" engine/prusa30/jniImports/openvdb/include/openvdb/version.h 2>/dev/null || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build OpenVDB 11.0.0 from source (static, blosc+zlib)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_openvdb.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/openvdb" \
+            BOOST_STAGE="$(pwd)/engine/prusa30/jniImports/boost" \
+            TBB_STAGE="$(pwd)/engine/prusa30/jniImports/tbb" \
+            BLOSC_STAGE="$(pwd)/engine/prusa30/jniImports/blosc" \
+            ZSTD_STAGE="$(pwd)/engine/prusa30/jniImports/zstd" \
+            ZLIB_STAGE="$(pwd)/engine/prusa30/jniImports/pngfmt" \
+            ./scripts/build_prusa30_openvdb.sh
+
+      - name: Verify staged OpenVDB exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/openvdb/include/openvdb/version.h \
+            || { echo "ERROR: openvdb/version.h missing"; exit 1; }
+          find engine/prusa30/jniImports/openvdb -name 'libopenvdb.a' | grep -q . \
+            || { echo "ERROR: no libopenvdb.a staged"; exit 1; }
+          grep -q "OPENVDB_USE_BLOSC" engine/prusa30/jniImports/openvdb/include/openvdb/version.h \
+            || { echo "ERROR: version.h lacks OPENVDB_USE_BLOSC"; exit 1; }
+          grep -q "OPENVDB_USE_ZLIB" engine/prusa30/jniImports/openvdb/include/openvdb/version.h \
+            || { echo "ERROR: version.h lacks OPENVDB_USE_ZLIB"; exit 1; }
+          echo "OpenVDB 11.0.0 staged and verified"
+
+      - name: Save staged OpenVDB 11.0.0
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/openvdb
+          key: prusa30-openvdb-11.0.0-${{ hashFiles('scripts/build_prusa30_openvdb.sh', 'scripts/build_prusa30_blosc.sh', 'scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-heatshrink:
+    name: heatshrink
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged heatshrink 0.4.1 from cache
+        id: hs-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/heatshrink
+          key: prusa30-heatshrink-0.4.1-${{ hashFiles('scripts/build_prusa30_heatshrink.sh', 'engine/prusa30/heatshrink/CMakeLists.txt', 'engine/prusa30/heatshrink/Config.cmake.in') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored heatshrink
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.hs-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/heatshrink/include/heatshrink/heatshrink_decoder.h || OK=0
+            find engine/prusa30/jniImports/heatshrink -name 'libheatshrink_dynalloc.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/heatshrink -name heatshrinkConfig.cmake | grep -q . || OK=0
+            grep -rq "heatshrink::heatshrink_dynalloc" engine/prusa30/jniImports/heatshrink || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build heatshrink 0.4.1 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_heatshrink.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/heatshrink" \
+            ./scripts/build_prusa30_heatshrink.sh
+
+      - name: Verify staged heatshrink exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/heatshrink/include/heatshrink/heatshrink_decoder.h \
+            || { echo "ERROR: heatshrink headers missing"; exit 1; }
+          find engine/prusa30/jniImports/heatshrink -name 'libheatshrink_dynalloc.a' | grep -q . \
+            || { echo "ERROR: no libheatshrink_dynalloc.a staged"; exit 1; }
+          find engine/prusa30/jniImports/heatshrink -name heatshrinkConfig.cmake | grep -q . \
+            || { echo "ERROR: heatshrinkConfig.cmake missing"; exit 1; }
+          grep -rq "heatshrink::heatshrink_dynalloc" engine/prusa30/jniImports/heatshrink \
+            || { echo "ERROR: heatshrink::heatshrink_dynalloc target missing"; exit 1; }
+          echo "heatshrink 0.4.1 staged and verified"
+
+      - name: Save staged heatshrink 0.4.1
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/heatshrink
+          key: prusa30-heatshrink-0.4.1-${{ hashFiles('scripts/build_prusa30_heatshrink.sh', 'engine/prusa30/heatshrink/CMakeLists.txt', 'engine/prusa30/heatshrink/Config.cmake.in') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-libbgcode:
+    name: libbgcode
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [prusa30-changes, build-boost, build-heatshrink, build-pngfmt]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged Boost ${{ env.BOOST_VER }} from cache (libbgcode input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/boost
+          key: prusa30-boost-${{ env.BOOST_VER }}-${{ hashFiles('scripts/build_boost.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged heatshrink 0.4.1 from cache (libbgcode input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/heatshrink
+          key: prusa30-heatshrink-0.4.1-${{ hashFiles('scripts/build_prusa30_heatshrink.sh', 'engine/prusa30/heatshrink/CMakeLists.txt', 'engine/prusa30/heatshrink/Config.cmake.in') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged zlib+libpng from cache (libbgcode input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/pngfmt
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh', 'scripts/build_prusa30_tracy.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged LibBGCode 0.3.0 from cache
+        id: bgcode-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/bgcode
+          key: prusa30-libbgcode-0.3.0-${{ hashFiles('scripts/build_prusa30_libbgcode.sh', 'scripts/build_prusa30_heatshrink.sh', 'engine/prusa30/heatshrink/CMakeLists.txt', 'engine/prusa30/heatshrink/Config.cmake.in') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored LibBGCode
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.bgcode-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/bgcode/include/LibBGCode/convert/convert.hpp || OK=0
+            find engine/prusa30/jniImports/bgcode -name 'libbgcode_convert.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/bgcode -name 'libbgcode_binarize.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/bgcode -name 'libbgcode_core.a' | grep -q . || OK=0
+            find engine/prusa30/jniImports/bgcode -name LibBGCodeConfig.cmake | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build LibBGCode 0.3.0 from source (static, external boost/zlib/heatshrink)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_libbgcode.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/bgcode" \
+            BOOST_STAGE="$(pwd)/engine/prusa30/jniImports/boost" \
+            ZLIB_STAGE="$(pwd)/engine/prusa30/jniImports/pngfmt" \
+            HEATSHRINK_STAGE="$(pwd)/engine/prusa30/jniImports/heatshrink" \
+            ./scripts/build_prusa30_libbgcode.sh
+
+      - name: Verify staged LibBGCode exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/bgcode/include/LibBGCode/core/core.hpp \
+            || { echo "ERROR: LibBGCode core headers missing"; exit 1; }
+          test -f engine/prusa30/jniImports/bgcode/include/LibBGCode/convert/convert.hpp \
+            || { echo "ERROR: LibBGCode convert headers missing"; exit 1; }
+          find engine/prusa30/jniImports/bgcode -name 'libbgcode_convert.a' | grep -q . \
+            || { echo "ERROR: no libbgcode_convert.a staged"; exit 1; }
+          find engine/prusa30/jniImports/bgcode -name 'libbgcode_binarize.a' | grep -q . \
+            || { echo "ERROR: no libbgcode_binarize.a staged"; exit 1; }
+          find engine/prusa30/jniImports/bgcode -name 'libbgcode_core.a' | grep -q . \
+            || { echo "ERROR: no libbgcode_core.a staged"; exit 1; }
+          find engine/prusa30/jniImports/bgcode -name LibBGCodeConfig.cmake | grep -q . \
+            || { echo "ERROR: LibBGCodeConfig.cmake missing"; exit 1; }
+          echo "LibBGCode 0.3.0 staged and verified"
+
+      - name: Save staged LibBGCode 0.3.0
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/bgcode
+          key: prusa30-libbgcode-0.3.0-${{ hashFiles('scripts/build_prusa30_libbgcode.sh', 'scripts/build_prusa30_heatshrink.sh', 'engine/prusa30/heatshrink/CMakeLists.txt', 'engine/prusa30/heatshrink/Config.cmake.in') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-jpeg:
+    name: jpeg
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [prusa30-changes, build-pngfmt]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged zlib+libpng from cache (JPEG build input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/pngfmt
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh', 'scripts/build_prusa30_tracy.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged libjpeg-turbo 3.0.1 from cache
+        id: jpeg-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/jpeg
+          key: prusa30-jpeg-3.0.1-${{ hashFiles('scripts/build_prusa30_jpeg.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored libjpeg-turbo
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.jpeg-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/jpeg/include/jpeglib.h || OK=0
+            find engine/prusa30/jniImports/jpeg -name 'libjpeg.a' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build libjpeg-turbo 3.0.1 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_jpeg.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/jpeg" \
+            ZLIB_STAGE="$(pwd)/engine/prusa30/jniImports/pngfmt" \
+            ./scripts/build_prusa30_jpeg.sh
+
+      - name: Verify staged libjpeg-turbo exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/jpeg/include/jpeglib.h \
+            || { echo "ERROR: jpeglib.h missing"; exit 1; }
+          find engine/prusa30/jniImports/jpeg -name 'libjpeg.a' | grep -q . \
+            || { echo "ERROR: no libjpeg.a staged"; exit 1; }
+          echo "libjpeg-turbo 3.0.1 staged and verified"
+
+      - name: Save staged libjpeg-turbo 3.0.1
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/jpeg
+          key: prusa30-jpeg-3.0.1-${{ hashFiles('scripts/build_prusa30_jpeg.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-lua:
+    name: lua
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [prusa30-changes]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged Lua 5.4.8 from cache
+        id: lua-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/lua
+          key: prusa30-lua-5.4.8-${{ hashFiles('scripts/build_prusa30_lua.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored Lua
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.lua-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -f engine/prusa30/jniImports/lua/include/lua.h || OK=0
+            find engine/prusa30/jniImports/lua -name 'liblua.a' | grep -q . || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build Lua 5.4.8 from source (static)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_lua.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/lua" \
+            ./scripts/build_prusa30_lua.sh
+
+      - name: Verify staged Lua exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -f engine/prusa30/jniImports/lua/include/lua.h \
+            || { echo "ERROR: lua.h missing"; exit 1; }
+          find engine/prusa30/jniImports/lua -name 'liblua.a' | grep -q . \
+            || { echo "ERROR: no liblua.a staged"; exit 1; }
+          echo "Lua 5.4.8 staged and verified"
+
+      - name: Save staged Lua 5.4.8
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/lua
+          key: prusa30-lua-5.4.8-${{ hashFiles('scripts/build_prusa30_lua.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  build-sol2:
+    name: sol2
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [prusa30-changes, build-lua]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Restore staged Lua 5.4.8 from cache (sol2 build input)
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/lua
+          key: prusa30-lua-5.4.8-${{ hashFiles('scripts/build_prusa30_lua.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Restore staged sol2 v3.5.0 from cache
+        id: sol2-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/sol2
+          key: prusa30-sol2-3.5.0-${{ hashFiles('scripts/build_prusa30_sol2.sh', 'scripts/build_prusa30_lua.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+      - name: Validate restored sol2
+        id: validate
+        run: |
+          NEED=1
+          if [ "${{ steps.sol2-cache.outputs.cache-hit }}" = "true" ]; then
+            OK=1
+            test -d engine/prusa30/jniImports/sol2/include/sol || OK=0
+            SOL2_DIR="$(find engine/prusa30/jniImports/sol2 -name sol2-config.cmake -printf '%h\n' | head -1)"
+            test -n "$SOL2_DIR" || OK=0
+            test -f "$SOL2_DIR/sol2-targets.cmake" || OK=0
+            grep -q "sol2::sol2" "$SOL2_DIR/sol2-targets.cmake" || OK=0
+            [ "$OK" = "1" ] && NEED=0
+          fi
+          echo "need=$NEED" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Android SDK env
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.validate.outputs.need == '1'
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        if: steps.validate.outputs.need == '1'
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Build sol2 v3.5.0 from source (header-only)
+        if: steps.validate.outputs.need == '1'
+        run: |
+          chmod +x scripts/build_prusa30_sol2.sh
+          ABI="$ABI" API_LEVEL="23" \
+            STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/sol2" \
+            LUA_STAGE="$(pwd)/engine/prusa30/jniImports/lua" \
+            ./scripts/build_prusa30_sol2.sh
+
+      - name: Verify staged sol2 exactly
+        if: steps.validate.outputs.need == '1'
+        run: |
+          test -d engine/prusa30/jniImports/sol2/include/sol \
+            || { echo "ERROR: sol/ headers missing"; exit 1; }
+          SOL2_DIR="$(find engine/prusa30/jniImports/sol2 -name sol2-config.cmake -printf '%h\n' | head -1)"
+          test -n "$SOL2_DIR" || { echo "ERROR: sol2-config.cmake missing"; exit 1; }
+          test -f "$SOL2_DIR/sol2-targets.cmake" \
+            || { echo "ERROR: sol2-targets.cmake missing"; exit 1; }
+          grep -q "sol2::sol2" "$SOL2_DIR/sol2-targets.cmake" \
+            || { echo "ERROR: sol2::sol2 target missing"; exit 1; }
+          echo "sol2 v3.5.0 staged and verified"
+
+      - name: Save staged sol2 v3.5.0
+        if: steps.validate.outputs.need == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: engine/prusa30/jniImports/sol2
+          key: prusa30-sol2-3.5.0-${{ hashFiles('scripts/build_prusa30_sol2.sh', 'scripts/build_prusa30_lua.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+
+  headless-build:
+    name: headless
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    needs: [prusa30-changes, build-boost, build-tbb, build-nlopt, build-expat, build-pngfmt, build-assert, build-qhullmix, build-gmpcgal, build-openssl, build-zstd, build-blosc, build-openvdb, build-heatshrink, build-libbgcode, build-jpeg, build-lua, build-sol2]
+    if: needs.prusa30-changes.outputs.prusa30 == 'true'
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Android SDK env
+        uses: 1337farm/actions/setup-android-env@v1
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        uses: 1337farm/actions/setup-android-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+      - name: Install Android platform / CMake
+        run: |
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1"
+          ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+
+      - name: Fetch PrusaSlicer 3.0 source (pinned + patched)
+        run: |
+          chmod +x engine/prusa30/fetch_prusaslicer.sh
+          PRUSA_REF="$PRUSA_REF" ./engine/prusa30/fetch_prusaslicer.sh
+
+      - name: Stage header-only deps (cereal/json/spdlog/fmt/sol2/eigen)
+        run: |
+          chmod +x scripts/build_prusa30_deps.sh
+          ./scripts/build_prusa30_deps.sh
+
+      - name: Restore staged Boost ${{ env.BOOST_VER }} from cache
+        id: boost-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/boost
+          key: prusa30-boost-${{ env.BOOST_VER }}-${{ hashFiles('scripts/build_boost.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged Boost exactly
+        run: |
+          for lib in system filesystem thread regex chrono atomic date_time iostreams nowide; do
+            ls "engine/prusa30/jniImports/boost/lib/$ABI/lib/libboost_${lib}"*.a >/dev/null \
+              || { echo "ERROR: staged Boost missing libboost_$lib"; exit 1; }
+          done
+          grep -q "1_86" engine/prusa30/jniImports/boost/include/boost/version.hpp \
+            || { echo "ERROR: staged Boost headers are not 1.86"; exit 1; }
+          echo "--- actual staged archive names (FindBoost must match these) ---"
+          ls engine/prusa30/jniImports/boost/lib/$ABI/lib/
+          echo "Boost $BOOST_VER present and verified"
+
+      - name: Bridge Boost archives into stage/lib (FindBoost search path)
+        run: |
+          # FindBoost probes <prefix>/stage/lib for BOOST_ROOT layouts; our
+          # NDK archives live one level deeper (lib/<abi>/lib, layout).
+          # Relative symlinks keep working whatever the runner workspace is.
+          mkdir -p engine/prusa30/jniImports/boost/stage/lib
+          for a in engine/prusa30/jniImports/boost/lib/$ABI/lib/libboost_*.a; do
+            ln -sf "../../lib/$ABI/lib/$(basename "$a")" \
+              "engine/prusa30/jniImports/boost/stage/lib/$(basename "$a")"
+          done
+          ls engine/prusa30/jniImports/boost/stage/lib/ | head -5
+
+      - name: Restore staged oneTBB v2021.12.0 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/tbb
+          key: prusa30-tbb-v2021.12.0-${{ hashFiles('scripts/build_prusa30_tbb.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged oneTBB exactly
+        run: |
+          test -f engine/prusa30/jniImports/tbb/include/oneapi/tbb/version.h \
+            || { echo "ERROR: staged oneTBB missing oneapi headers"; exit 1; }
+          find engine/prusa30/jniImports/tbb -name TBBConfig.cmake | grep -q . \
+            || { echo "ERROR: staged oneTBB missing TBBConfig.cmake"; exit 1; }
+          echo "oneTBB v2021.12.0 present and verified"
+
+      - name: Restore staged NLopt v2.5.0 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/nlopt
+          key: prusa30-nlopt-v2.5.0-${{ hashFiles('scripts/build_prusa30_nlopt.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged NLopt exactly
+        run: |
+          test -f engine/prusa30/jniImports/nlopt/include/nlopt.hpp \
+            || { echo "ERROR: staged NLopt missing nlopt.hpp"; exit 1; }
+          ls engine/prusa30/jniImports/nlopt/lib/libnlopt_cxx.* >/dev/null \
+            || { echo "ERROR: staged NLopt missing libnlopt_cxx"; exit 1; }
+          echo "NLopt v2.5.0 present and verified"
+
+      - name: Restore staged expat R_2_8_2 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/expat
+          key: prusa30-expat-R_2_8_2-${{ hashFiles('scripts/build_prusa30_expat.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged expat exactly
+        run: |
+          test -f engine/prusa30/jniImports/expat/include/expat.h \
+            || { echo "ERROR: staged expat missing expat.h"; exit 1; }
+          find engine/prusa30/jniImports/expat -name 'libexpat.a' | grep -q . \
+            || { echo "ERROR: staged expat missing libexpat.a"; exit 1; }
+          find engine/prusa30/jniImports/expat -name 'expat-config.cmake' | grep -q . \
+            || { echo "ERROR: staged expat missing expat-config.cmake"; exit 1; }
+          echo "expat R_2_8_2 present and verified"
+
+      - name: Restore staged pngfmt from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/pngfmt
+          key: prusa30-pngfmt-${{ hashFiles('scripts/build_prusa30_png.sh', 'scripts/build_prusa30_fmt.sh', 'scripts/build_prusa30_tracy.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged pngfmt exactly
+        run: |
+          test -f engine/prusa30/jniImports/pngfmt/include/zlib.h \
+            || { echo "ERROR: staged zlib.h missing"; exit 1; }
+          test -f engine/prusa30/jniImports/pngfmt/include/png.h \
+            || { echo "ERROR: staged png.h missing"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'libz.a' | grep -q . \
+            || { echo "ERROR: staged libz.a missing"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'libpng*.a' | grep -q . \
+            || { echo "ERROR: staged libpng missing"; exit 1; }
+          test -f engine/prusa30/jniImports/pngfmt/include/fmt/core.h \
+            || { echo "ERROR: staged fmt/core.h missing"; exit 1; }
+          find engine/prusa30/jniImports/pngfmt -name 'libfmt.a' | grep -q . \
+            || { echo "ERROR: staged libfmt.a missing"; exit 1; }
+          echo "pngfmt present and verified"
+
+      - name: Restore staged libassert from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/assert
+          key: prusa30-assert-${{ hashFiles('scripts/build_prusa30_libassert.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged libassert exactly
+        run: |
+          find engine/prusa30/jniImports/assert -name 'libassert*.a' | grep -q . \
+            || { echo "ERROR: staged libassert missing archive"; exit 1; }
+          find engine/prusa30/jniImports/assert -name 'libassert-config.cmake' -o -name 'libassertConfig.cmake' | grep -q . \
+            || { echo "ERROR: staged libassert missing config"; exit 1; }
+          echo "libassert v2.2.1 present and verified"
+
+      - name: Restore staged Qhull+mixer from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            engine/prusa30/jniImports/qhull
+            engine/prusa30/jniImports/mixer
+          key: prusa30-qhullmix-${{ hashFiles('scripts/build_prusa30_qhull.sh', 'scripts/build_prusa30_mixer.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged Qhull+mixer exactly
+        run: |
+          find engine/prusa30/jniImports/qhull -name 'libqhull*.a' | grep -q . \
+            || { echo "ERROR: staged qhull missing libs"; exit 1; }
+          find engine/prusa30/jniImports/mixer -name 'libprusa_fdm_mixer.a' | grep -q . \
+            || { echo "ERROR: staged mixer missing lib"; exit 1; }
+          echo "Qhull + prusa-fdm-mixer present and verified"
+
+      - name: Restore staged GMP+MPFR+CGAL from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/gmpcgal
+          key: prusa30-gmpcgal-cgal5.6.2-${{ hashFiles('scripts/build_prusa30_gmp.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged GMP+MPFR+CGAL exactly
+        run: |
+          test -f engine/prusa30/jniImports/gmpcgal/include/gmp.h \
+            || { echo "ERROR: staged gmp.h missing"; exit 1; }
+          test -f engine/prusa30/jniImports/gmpcgal/include/gmpxx.h \
+            || { echo "ERROR: staged gmpxx.h missing"; exit 1; }
+          test -f engine/prusa30/jniImports/gmpcgal/include/mpfr.h \
+            || { echo "ERROR: staged mpfr.h missing"; exit 1; }
+          ls engine/prusa30/jniImports/gmpcgal/lib/libgmp.so >/dev/null \
+            || { echo "ERROR: staged libgmp.so missing"; exit 1; }
+          ls engine/prusa30/jniImports/gmpcgal/lib/libgmpxx.so >/dev/null \
+            || { echo "ERROR: staged libgmpxx.so missing"; exit 1; }
+          ls engine/prusa30/jniImports/gmpcgal/lib/libmpfr.so >/dev/null \
+            || { echo "ERROR: staged libmpfr.so missing"; exit 1; }
+          find engine/prusa30/jniImports/gmpcgal \( -name 'CGALConfig.cmake' -o -name 'CGAL-config.cmake' \) | grep -q . \
+            || { echo "ERROR: staged CGAL config missing"; exit 1; }
+          echo "GMP + MPFR + CGAL present and verified"
+
+      - name: Restore staged OpenSSL 4.0.1 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/openssl
+          key: prusa30-openssl4.0.1-${{ hashFiles('scripts/build_prusa30_openssl.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged OpenSSL exactly
+        run: |
+          test -f engine/prusa30/jniImports/openssl/include/openssl/ssl.h \
+            || { echo "ERROR: staged openssl missing ssl.h"; exit 1; }
+          test -f engine/prusa30/jniImports/openssl/lib/libcrypto.a \
+            || { echo "ERROR: staged openssl missing libcrypto.a"; exit 1; }
+          test -f engine/prusa30/jniImports/openssl/lib/libssl.a \
+            || { echo "ERROR: staged openssl missing libssl.a"; exit 1; }
+          echo "OpenSSL 4.0.1 present and verified"
+
+      - name: Restore staged zstd 1.5.6 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/zstd
+          key: prusa30-zstd-1.5.6-${{ hashFiles('scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged zstd exactly
+        run: |
+          test -f engine/prusa30/jniImports/zstd/include/zstd.h \
+            || { echo "ERROR: staged zstd missing zstd.h"; exit 1; }
+          find engine/prusa30/jniImports/zstd -name 'libzstd.a' | grep -q . \
+            || { echo "ERROR: staged zstd missing libzstd.a"; exit 1; }
+          find engine/prusa30/jniImports/zstd -name zstdConfig.cmake | grep -q . \
+            || { echo "ERROR: staged zstd missing zstdConfig.cmake"; exit 1; }
+          echo "zstd 1.5.6 present and verified"
+
+      - name: Restore staged Blosc 1.21.6 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/blosc
+          key: prusa30-blosc-1.21.6-${{ hashFiles('scripts/build_prusa30_blosc.sh', 'scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged Blosc exactly
+        run: |
+          test -f engine/prusa30/jniImports/blosc/include/blosc.h \
+            || { echo "ERROR: staged blosc missing blosc.h"; exit 1; }
+          find engine/prusa30/jniImports/blosc -name 'libblosc.a' | grep -q . \
+            || { echo "ERROR: staged blosc missing libblosc.a"; exit 1; }
+          echo "Blosc 1.21.6 present and verified"
+
+      - name: Restore staged OpenVDB 11.0.0 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/openvdb
+          key: prusa30-openvdb-11.0.0-${{ hashFiles('scripts/build_prusa30_openvdb.sh', 'scripts/build_prusa30_blosc.sh', 'scripts/build_prusa30_zstd.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged OpenVDB exactly
+        run: |
+          test -f engine/prusa30/jniImports/openvdb/include/openvdb/version.h \
+            || { echo "ERROR: staged openvdb missing openvdb/version.h"; exit 1; }
+          find engine/prusa30/jniImports/openvdb -name 'libopenvdb.a' | grep -q . \
+            || { echo "ERROR: staged openvdb missing libopenvdb.a"; exit 1; }
+          grep -q "OPENVDB_USE_BLOSC" engine/prusa30/jniImports/openvdb/include/openvdb/version.h \
+            || { echo "ERROR: staged openvdb version.h lacks OPENVDB_USE_BLOSC"; exit 1; }
+          echo "OpenVDB 11.0.0 present and verified"
+
+      - name: Restore staged heatshrink 0.4.1 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/heatshrink
+          key: prusa30-heatshrink-0.4.1-${{ hashFiles('scripts/build_prusa30_heatshrink.sh', 'engine/prusa30/heatshrink/CMakeLists.txt', 'engine/prusa30/heatshrink/Config.cmake.in') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged heatshrink exactly
+        run: |
+          find engine/prusa30/jniImports/heatshrink -name 'libheatshrink_dynalloc.a' | grep -q . \
+            || { echo "ERROR: staged heatshrink missing libheatshrink_dynalloc.a"; exit 1; }
+          find engine/prusa30/jniImports/heatshrink -name heatshrinkConfig.cmake | grep -q . \
+            || { echo "ERROR: staged heatshrink missing heatshrinkConfig.cmake"; exit 1; }
+          echo "heatshrink 0.4.1 present and verified"
+
+      - name: Restore staged LibBGCode 0.3.0 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/bgcode
+          key: prusa30-libbgcode-0.3.0-${{ hashFiles('scripts/build_prusa30_libbgcode.sh', 'scripts/build_prusa30_heatshrink.sh', 'engine/prusa30/heatshrink/CMakeLists.txt', 'engine/prusa30/heatshrink/Config.cmake.in') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged LibBGCode exactly
+        run: |
+          test -f engine/prusa30/jniImports/bgcode/include/LibBGCode/convert/convert.hpp \
+            || { echo "ERROR: staged libbgcode missing convert headers"; exit 1; }
+          find engine/prusa30/jniImports/bgcode -name 'libbgcode_convert.a' | grep -q . \
+            || { echo "ERROR: staged libbgcode missing libbgcode_convert.a"; exit 1; }
+          find engine/prusa30/jniImports/bgcode -name LibBGCodeConfig.cmake | grep -q . \
+            || { echo "ERROR: staged libbgcode missing LibBGCodeConfig.cmake"; exit 1; }
+          echo "LibBGCode 0.3.0 present and verified"
+
+      - name: Restore staged libjpeg-turbo 3.0.1 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/jpeg
+          key: prusa30-jpeg-3.0.1-${{ hashFiles('scripts/build_prusa30_jpeg.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged libjpeg-turbo exactly
+        run: |
+          test -f engine/prusa30/jniImports/jpeg/include/jpeglib.h \
+            || { echo "ERROR: staged libjpeg missing jpeglib.h"; exit 1; }
+          find engine/prusa30/jniImports/jpeg -name 'libjpeg.a' | grep -q . \
+            || { echo "ERROR: staged libjpeg missing libjpeg.a"; exit 1; }
+          echo "libjpeg-turbo 3.0.1 present and verified"
+
+      - name: Restore staged Lua 5.4.8 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/lua
+          key: prusa30-lua-5.4.8-${{ hashFiles('scripts/build_prusa30_lua.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged Lua exactly
+        run: |
+          test -f engine/prusa30/jniImports/lua/include/lua.h \
+            || { echo "ERROR: staged lua missing lua.h"; exit 1; }
+          find engine/prusa30/jniImports/lua -name 'liblua.a' | grep -q . \
+            || { echo "ERROR: staged lua missing liblua.a"; exit 1; }
+          echo "Lua 5.4.8 present and verified"
+
+      - name: Restore staged sol2 v3.5.0 from cache
+        uses: actions/cache/restore@v5
+        with:
+          path: engine/prusa30/jniImports/sol2
+          key: prusa30-sol2-3.5.0-${{ hashFiles('scripts/build_prusa30_sol2.sh', 'scripts/build_prusa30_lua.sh') }}-ndk${{ env.NDK_VERSION }}-${{ env.ABI }}
+          fail-on-cache-miss: true
+
+      - name: Validate staged sol2 exactly
+        run: |
+          test -d engine/prusa30/jniImports/sol2/include/sol \
+            || { echo "ERROR: staged sol2 missing sol/ headers"; exit 1; }
+          find engine/prusa30/jniImports/sol2 -name sol2-config.cmake | grep -q . \
+            || { echo "ERROR: staged sol2 missing sol2-config.cmake"; exit 1; }
+          echo "sol2 v3.5.0 present and verified"
+
+      - name: Configure headless 3.0 build (arm64-v8a)
+        env:
+          # Upstream FindNLopt reads the NLOPT *environment* variable:
+          # $NLOPT/include/nlopt.hpp + $NLOPT/lib/libnlopt_cxx.
+          NLOPT: ${{ github.workspace }}/engine/prusa30/jniImports/nlopt
+        run: |
+          # Configure upstream as the TOP-LEVEL project: its root CMakeLists
+          # relies on CMAKE_SOURCE_DIR/module-path being the upstream tree.
+          # TBB's config dir varies by install layout (lib/cmake/TBB vs
+          # lib/<triplet>/cmake/TBB); resolve it instead of guessing.
+          TBB_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/tbb" -name TBBConfig.cmake -printf '%h\n' | head -1)"
+          test -n "$TBB_CMAKE_DIR" || { echo "ERROR: TBBConfig.cmake not staged"; exit 1; }
+          echo "TBB config dir: $TBB_CMAKE_DIR"
+          # Same for expat: its CONFIG file may sit at lib/cmake/expat or
+          # lib/<triplet>/cmake/expat. Upstream FindEXPAT passes EXPAT_DIR
+          # into find_package(EXPAT CONFIG), so give it the exact dir.
+          EXPAT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/expat" -name expat-config.cmake -printf '%h\n' | head -1)"
+          test -n "$EXPAT_CMAKE_DIR" || { echo "ERROR: expat-config.cmake not staged"; exit 1; }
+          echo "EXPAT config dir: $EXPAT_CMAKE_DIR"
+          # Same for cereal: the staged tree carries a minimal CONFIG package
+          # (the header-fallback bakes a source-relative include dir that
+          # never resolves for staged headers).
+          CEREAL_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/cereal" -name cereal-config.cmake -printf '%h\n' | head -1)"
+          test -n "$CEREAL_CMAKE_DIR" || { echo "ERROR: cereal-config.cmake not staged"; exit 1; }
+          echo "cereal config dir: $CEREAL_CMAKE_DIR"
+          # Same for Eigen3: bundled find_package(Eigen3) is CONFIG-only.
+          EIGEN_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/eigen" -name Eigen3Config.cmake -printf '%h\n' | head -1)"
+          test -n "$EIGEN_CMAKE_DIR" || { echo "ERROR: Eigen3Config.cmake not staged"; exit 1; }
+          echo "Eigen3 config dir: $EIGEN_CMAKE_DIR"
+          # Same for tl-expected (slic3r-base links tl::expected).
+          EXPECTED_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/expected" -name tl-expected-config.cmake -printf '%h\n' | head -1)"
+          test -n "$EXPECTED_CMAKE_DIR" || { echo "ERROR: tl-expected-config.cmake not staged"; exit 1; }
+          echo "tl-expected config dir: $EXPECTED_CMAKE_DIR"
+          # Same for NanoSVG (header-only nanosvg + nanosvgrast targets).
+          NANOSVG_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/nanosvg" -name NanoSVGConfig.cmake -printf '%h\n' | head -1)"
+          test -n "$NANOSVG_CMAKE_DIR" || { echo "ERROR: NanoSVGConfig.cmake not staged"; exit 1; }
+          echo "NanoSVG config dir: $NANOSVG_CMAKE_DIR"
+          # Qhull + mixer live in sibling prefixes; resolve either Qhull
+          # config-file casing (year-2000 CMake names vary by version).
+          QHULL_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/qhull" \( -name QhullConfig.cmake -o -name qhull-config.cmake \) -printf '%h\n' | head -1)"
+          test -n "$QHULL_CMAKE_DIR" || { echo "ERROR: Qhull config not staged"; exit 1; }
+          echo "Qhull config dir: $QHULL_CMAKE_DIR"
+          MIXER_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/mixer" \( -name prusa_fdm_mixerConfig.cmake -o -name prusa_fdm_mixer-config.cmake \) -printf '%h\n' | head -1)"
+          test -n "$MIXER_CMAKE_DIR" || { echo "ERROR: mixer config not staged"; exit 1; }
+          echo "mixer config dir: $MIXER_CMAKE_DIR"
+          # Same for libassert: resolve whichever config name its install used.
+          ASSERT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/assert" \( -name libassert-config.cmake -o -name libassertConfig.cmake \) -printf '%h\n' | head -1)"
+          test -n "$ASSERT_CMAKE_DIR" || { echo "ERROR: libassert config not staged"; exit 1; }
+          echo "libassert config dir: $ASSERT_CMAKE_DIR"
+          # libassert's config find_dependency()s cpptrace, which lives in
+          # the same stage tree but off CMAKE_PREFIX_PATH — resolve it too.
+          CPPTRACE_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/assert" -name cpptrace-config.cmake -printf '%h\n' | head -1)"
+          test -n "$CPPTRACE_CMAKE_DIR" || { echo "ERROR: cpptrace-config.cmake not staged"; exit 1; }
+          echo "cpptrace config dir: $CPPTRACE_CMAKE_DIR"
+          # Same for fmt: fmt 12.x no longer ships a Find module, only
+          # fmt-config.cmake — resolve it exactly the same way.
+          FMT_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name fmt-config.cmake -printf '%h\n' | head -1)"
+          test -n "$FMT_CMAKE_DIR" || { echo "ERROR: fmt-config.cmake not staged"; exit 1; }
+          echo "fmt config dir: $FMT_CMAKE_DIR"
+          # Same for spdlog (header-only shim exposing spdlog::spdlog).
+          SPDLOG_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/spdlog" -name spdlogConfig.cmake -printf '%h\n' | head -1)"
+          test -n "$SPDLOG_CMAKE_DIR" || { echo "ERROR: spdlogConfig.cmake not staged"; exit 1; }
+          echo "spdlog config dir: $SPDLOG_CMAKE_DIR"
+          # Tracy: slic3r_add_tracy needs target Tracy::TracyClient with an
+          # INTERFACE_INCLUDE_DIRECTORIES property even when profiling is OFF
+          # (sources only get compiled with SLIC3R_ENABLE_PROFILING=ON, off by
+          # default). The staged TracyConfig.cmake provides exactly that
+          # imported target; resolve its dir like the other CONFIG packages.
+          TRACY_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name TracyConfig.cmake -printf '%h\n' | head -1)"
+          test -n "$TRACY_CMAKE_DIR" || { echo "ERROR: TracyConfig.cmake not staged"; exit 1; }
+          echo "Tracy config dir: $TRACY_CMAKE_DIR"
+          # Same for CGAL: the gmpcgal prefix carries CGALConfig.cmake from
+          # CGAL's own `cmake --install` tree (year-2000 CMake names vary by
+          # version, so resolve either casing like Qhull).
+          CGAL_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/gmpcgal" \( -name CGALConfig.cmake -o -name CGAL-config.cmake \) -printf '%h\n' | head -1)"
+          test -n "$CGAL_CMAKE_DIR" || { echo "ERROR: CGALConfig.cmake not staged"; exit 1; }
+          echo "CGAL config dir: $CGAL_CMAKE_DIR"
+          # CGAL's config re-probes GMP/MPFR via its own FindGMP/FindMPFR at
+          # OUR configure time: pre-seed the exact staged libs+headers (same
+          # PNG/ZLIB pattern) so no NDK-sysroot probing is needed.
+          # NDK quirk (playbook section 5): the toolchain forces
+          # CMAKE_FIND_ROOT_PATH_MODE_*=ONLY, so absolute HINTS get re-rooted
+          # under the sysroot and staged-prefix header finds miss. Top-level
+          # calls never notice (-DBoost_INCLUDE_DIR cache-hits), but CGAL's
+          # tweak changes Boost_ADDITIONAL_VERSIONS, invalidating the cache
+          # and forcing a re-search that misses. BOTH searches re-rooted
+          # first, then original paths: strictly more than ONLY, so existing
+          # exact pre-seeds (PNG/ZLIB/GMP/MPFR/_DIRs) resolve identically.
+          GMP_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/gmpcgal" -name gmp.h | head -1)")"
+          test -n "$GMP_INC" || { echo "ERROR: staged gmp.h not found"; exit 1; }
+          GMP_LIB="$(find "$(pwd)/engine/prusa30/jniImports/gmpcgal" -name 'libgmp.so' | head -1)"
+          test -n "$GMP_LIB" || { echo "ERROR: staged libgmp.so not found"; exit 1; }
+          GMPXX_LIB="$(find "$(pwd)/engine/prusa30/jniImports/gmpcgal" -name 'libgmpxx.so' | head -1)"
+          test -n "$GMPXX_LIB" || { echo "ERROR: staged libgmpxx.so not found"; exit 1; }
+          MPFR_LIB="$(find "$(pwd)/engine/prusa30/jniImports/gmpcgal" -name 'libmpfr.so' | head -1)"
+          test -n "$MPFR_LIB" || { echo "ERROR: staged libmpfr.so not found"; exit 1; }
+          echo "GMP lib: $GMP_LIB inc: $GMP_INC"
+          echo "MPFR lib: $MPFR_LIB"
+          # PNG/ZLIB: stock FindPNG/FindZLIB honor PNG_ROOT/ZLIB_ROOT, but
+          # pre-seeding the exact lib+include paths is immune to GNUInstallDirs
+          # nesting (lib/ vs lib/<triplet>/) and NDK-sysroot shadowing
+          # (configure once grabbed sysroot libz.so 1.2.11 over staged 1.3.1).
+          PNG_LIB="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name 'libpng16.a' -o -name 'libpng.a' | head -1)"
+          test -n "$PNG_LIB" || { echo "ERROR: staged libpng not found"; exit 1; }
+          PNG_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name png.h | head -1)")"
+          test -n "$PNG_INC" || { echo "ERROR: staged png.h not found"; exit 1; }
+          echo "PNG lib: $PNG_LIB inc: $PNG_INC"
+          ZLIB_LIB="$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name 'libz.a' | head -1)"
+          test -n "$ZLIB_LIB" || { echo "ERROR: staged libz.a not found"; exit 1; }
+          ZLIB_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/pngfmt" -name zlib.h | head -1)")"
+          test -n "$ZLIB_INC" || { echo "ERROR: staged zlib.h not found"; exit 1; }
+          echo "ZLIB lib: $ZLIB_LIB inc: $ZLIB_INC"
+          # libslic3r find_package(JPEG) uses stock FindJPEG (module mode):
+          # pre-seed the exact staged lib+include (PNG/ZLIB/OpenSSL pattern)
+          # so NDK MODE=ONLY re-rooting can't shadow it with a sysroot stub.
+          JPEG_LIB="$(find "$(pwd)/engine/prusa30/jniImports/jpeg" -name 'libjpeg.a' | head -1)"
+          test -n "$JPEG_LIB" || { echo "ERROR: staged libjpeg.a not found"; exit 1; }
+          JPEG_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/jpeg" -name jpeglib.h | head -1)")"
+          test -n "$JPEG_INC" || { echo "ERROR: staged jpeglib.h not found"; exit 1; }
+          echo "JPEG lib: $JPEG_LIB inc: $JPEG_INC"
+          # OpenSSL: slic3r-biz-crypto hard-requires find_package(OpenSSL).
+          # Pre-seed the exact staged libs+include (PNG/ZLIB pattern) so the
+          # NDK MODE=ONLY re-rooting (playbook §5) can't shadow them with the
+          # sysroot's header-only 3.0.13 tree.
+          OPENSSL_ROOT="$(pwd)/engine/prusa30/jniImports/openssl"
+          test -f "$OPENSSL_ROOT/include/openssl/ssl.h" \
+            || { echo "ERROR: staged ssl.h missing"; exit 1; }
+          OPENSSL_INCLUDE_DIR="$OPENSSL_ROOT/include"
+          OPENSSL_CRYPTO_LIBRARY="$OPENSSL_ROOT/lib/libcrypto.a"
+          test -f "$OPENSSL_CRYPTO_LIBRARY" \
+            || { echo "ERROR: staged libcrypto.a missing"; exit 1; }
+          OPENSSL_SSL_LIBRARY="$OPENSSL_ROOT/lib/libssl.a"
+          test -f "$OPENSSL_SSL_LIBRARY" \
+            || { echo "ERROR: staged libssl.a missing"; exit 1; }
+          echo "OpenSSL libcrypto: $OPENSSL_CRYPTO_LIBRARY inc: $OPENSSL_INCLUDE_DIR"
+          # OpenVDB: bundled FindOpenVDB (src/libslic3r) reads the staged
+          # openvdb/version.h (USE_BLOSC/ZLIB baked in) then hard-requires
+          # Blosc{+zstd config}, ZLIB, TBB and Boost iostreams — all staged.
+          # Pre-seed the exact component vars so the NDK MODE=ONLY re-rooting
+          # (playbook §5) can't miss them (same PNG/ZLIB/OpenSSL pattern).
+          OPENVDB_STAGE="$(pwd)/engine/prusa30/jniImports/openvdb"
+          test -f "$OPENVDB_STAGE/include/openvdb/version.h" \
+            || { echo "ERROR: staged openvdb/version.h missing"; exit 1; }
+          OPENVDB_INC="$(dirname "$(dirname "$(find "$OPENVDB_STAGE" -path '*/openvdb/version.h' | head -1)")")"
+          OPENVDB_LIB="$(find "$OPENVDB_STAGE" -name 'libopenvdb.a' | head -1)"
+          test -n "$OPENVDB_LIB" || { echo "ERROR: staged libopenvdb.a missing"; exit 1; }
+          grep -q "OPENVDB_USE_BLOSC" "$OPENVDB_STAGE/include/openvdb/version.h" \
+            || { echo "ERROR: staged openvdb lacks OPENVDB_USE_BLOSC"; exit 1; }
+          echo "OpenVDB lib: $OPENVDB_LIB inc: $OPENVDB_INC"
+          BLOSC_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/blosc" -name blosc.h | head -1)")"
+          test -n "$BLOSC_INC" || { echo "ERROR: staged blosc.h missing"; exit 1; }
+          BLOSC_LIB="$(find "$(pwd)/engine/prusa30/jniImports/blosc" -name 'libblosc.a' | head -1)"
+          test -n "$BLOSC_LIB" || { echo "ERROR: staged libblosc.a missing"; exit 1; }
+          echo "Blosc lib: $BLOSC_LIB inc: $BLOSC_INC"
+          # Blosc::blosc unconditionally links zstd::libzstd via
+          # find_package(zstd REQUIRED) (config mode) — resolve its package dir.
+          ZSTD_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/zstd" -name zstdConfig.cmake -printf '%h\n' | head -1)"
+          test -n "$ZSTD_CMAKE_DIR" || { echo "ERROR: staged zstdConfig.cmake missing"; exit 1; }
+          test -f "$ZSTD_CMAKE_DIR/zstdTargets.cmake" \
+            || { echo "ERROR: zstdTargets.cmake missing"; exit 1; }
+          grep -q "zstd::libzstd" "$ZSTD_CMAKE_DIR/zstdTargets.cmake" \
+            || { echo "ERROR: zstd::libzstd target missing"; exit 1; }
+          echo "zstd config dir: $ZSTD_CMAKE_DIR"
+          # LibBGCode: find_package(LibBGCode REQUIRED COMPONENTS Convert)
+          # resolves via our staged config package. Its Config.cmake.in
+          # find_dependency()s heatshrink/ZLIB/Boost at OUR configure time
+          # (Binarize -> heatshrink 0.4 + ZLIB 1.0; Convert -> Boost 1.78), so
+          # heatshrink needs the exact config dir too (same TBB/EXPAT pattern).
+          # ZLIB + Boost are already pre-seeded below/above.
+          HEATSHRINK_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/heatshrink" -name heatshrinkConfig.cmake -printf '%h\n' | head -1)"
+          test -n "$HEATSHRINK_CMAKE_DIR" || { echo "ERROR: heatshrinkConfig.cmake not staged"; exit 1; }
+          echo "heatshrink config dir: $HEATSHRINK_CMAKE_DIR"
+          BGCODE_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/bgcode" -name LibBGCodeConfig.cmake -printf '%h\n' | head -1)"
+          test -n "$BGCODE_CMAKE_DIR" || { echo "ERROR: LibBGCodeConfig.cmake not staged"; exit 1; }
+          echo "LibBGCode config dir: $BGCODE_CMAKE_DIR"
+          # Lua + sol2 (slic3r-biz-lua): find_package(Lua REQUIRED) uses the
+          # standard FindLua module (preset vars; version auto-detected from
+          # the staged lua.h). sol2::sol2 is header-only, resolved in config
+          # mode via the staged sol2-config.cmake — pass the exact package dir.
+          LUA_INC="$(dirname "$(find "$(pwd)/engine/prusa30/jniImports/lua" -name lua.h | head -1)")"
+          test -n "$LUA_INC" || { echo "ERROR: staged lua.h missing"; exit 1; }
+          LUA_LIB="$(find "$(pwd)/engine/prusa30/jniImports/lua" -name 'liblua.a' | head -1)"
+          test -n "$LUA_LIB" || { echo "ERROR: staged liblua.a missing"; exit 1; }
+          # Android has no separate libm; FindLua would otherwise bake
+          # LUA_MATH_LIBRARY-NOTFOUND into LUA_LIBRARIES. Pre-seed it from the
+          # NDK sysroot stub when present (fall back to FindLua's own search).
+          LUA_MATH_LIB="$(find "$ANDROID_NDK_ROOT" \( -name 'libm.a' -o -name 'libm.so' \) | head -1 || true)"
+          if [ -n "$LUA_MATH_LIB" ]; then
+            LUA_FLAGS=(-DLUA_MATH_LIBRARY="$LUA_MATH_LIB")
+          else
+            LUA_FLAGS=()
+          fi
+          echo "Lua include: $LUA_INC lib: $LUA_LIB math: ${LUA_MATH_LIB:-<auto>}"
+          SOL2_CMAKE_DIR="$(find "$(pwd)/engine/prusa30/jniImports/sol2" -name sol2-config.cmake -printf '%h\n' | head -1)"
+          test -n "$SOL2_CMAKE_DIR" || { echo "ERROR: sol2-config.cmake not staged"; exit 1; }
+           echo "sol2 config dir: $SOL2_CMAKE_DIR"
+           # SLIC3R_PCH=OFF (below): REUSE_FROM targets (slic3r-biz-*) get usage
+           # requirements (qhull etc.) the slic3r-domain PCH wasn't built with, so
+           # clang rejects the reused PCH ("POSIX thread support was disabled in
+           # PCH file but is currently enabled"); headless API needs no PCH.
+           cmake -S "$(pwd)/engine/build/prusaslicer-src" -B build/prusa30 \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_STL=c++_shared \
+            -DANDROID_PLATFORM=android-23 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=20 \
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
+            -DSLIC3R_GUI=OFF \
+            -DSLIC3R_ENABLE_FORMAT_STEP=OFF \
+            -DSLIC3R_BUILD_TESTS=OFF \
+            -DSLIC3R_PCH=OFF \
+            -DCMAKE_PREFIX_PATH="$(pwd)/engine/prusa30/jniImports" \
+            -DBOOST_ROOT="$(pwd)/engine/prusa30/jniImports/boost" \
+            -DBoost_ROOT="$(pwd)/engine/prusa30/jniImports/boost" \
+            -DBoost_INCLUDE_DIR="$(pwd)/engine/prusa30/jniImports/boost/include" \
+            -DBoost_LIBRARY_DIR="$(pwd)/engine/prusa30/jniImports/boost/lib/arm64-v8a/lib" \
+            -DBoost_ARCHITECTURE="-a64" \
+            -DBoost_COMPILER="-clang" \
+            -DBOOST_INCLUDEDIR="$(pwd)/engine/prusa30/jniImports/boost/include" \
+            -DBOOST_LIBRARYDIR="$(pwd)/engine/prusa30/jniImports/boost/lib/arm64-v8a/lib" \
+            -DTBB_DIR="$TBB_CMAKE_DIR" \
+            -DEXPAT_DIR="$EXPAT_CMAKE_DIR" \
+            -Dfmt_DIR="$FMT_CMAKE_DIR" \
+            -Dlibassert_DIR="$ASSERT_CMAKE_DIR" \
+            -DQhull_DIR="$QHULL_CMAKE_DIR" \
+            -Dprusa_fdm_mixer_DIR="$MIXER_CMAKE_DIR" \
+            -DCGAL_DIR="$CGAL_CMAKE_DIR" \
+            -DGMP_INCLUDE_DIR="$GMP_INC" \
+            -DGMP_LIBRARIES="$GMP_LIB" \
+            -DGMPXX_INCLUDE_DIR="$GMP_INC" \
+            -DGMPXX_LIBRARIES="$GMPXX_LIB" \
+            -DMPFR_INCLUDE_DIR="$GMP_INC" \
+            -DMPFR_LIBRARIES="$MPFR_LIB" \
+            -Dcpptrace_DIR="$CPPTRACE_CMAKE_DIR" \
+            -Dspdlog_DIR="$SPDLOG_CMAKE_DIR" \
+            -Dcereal_DIR="$CEREAL_CMAKE_DIR" \
+            -DEigen3_DIR="$EIGEN_CMAKE_DIR" \
+            -Dtl-expected_DIR="$EXPECTED_CMAKE_DIR" \
+            -DJSON_INCLUDE_DIR="$(pwd)/engine/prusa30/jniImports/nlohmann_json/include" \
+            -DMAGIC_ENUM_INCLUDE_DIR="$(pwd)/engine/prusa30/jniImports/magic_enum/include" \
+            -DNanoSVG_DIR="$NANOSVG_CMAKE_DIR" \
+            -DZLIB_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
+            -DPNG_ROOT="$(pwd)/engine/prusa30/jniImports/pngfmt" \
+            -DZLIB_LIBRARY="$ZLIB_LIB" \
+            -DZLIB_INCLUDE_DIR="$ZLIB_INC" \
+            -DPNG_LIBRARY="$PNG_LIB" \
+            -DPNG_PNG_INCLUDE_DIR="$PNG_INC" \
+            -DTracy_DIR="$TRACY_CMAKE_DIR" \
+            -DOPENSSL_ROOT_DIR="$OPENSSL_ROOT" \
+            -DOPENSSL_INCLUDE_DIR="$OPENSSL_INCLUDE_DIR" \
+            -DOPENSSL_CRYPTO_LIBRARY="$OPENSSL_CRYPTO_LIBRARY" \
+            -DOPENSSL_SSL_LIBRARY="$OPENSSL_SSL_LIBRARY" \
+            -DOPENVDB_USE_STATIC_LIBS=ON \
+            -DOpenVDB_ROOT="$OPENVDB_STAGE" \
+            -DOpenVDB_INCLUDE_DIR="$OPENVDB_INC" \
+            -DOpenVDB_openvdb_INCLUDE_DIR="$OPENVDB_INC" \
+            -DOpenVDB_openvdb_LIBRARY="$OPENVDB_LIB" \
+            -DBLOSC_USE_STATIC_LIBS=ON \
+            -DBlosc_ROOT="$(pwd)/engine/prusa30/jniImports/blosc" \
+            -DBlosc_INCLUDE_DIR="$BLOSC_INC" \
+            -DBlosc_LIBRARY="$BLOSC_LIB" \
+            -DBlosc_LIBRARY_RELEASE="$BLOSC_LIB" \
+            -Dzstd_DIR="$ZSTD_CMAKE_DIR" \
+            -Dheatshrink_DIR="$HEATSHRINK_CMAKE_DIR" \
+            -DLibBGCode_DIR="$BGCODE_CMAKE_DIR" \
+            -DJPEG_LIBRARY="$JPEG_LIB" \
+            -DJPEG_INCLUDE_DIR="$JPEG_INC" \
+            -DLUA_INCLUDE_DIR="$LUA_INC" \
+            -DLUA_LIBRARY="$LUA_LIB" \
+            "${LUA_FLAGS[@]}" \
+            -Dsol2_DIR="$SOL2_CMAKE_DIR"
+
+      - name: Build headless core (libslic3r)
+        run: |
+          cmake --build build/prusa30 --target libslic3r -j"$(nproc)"
+
+  # Terminal gate: this is the ONE prusa30 check branch protection/ruleset must
+  # require, instead of every individual stage name. GitHub never auto-adds new
+  # job names to required checks, so a per-job list silently goes stale when a
+  # dep stage is added (2026-09-13: #204 merged red — headless failed on Blosc
+  # but only native engine/apk were required, and automerge ignored the red
+  # headless check). The gate `needs:` EVERY stage and fails unless each
+  # upstream result is success (skips are only OK on the prusa30=false change
+  # path). Adding a job to this workflow only requires adding it to this gate's
+  # needs+check — enforcement stays exactly one name.
+  prusa30-gate:
+    name: prusa30-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - prusa30-changes
+      - build-boost
+      - build-tbb
+      - build-nlopt
+      - build-expat
+      - build-pngfmt
+      - build-assert
+      - build-qhullmix
+      - build-gmpcgal
+      - build-openssl
+      - build-zstd
+      - build-blosc
+      - build-openvdb
+      - build-heatshrink
+      - build-libbgcode
+      - build-jpeg
+      - build-lua
+      - build-sol2
+      - headless-build
+    steps:
+      - name: Gate every prusa30 stage result
+        run: |
+          NEED="${{ needs.prusa30-changes.outputs.prusa30 }}"
+          if [ "$NEED" != "true" ]; then
+            echo "prusa30 untouched: heavy stages skipped by design; gate green"
+            exit 0
+          fi
+          BAD=""
+          for kv in \
+            "boost=${{ needs.build-boost.result }}" \
+            "tbb=${{ needs.build-tbb.result }}" \
+            "nlopt=${{ needs.build-nlopt.result }}" \
+            "expat=${{ needs.build-expat.result }}" \
+            "pngfmt=${{ needs.build-pngfmt.result }}" \
+            "assert=${{ needs.build-assert.result }}" \
+            "qhullmix=${{ needs.build-qhullmix.result }}" \
+            "gmpcgal=${{ needs.build-gmpcgal.result }}" \
+            "openssl=${{ needs.build-openssl.result }}" \
+            "zstd=${{ needs.build-zstd.result }}" \
+            "blosc=${{ needs.build-blosc.result }}" \
+            "openvdb=${{ needs.build-openvdb.result }}" \
+            "heatshrink=${{ needs.build-heatshrink.result }}" \
+            "libbgcode=${{ needs.build-libbgcode.result }}" \
+            "jpeg=${{ needs.build-jpeg.result }}" \
+            "lua=${{ needs.build-lua.result }}" \
+            "sol2=${{ needs.build-sol2.result }}" \
+            "headless=${{ needs.headless-build.result }}" \
+          ; do
+            name="${kv%%=*}"; res="${kv#*=}"
+            [ "$res" = "success" ] || BAD="$BAD $name=$res"
+          done
+          if [ -n "$BAD" ]; then
+            echo "ERROR: prusa30 pipeline red:$BAD"
+            exit 1
+          fi
+          echo "prusa30 pipeline fully green (all 18 stages success)"

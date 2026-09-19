@@ -40,16 +40,30 @@ public final class PairingService {
      * @return the bound printer, or null when no pending, unexpired record matches
      */
     public static synchronized PrinterFleetManager.Printer onPairBeacon(String peerNodeIdHex, String tokenHex) {
-        if (peerNodeIdHex == null || tokenHex == null) return null;
         List<PrinterFleetManager.Printer> fleet = PrinterFleetManager.getPrinters();
         if (fleet == null) return null;
-        long now = System.currentTimeMillis();
+        PrinterFleetManager.Printer hit =
+                matchBeacon(fleet, System.currentTimeMillis(), peerNodeIdHex, tokenHex);
+        if (hit != null) PrinterFleetManager.savePrinters(fleet);
+        return hit;
+    }
+
+    /**
+     * Pure beacon-matching core (no persistence, injectable clock/fleet) so JVM
+     * unit tests can pin the validation semantics without Android. On a match
+     * the printer is bound in place: nodeId set (lowercased), token cleared.
+     */
+    static PrinterFleetManager.Printer matchBeacon(
+            List<PrinterFleetManager.Printer> fleet,
+            long nowMs,
+            String peerNodeIdHex,
+            String tokenHex) {
+        if (fleet == null || peerNodeIdHex == null || tokenHex == null) return null;
         for (PrinterFleetManager.Printer p : fleet) {
-            if (p.pairToken != null && p.pairToken.equalsIgnoreCase(tokenHex) && p.pairExpiresAt > now) {
+            if (p.pairToken != null && p.pairToken.equalsIgnoreCase(tokenHex) && p.pairExpiresAt > nowMs) {
                 p.nodeId = peerNodeIdHex.toLowerCase(Locale.ROOT);
                 p.pairToken = null;
                 p.pairExpiresAt = 0;
-                PrinterFleetManager.savePrinters(fleet);
                 return p;
             }
         }

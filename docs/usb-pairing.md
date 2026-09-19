@@ -130,6 +130,49 @@ old backups parse unchanged (Gson ignores missing keys).
   connections; no foreground service yet) — the printer retry loop
   (30s × 1 day, then hourly, reboot-persistent via `pairing.sh`) covers the gap.
 
+## Testing the tooling (what runs where)
+
+The P2P path is covered in three tiers; the gaps are called out, not hidden.
+
+1. **JVM unit tests (run here, no device):**
+   `:app:testDebugUnitTest` — currently 124 tests, including the P2P pair:
+   - `NodeIdentityTest` (6): toHex vectors, fixed-seed vector pinned against
+     `native_iroh_engine/tests/nodeid_vector.rs` (Rust iroh 1.1.0 agrees
+     byte-for-byte with Java net.i2p eddsa), lowercase-hex-64 shape, seed
+     persistence + short-file repair.
+   - `PairingServiceTest` (7): token format, case-insensitive match, expiry
+     boundary (`pairExpiresAt > now`), bind-and-clear, null safety,
+     multi-printer scan.
+   - `ConfigSerializeFlowTest` (existing): bool→enum migration guard that
+     feeds the native slicer.
+
+   Run: `./gradlew :app:testDebugUnitTest` (needs `GH_PACKAGES_USER/TOKEN`
+   for the `irohbridge:0.4.0` resolve).
+
+2. **Engine (Rust, runs in CI + locally):**
+   `native_iroh_engine` — `cargo test --locked` covers
+   `tests/nodeid_vector.rs`; `cargo check` on all four Android ABIs
+   (arm64, armv7, i686, x86_64) is wired as the `engine` job in
+   `iroh-android-native/.github/workflows/android.yml` and is a required
+   merge check alongside `test`/`apk`.
+
+3. **Source-text guards (seconds, run here):**
+   `scripts/tests/test_ci_guards.py` (workflow ↔ branch-protection mapping)
+   and `test_jni_contract.py` (119/119 Java↔C++ JNI signatures) — both green.
+   Headless JVM E2E (`run_e2e_tests.sh`, 93 tests) covers UI/slice flows via
+   JNI shadow mocks, not the P2P path.
+
+4. **Device (not runnable in this environment — no adb device attached):**
+   needs a physical phone + provisioned printer on real networks:
+   - `CrossAppTicketInteropTest` (instrumented, in `iroh-android-native`):
+     publish → ticket → fetch roundtrip, sync announce/merge, ticket-format
+     validation. Run via Android Studio / `./gradlew connectedAndroidTest`.
+   - Live reverse-pairing pass: provision USB stick (writes `phone-*.addr`),
+     boot printer, confirm accept-loop binds NodeId, fleet card flips to
+     "Paired — P2P ready", then a phone→printer `pairDial`.
+   - Doze check: app backgrounded 30+ min, printer dial still binds (see
+     hardening item 1 below).
+
 ## Remaining hardening (not built)
 
 1. **Foreground service** for the pairing window so inbound dials survive Doze

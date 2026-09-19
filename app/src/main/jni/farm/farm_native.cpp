@@ -1204,6 +1204,57 @@ extern "C" {
         ref->triangles->normals = BizAlgo::TriangleMesh::its_face_normals(ref->triangles->mesh.its);
     }
 
+    // Parses a bed-shape value in either dialect the app writes: the Prusa
+    // "XxY,XxY,..." point list or a "[[x,y],...]" JSON pair array (project
+    // profiles store printable_area this way). Returns the contour in mm;
+    // empty when nothing parses, letting the caller keep the previous shape.
+    static Domain::Vec2ds parse_bed_shape_value(const std::string& value) {
+        Domain::Vec2ds out;
+        if (value.empty()) return out;
+        std::string body = value;
+        if (body.front() == '[') {
+            // "[[x,y],...]" project-JSON array (or "[x,y],..."): split on
+            // "],[" boundaries and strip stray brackets per token — the
+            // shared outer brackets would otherwise eat the first pair.
+            size_t pos = 0;
+            while (pos < body.size()) {
+                const size_t close = body.find("],[", pos);
+                std::string tok = (close == std::string::npos)
+                    ? body.substr(pos)
+                    : body.substr(pos, close - pos);
+                const auto l = tok.find_first_not_of(" \t[");
+                const auto r = tok.find_last_not_of(" \t]");
+                if (l != std::string::npos && r != std::string::npos && l <= r) {
+                    tok = tok.substr(l, r - l + 1);
+                    const size_t comma = tok.find(',');
+                    if (comma != std::string::npos) {
+                        try {
+                            out.emplace_back(std::stod(tok.substr(0, comma)),
+                                             std::stod(tok.substr(comma + 1)));
+                        } catch (const std::exception&) { /* skip malformed pair */ }
+                    }
+                }
+                if (close == std::string::npos) break;
+                pos = close + 3;
+            }
+            return out;
+        }
+        size_t pos = 0;
+        while (pos < value.size()) {
+            const size_t comma = value.find(',', pos);
+            const std::string tok = value.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+            const size_t x = tok.find('x');
+            if (x != std::string::npos) {
+                try {
+                    out.emplace_back(std::stod(tok.substr(0, x)), std::stod(tok.substr(x + 1)));
+                } catch (const std::exception&) { /* skip malformed point */ }
+            }
+            if (comma == std::string::npos) break;
+            pos = comma + 1;
+        }
+        return out;
+    }
+
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1configure(JNIEnv* env, jclass, jlong ptr, jstring config_path) {
         FarmBedRef* ref = (FarmBedRef*) (intptr_t) ptr;
         if (ref == nullptr) return;
@@ -1211,8 +1262,10 @@ extern "C" {
         const std::string iniPath(chars);
         env->ReleaseStringUTFChars(config_path, chars);
 
-        // Minimal legacy-INI scan for the two bed keys (2.x semantics):
-        // bed_shape is "XxY,XxY,..." in mm; max_print_height a mm double.
+        // The app writes farm-dialect keys (ConfigObject::serialize migrates to
+        // flashforge-farm names); legacy Prusa profiles use the Prusa names.
+        // bed_shape is "XxY,XxY,..." in mm; printable_area the same list or a
+        // "[[x,y],...]" JSON array; max_print_height/printable_height a double.
         Domain::Vec2ds shape;
         float max_height = 200.0f;
         {
@@ -1233,22 +1286,11 @@ extern "C" {
                 const auto last = value.find_last_not_of(" \t\"\r");
                 if (first == std::string::npos) continue;
                 value = value.substr(first, last - first + 1);
-                if (key == "bed_shape") {
-                    shape.clear();
-                    size_t pos = 0;
-                    while (pos < value.size()) {
-                        const size_t comma = value.find(',', pos);
-                        const std::string tok = value.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
-                        const size_t x = tok.find('x');
-                        if (x != std::string::npos) {
-                            try {
-                                shape.emplace_back(std::stod(tok.substr(0, x)), std::stod(tok.substr(x + 1)));
-                            } catch (const std::exception&) { /* skip malformed point */ }
-                        }
-                        if (comma == std::string::npos) break;
-                        pos = comma + 1;
-                    }
-                } else if (key == "max_print_height") {
+                if (key == "bed_shape" || key == "printable_area") {
+                    const Domain::Vec2ds parsed = parse_bed_shape_value(value);
+                    if (parsed.size() >= 3)
+                        shape = parsed;
+                } else if (key == "max_print_height" || key == "printable_height") {
                     try { max_height = std::stof(value); } catch (const std::exception&) { }
                 }
             }

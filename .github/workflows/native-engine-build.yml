@@ -1332,14 +1332,14 @@ jobs:
       - name: Stage oneTBB v2021.12.0 headers (bridge needs 2021 template tbb headers)
         # Headers only (seconds): the app links the engine .so, never libtbb.a.
         # No actions/cache by design (CI guard); pin mirrors build_prusa30_tbb.sh.
-        if: needs.changes.outputs.native == 'true'
+        # Ungated: package-apk always compiles the bridge, even on
+        # non-native (Java-only) PRs where build-engine skips.
         run: |
           chmod +x scripts/stage_prusa30_tbb_headers.sh
           STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/tbb" \
             ./scripts/stage_prusa30_tbb_headers.sh
 
       - name: Verify staged oneTBB v2021.12.0 headers
-        if: needs.changes.outputs.native == 'true'
         run: |
           test -f engine/prusa30/jniImports/tbb/include/oneapi/tbb/version.h \
             || { echo "ERROR: oneTBB 2021 headers missing"; exit 1; }
@@ -1349,7 +1349,8 @@ jobs:
         # Header-only fltk fork (seconds); same pin/layout as
         # scripts/build_prusa30_deps.sh. The apk runner is separate from the
         # engine runner, so this must be staged here too, not reused.
-        if: needs.changes.outputs.native == 'true'
+        # Ungated: package-apk always compiles the bridge, even on
+        # non-native (Java-only) PRs where build-engine skips.
         run: |
           chmod +x scripts/stage_prusa30_nanosvg.sh
           STAGE_ROOT="$(pwd)/engine/prusa30/jniImports/nanosvg" \

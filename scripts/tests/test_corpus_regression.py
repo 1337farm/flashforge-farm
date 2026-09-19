@@ -40,7 +40,7 @@ def test_corpus_renames_applied():
     out = _convert_all()["user_benchy_ad5m.ini"]
     assert out["perimeters"] == "2"       # wall_loops -> perimeters
     assert out["spiral_vase"] == "0"      # spiral_mode -> spiral_vase
-    assert out["support_material"] == "0"  # enable_support -> support_material
+    assert out["support_material"] == "none"  # enable_support=0 -> support_material=none (3.0 enum)
     assert "wall_loops" not in out
     assert "spiral_mode" not in out
     assert "enable_support" not in out

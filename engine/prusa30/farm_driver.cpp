@@ -190,8 +190,21 @@ std::string stage_name(Slic3r::Biz::Slicing::ProgressInfo stage) {
 // untouched except verified quirks:
 //   ironing: 2.x folded the enable into ironing_type ("no ironing" = off);
 //   3.0 split it into `ironing` (bool) + ironing_type in {top, topmost, solid}.
-//   An invalid value otherwise aborts the whole config load with
-//   "Invalid value provided for parameter ironing_type: no ironing".
+//   support_material / gcode_label_objects: 2.x bools; 3.0 enums
+//   ({none, enforcers_only, everywhere} / {disabled, octoprint, firmware}).
+//   The 2.x label feature emitted OctoPrint-style labels.
+//   pressure_advance: 2.x float K-value; 3.0 enum. Nonzero means enabled
+//   (calibration state is not inferable from the value).
+//   brim_type auto_brim (Orca): no 3.0 counterpart; outer_and_inner is the
+//   adhesion-safe superset. ensure_all -> enabled; disabled_fuzzy -> none.
+//   support_material / enable_support + gcode_label_objects + arc_fitting:
+//   2.x/Orca bools; 3.0 enums (everywhere/none, octoprint/disabled,
+//   emit_center/disabled).
+//   fill_pattern crosshatch (Orca) -> grid; support_material_style default
+//   -> grid; support_material_pattern default -> rectilinear;
+//   top_fill_pattern monotonicline (Orca singular) -> monotoniclines.
+// An invalid value otherwise aborts the whole config load, e.g.
+// "Invalid value provided for parameter ironing_type: no ironing".
 std::string normalize_legacy_ini(const std::string& ini_path) {
     std::ifstream in(ini_path);
     if (!in)
@@ -238,6 +251,84 @@ std::string normalize_legacy_ini(const std::string& ini_path) {
             else if (v == "all solid layers" || v == "all_solid_layers") v = "solid";
             if (!has_ironing_key) { out << "ironing = 1\n"; has_ironing_key = true; }
             out << "ironing_type = " << v << "\n";
+            continue;
+        }
+        if (key_of(line) == "support_material") {
+            const std::string v = value_of(line);
+            if (v == "1" || v == "true") out << "support_material = everywhere\n";
+            else if (v == "0" || v == "false") out << "support_material = none\n";
+            else out << line << '\n';
+            continue;
+        }
+        if (key_of(line) == "gcode_label_objects") {
+            const std::string v = value_of(line);
+            if (v == "1" || v == "true") out << "gcode_label_objects = octoprint\n";
+            else if (v == "0" || v == "false") out << "gcode_label_objects = disabled\n";
+            else out << line << '\n';
+            continue;
+        }
+        if (key_of(line) == "pressure_advance") {
+            const std::string v = value_of(line);
+            try {
+                out << "pressure_advance = " << (std::stod(v) != 0.0 ? "enabled" : "disabled") << "\n";
+            } catch (const std::exception&) { out << line << '\n'; }
+            continue;
+        }
+        if (key_of(line) == "brim_type") {
+            const std::string v = value_of(line);
+            if (v == "auto_brim") out << "brim_type = outer_and_inner\n";
+            else out << line << '\n';
+            continue;
+        }
+        if (key_of(line) == "ensure_vertical_shell_thickness") {
+            const std::string v = value_of(line);
+            if (v == "ensure_all") out << "ensure_vertical_shell_thickness = enabled\n";
+            else out << line << '\n';
+            continue;
+        }
+        if (key_of(line) == "fuzzy_skin") {
+            const std::string v = value_of(line);
+            if (v == "disabled_fuzzy") out << "fuzzy_skin = none\n";
+            else out << line << '\n';
+            continue;
+        }
+        if (key_of(line) == "enable_support" || key_of(line) == "support_material") {
+            // Orca bool (and the legacy bool) -> 3.0 support_material enum.
+            const std::string v = value_of(line);
+            if (v == "1" || v == "true") out << "support_material = everywhere\n";
+            else if (v == "0" || v == "false") out << "support_material = none\n";
+            else out << line << '\n';
+            continue;
+        }
+        if (key_of(line) == "arc_fitting") {
+            const std::string v = value_of(line);
+            if (v == "1" || v == "true") out << "arc_fitting = emit_center\n";
+            else if (v == "0" || v == "false") out << "arc_fitting = disabled\n";
+            else out << line << '\n';
+            continue;
+        }
+        if (key_of(line) == "fill_pattern") {
+            const std::string v = value_of(line);
+            if (v == "crosshatch") out << "fill_pattern = grid\n";
+            else out << line << '\n';
+            continue;
+        }
+        if (key_of(line) == "support_material_style") {
+            const std::string v = value_of(line);
+            if (v == "default") out << "support_material_style = grid\n";
+            else out << line << '\n';
+            continue;
+        }
+        if (key_of(line) == "support_material_pattern") {
+            const std::string v = value_of(line);
+            if (v == "default") out << "support_material_pattern = rectilinear\n";
+            else out << line << '\n';
+            continue;
+        }
+        if (key_of(line) == "top_fill_pattern") {
+            const std::string v = value_of(line);
+            if (v == "monotonicline") out << "top_fill_pattern = monotoniclines\n";
+            else out << line << '\n';
             continue;
         }
         out << line << '\n';

@@ -185,6 +185,64 @@ std::string stage_name(Slic3r::Biz::Slicing::ProgressInfo stage) {
     return name.empty() ? "slicing" : name;
 }
 
+// Reads the legacy INI's nozzle_diameter (comma list, one entry per tool)
+// for the hardware tool metadata. SlicingInput rejects an empty tool list
+// (NoHwConfigTools) and tools without a nozzle_diameter feature
+// (MissingHwConfigNozzleDiameter). Falls back to a single 0.4 nozzle so a
+// missing key degrades to defaults instead of failing the slice.
+std::vector<double> read_nozzle_diameters(const std::string& ini_path) {
+    std::ifstream in(ini_path);
+    std::string line;
+    while (std::getline(in, line)) {
+        const auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = line.substr(0, eq);
+        const auto key_last = key.find_last_not_of(" \t");
+        if (key_last == std::string::npos) continue;
+        key = key.substr(0, key_last + 1);
+        const auto key_first = key.find_first_not_of(" \t");
+        if (key_first != std::string::npos) key = key.substr(key_first);
+        if (key != "nozzle_diameter") continue;
+        std::string value = line.substr(eq + 1);
+        const auto first = value.find_first_not_of(" \t\"");
+        const auto last = value.find_last_not_of(" \t\"\r");
+        if (first == std::string::npos) continue;
+        value = value.substr(first, last - first + 1);
+        std::vector<double> out;
+        size_t pos = 0;
+        while (pos < value.size() && out.size() < 16) {
+            const size_t comma = value.find(',', pos);
+            const std::string tok = comma == std::string::npos
+                ? value.substr(pos) : value.substr(pos, comma - pos);
+            try {
+                const double d = std::stod(tok);
+                if (d > 0.0 && d < 5.0) out.push_back(d);
+            } catch (const std::exception&) { /* skip malformed entry */ }
+            if (comma == std::string::npos) break;
+            pos = comma + 1;
+        }
+        if (!out.empty()) return out;
+    }
+    return {0.4};
+}
+
+// Builds the minimal hardware metadata the slice path requires: the FFF
+// technology plus one tool per nozzle diameter (nozzle_diameter feature).
+// tool_count matches so material_slot_count() covers the tools; preset
+// names stay empty (they only feed gcode placeholder strings).
+Slic3r::Domain::Preset::SelectedPresetMetadata build_metadata(
+    const std::vector<double>& nozzle_diameters) {
+    Slic3r::Domain::Preset::SelectedPresetMetadata metadata;
+    metadata.hw_config.technology = PrinterTechnology::FFF;
+    metadata.hw_config.tool_count = static_cast<uint8_t>(nozzle_diameters.size());
+    for (const double d : nozzle_diameters) {
+        Slic3r::Domain::Preset::HwToolConfig tool;
+        tool.features["nozzle_diameter"] = d;
+        metadata.hw_config.tools.push_back(std::move(tool));
+    }
+    return metadata;
+}
+
 // Rewrites the app-written legacy INI into a sibling temp file, fixing 2.x
 // dialect values the 3.0 config definitions reject. Everything passes through
 // untouched except verified quirks:
@@ -364,10 +422,11 @@ SliceStats slice_to_gcode(Model& model,
     Domain::Bed bed = bed_from_config(*fdm);
     BedInstance bed_instance{bed};
 
-    // 3. Minimal preset metadata (gcode header data); the legacy INI has no
-    //    preset identity, and slicing only consumes the technology here.
-    Slic3r::Domain::Preset::SelectedPresetMetadata metadata;
-    metadata.hw_config.technology = PrinterTechnology::FFF;
+    // 3. Minimal preset metadata (gcode header data + the hardware tool
+    //    list slicing validates): technology, one tool per INI nozzle
+    //    diameter (nozzle_diameter feature), matching tool_count.
+    Slic3r::Domain::Preset::SelectedPresetMetadata metadata =
+        build_metadata(read_nozzle_diameters(legacy_ini_path));
 
     // Serialize universal print statistics to a SerializedConfig (project stats).
     auto serializer = [](const IPrint::UniversalPrintStatistics&) {

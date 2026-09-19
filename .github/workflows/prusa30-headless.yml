@@ -2171,7 +2171,7 @@ jobs:
             -lqhull -lprusa_fdm_mixer -lgmp -lmpfr -lcrypto -lssl \
             -lzstd -lblosc -lopenvdb -lheatshrink -lbgcode_convert -ljpeg \
             -llua -ldl -lpthread -lz -lm \
-            -o /tmp/farm_driver_test 2>&1 | head -50
+            -o /tmp/farm_driver_test
 
           echo "farm_driver.cpp compiles and links successfully against libslic3r.a"
 

@@ -36,6 +36,14 @@
         "kind": "rename",
         "note": ""
       },
+      "brim_type": {
+        "key": "brim_type",
+        "kind": "enum_remap",
+        "note": "Orca auto brim -> adhesion-safe superset (adds inner where useful)",
+        "values": {
+          "auto_brim": "outer_and_inner"
+        }
+      },
       "change_filament_gcode": {
         "key": "toolchange_gcode",
         "kind": "rename",
@@ -78,8 +86,14 @@
       },
       "enable_arc_fitting": {
         "key": "arc_fitting",
-        "kind": "rename",
-        "note": ""
+        "kind": "enum_remap",
+        "note": "Legacy bool -> 3.0 enum {disabled, emit_center}",
+        "values": {
+          "0": "disabled",
+          "1": "emit_center",
+          "false": "disabled",
+          "true": "emit_center"
+        }
       },
       "enable_prime_tower": {
         "key": "wipe_tower",
@@ -88,8 +102,14 @@
       },
       "enable_support": {
         "key": "support_material",
-        "kind": "rename",
-        "note": ""
+        "kind": "enum_remap",
+        "note": "Orca bool -> 3.0 support_material enum (same as support_material)",
+        "values": {
+          "0": "none",
+          "1": "everywhere",
+          "false": "none",
+          "true": "everywhere"
+        }
       },
       "enforce_support_layers": {
         "key": "support_material_enforce_layers",
@@ -105,6 +125,14 @@
         "key": null,
         "kind": "removed",
         "note": "Legacy per-plate bed temp slot"
+      },
+      "ensure_vertical_shell_thickness": {
+        "key": "ensure_vertical_shell_thickness",
+        "kind": "enum_remap",
+        "note": "Strongest guarantee maps to enabled",
+        "values": {
+          "ensure_all": "enabled"
+        }
       },
       "extra_perimeters_on_overhangs": {
         "key": "extra_perimeters",
@@ -201,6 +229,14 @@
         "kind": "removed",
         "note": "Legacy purge vector"
       },
+      "fuzzy_skin": {
+        "key": "fuzzy_skin",
+        "kind": "enum_remap",
+        "note": "Disabled state maps to none",
+        "values": {
+          "disabled_fuzzy": "none"
+        }
+      },
       "fuzzy_skin_point_distance": {
         "key": "fuzzy_skin_point_dist",
         "kind": "rename",
@@ -220,6 +256,17 @@
         "key": "gap_fill_speed",
         "kind": "rename",
         "note": ""
+      },
+      "gcode_label_objects": {
+        "key": "gcode_label_objects",
+        "kind": "enum_remap",
+        "note": "Legacy bool -> 3.0 enum; the 2.x feature emitted OctoPrint comments",
+        "values": {
+          "0": "disabled",
+          "1": "octoprint",
+          "false": "disabled",
+          "true": "octoprint"
+        }
       },
       "hot_plate_temp": {
         "key": null,
@@ -298,18 +345,9 @@
       },
       "ironing_type": {
         "key": "ironing",
-        "kind": "enum_remap",
-        "note": "Legacy ironing_type enum -> Prusa ironing bool",
-        "values": {
-          "all solid layers": "1",
-          "all top surfaces": "1",
-          "all_solid_layers": "1",
-          "all_top_surfaces": "1",
-          "no ironing": "0",
-          "no_ironing": "0",
-          "topmost surface": "1",
-          "topmost_surface": "1"
-        }
+        "kind": "type_changed",
+        "note": "Legacy ironing_type enum -> Prusa ironing bool (+ type when valid)",
+        "transform": "ironing_type"
       },
       "is_infill_first": {
         "key": "infill_first",
@@ -431,6 +469,12 @@
         "kind": "rename",
         "note": ""
       },
+      "pressure_advance": {
+        "key": "pressure_advance",
+        "kind": "type_changed",
+        "note": "Legacy float K-value -> 3.0 enum (nonzero = enabled)",
+        "transform": "pressure_advance"
+      },
       "prime_tower_brim_width": {
         "key": "wipe_tower_brim_width",
         "kind": "rename",
@@ -549,8 +593,11 @@
       },
       "sparse_infill_pattern": {
         "key": "fill_pattern",
-        "kind": "rename",
-        "note": ""
+        "kind": "enum_remap",
+        "note": "Orca Cross Hatch has no 3.0 counterpart; grid is the closest crossing-lines pattern",
+        "values": {
+          "crosshatch": "grid"
+        }
       },
       "sparse_infill_speed": {
         "key": "infill_speed",
@@ -569,8 +616,11 @@
       },
       "support_base_pattern": {
         "key": "support_material_pattern",
-        "kind": "rename",
-        "note": ""
+        "kind": "enum_remap",
+        "note": "Orca default interface pattern -> rectilinear",
+        "values": {
+          "default": "rectilinear"
+        }
       },
       "support_base_pattern_spacing": {
         "key": "support_material_spacing",
@@ -627,6 +677,17 @@
         "kind": "rename",
         "note": ""
       },
+      "support_material": {
+        "key": "support_material",
+        "kind": "enum_remap",
+        "note": "Legacy bool -> 3.0 enum {none, enforcers_only, everywhere}",
+        "values": {
+          "0": "none",
+          "1": "everywhere",
+          "false": "none",
+          "true": "everywhere"
+        }
+      },
       "support_object_xy_distance": {
         "key": "support_material_xy_spacing",
         "kind": "rename",
@@ -644,8 +705,11 @@
       },
       "support_style": {
         "key": "support_material_style",
-        "kind": "rename",
-        "note": ""
+        "kind": "enum_remap",
+        "note": "Orca default (normal) supports -> grid",
+        "values": {
+          "default": "grid"
+        }
       },
       "support_threshold_angle": {
         "key": "support_material_threshold",
@@ -700,8 +764,11 @@
       },
       "top_surface_pattern": {
         "key": "top_fill_pattern",
-        "kind": "rename",
-        "note": ""
+        "kind": "enum_remap",
+        "note": "Orca singular spelling -> 3.0 monotoniclines",
+        "values": {
+          "monotonicline": "monotoniclines"
+        }
       },
       "top_surface_speed": {
         "key": "top_solid_infill_speed",
@@ -823,6 +890,14 @@
         "kind": "rename",
         "note": ""
       },
+      "brim_type": {
+        "key": "brim_type",
+        "kind": "enum_remap",
+        "note": "Orca auto brim -> adhesion-safe superset (adds inner where useful)",
+        "values": {
+          "auto_brim": "outer_and_inner"
+        }
+      },
       "change_filament_gcode": {
         "key": "toolchange_gcode",
         "kind": "rename",
@@ -865,8 +940,14 @@
       },
       "enable_arc_fitting": {
         "key": "arc_fitting",
-        "kind": "rename",
-        "note": ""
+        "kind": "enum_remap",
+        "note": "Legacy bool -> 3.0 enum {disabled, emit_center}",
+        "values": {
+          "0": "disabled",
+          "1": "emit_center",
+          "false": "disabled",
+          "true": "emit_center"
+        }
       },
       "enable_prime_tower": {
         "key": "wipe_tower",
@@ -875,8 +956,14 @@
       },
       "enable_support": {
         "key": "support_material",
-        "kind": "rename",
-        "note": ""
+        "kind": "enum_remap",
+        "note": "Orca bool -> 3.0 support_material enum (same as support_material)",
+        "values": {
+          "0": "none",
+          "1": "everywhere",
+          "false": "none",
+          "true": "everywhere"
+        }
       },
       "enforce_support_layers": {
         "key": "support_material_enforce_layers",
@@ -892,6 +979,14 @@
         "key": null,
         "kind": "removed",
         "note": "Legacy per-plate bed temp slot"
+      },
+      "ensure_vertical_shell_thickness": {
+        "key": "ensure_vertical_shell_thickness",
+        "kind": "enum_remap",
+        "note": "Strongest guarantee maps to enabled",
+        "values": {
+          "ensure_all": "enabled"
+        }
       },
       "extra_perimeters_on_overhangs": {
         "key": "extra_perimeters",
@@ -988,6 +1083,14 @@
         "kind": "removed",
         "note": "Legacy purge vector"
       },
+      "fuzzy_skin": {
+        "key": "fuzzy_skin",
+        "kind": "enum_remap",
+        "note": "Disabled state maps to none",
+        "values": {
+          "disabled_fuzzy": "none"
+        }
+      },
       "fuzzy_skin_point_distance": {
         "key": "fuzzy_skin_point_dist",
         "kind": "rename",
@@ -1007,6 +1110,17 @@
         "key": "gap_fill_speed",
         "kind": "rename",
         "note": ""
+      },
+      "gcode_label_objects": {
+        "key": "gcode_label_objects",
+        "kind": "enum_remap",
+        "note": "Legacy bool -> 3.0 enum; the 2.x feature emitted OctoPrint comments",
+        "values": {
+          "0": "disabled",
+          "1": "octoprint",
+          "false": "disabled",
+          "true": "octoprint"
+        }
       },
       "hot_plate_temp": {
         "key": null,
@@ -1085,18 +1199,9 @@
       },
       "ironing_type": {
         "key": "ironing",
-        "kind": "enum_remap",
-        "note": "Legacy ironing_type enum -> Prusa ironing bool",
-        "values": {
-          "all solid layers": "1",
-          "all top surfaces": "1",
-          "all_solid_layers": "1",
-          "all_top_surfaces": "1",
-          "no ironing": "0",
-          "no_ironing": "0",
-          "topmost surface": "1",
-          "topmost_surface": "1"
-        }
+        "kind": "type_changed",
+        "note": "Legacy ironing_type enum -> Prusa ironing bool (+ type when valid)",
+        "transform": "ironing_type"
       },
       "is_infill_first": {
         "key": "infill_first",
@@ -1218,6 +1323,12 @@
         "kind": "rename",
         "note": ""
       },
+      "pressure_advance": {
+        "key": "pressure_advance",
+        "kind": "type_changed",
+        "note": "Legacy float K-value -> 3.0 enum (nonzero = enabled)",
+        "transform": "pressure_advance"
+      },
       "prime_tower_brim_width": {
         "key": "wipe_tower_brim_width",
         "kind": "rename",
@@ -1336,8 +1447,11 @@
       },
       "sparse_infill_pattern": {
         "key": "fill_pattern",
-        "kind": "rename",
-        "note": ""
+        "kind": "enum_remap",
+        "note": "Orca Cross Hatch has no 3.0 counterpart; grid is the closest crossing-lines pattern",
+        "values": {
+          "crosshatch": "grid"
+        }
       },
       "sparse_infill_speed": {
         "key": "infill_speed",
@@ -1356,8 +1470,11 @@
       },
       "support_base_pattern": {
         "key": "support_material_pattern",
-        "kind": "rename",
-        "note": ""
+        "kind": "enum_remap",
+        "note": "Orca default interface pattern -> rectilinear",
+        "values": {
+          "default": "rectilinear"
+        }
       },
       "support_base_pattern_spacing": {
         "key": "support_material_spacing",
@@ -1414,6 +1531,17 @@
         "kind": "rename",
         "note": ""
       },
+      "support_material": {
+        "key": "support_material",
+        "kind": "enum_remap",
+        "note": "Legacy bool -> 3.0 enum {none, enforcers_only, everywhere}",
+        "values": {
+          "0": "none",
+          "1": "everywhere",
+          "false": "none",
+          "true": "everywhere"
+        }
+      },
       "support_object_xy_distance": {
         "key": "support_material_xy_spacing",
         "kind": "rename",
@@ -1431,8 +1559,11 @@
       },
       "support_style": {
         "key": "support_material_style",
-        "kind": "rename",
-        "note": ""
+        "kind": "enum_remap",
+        "note": "Orca default (normal) supports -> grid",
+        "values": {
+          "default": "grid"
+        }
       },
       "support_threshold_angle": {
         "key": "support_material_threshold",
@@ -1487,8 +1618,11 @@
       },
       "top_surface_pattern": {
         "key": "top_fill_pattern",
-        "kind": "rename",
-        "note": ""
+        "kind": "enum_remap",
+        "note": "Orca singular spelling -> 3.0 monotoniclines",
+        "values": {
+          "monotonicline": "monotoniclines"
+        }
       },
       "top_surface_speed": {
         "key": "top_solid_infill_speed",
@@ -2038,7 +2172,13 @@
       "support_material": {
         "key": "support_material",
         "kind": "identity",
-        "note": ""
+        "note": "",
+        "values": {
+          "0": "none",
+          "1": "everywhere",
+          "false": "none",
+          "true": "everywhere"
+        }
       },
       "support_material_angle": {
         "key": "support_material_angle",
@@ -2715,7 +2855,13 @@
       "support_material": {
         "key": "support_material",
         "kind": "identity",
-        "note": ""
+        "note": "",
+        "values": {
+          "0": "none",
+          "1": "everywhere",
+          "false": "none",
+          "true": "everywhere"
+        }
       },
       "support_material_angle": {
         "key": "support_material_angle",
@@ -3392,7 +3538,13 @@
       "support_material": {
         "key": "support_material",
         "kind": "identity",
-        "note": ""
+        "note": "",
+        "values": {
+          "0": "none",
+          "1": "everywhere",
+          "false": "none",
+          "true": "everywhere"
+        }
       },
       "support_material_angle": {
         "key": "support_material_angle",

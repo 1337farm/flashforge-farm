@@ -149,14 +149,44 @@ public final class DialectKeyMap {
         m.put("machine_max_speed_e", "machine_max_feedrate_e");
         m.put("wall_sequence", "external_perimeters_first");
         m.put("ironing_type", "ironing");
+        m.put("support_material", "support_material");
+        m.put("gcode_label_objects", "gcode_label_objects");
+        m.put("brim_type", "brim_type");
+        m.put("ensure_vertical_shell_thickness", "ensure_vertical_shell_thickness");
+        m.put("fuzzy_skin", "fuzzy_skin");
+        m.put("pressure_advance", "pressure_advance");
         return m;
     }
     private static Map<String, Map<String, String>> legacyValues() {
         Map<String, Map<String, String>> m = new HashMap<>();
+        m.put("sparse_infill_pattern", new HashMap<String, String>() {{
+            put("crosshatch", "grid");
+        }});
         m.put("gap_fill_target", new HashMap<String, String>() {{
             put("everywhere", "1");
             put("topbottom", "1");
             put("nowhere", "0");
+        }});
+        m.put("top_surface_pattern", new HashMap<String, String>() {{
+            put("monotonicline", "monotoniclines");
+        }});
+        m.put("enable_arc_fitting", new HashMap<String, String>() {{
+            put("1", "emit_center");
+            put("0", "disabled");
+            put("true", "emit_center");
+            put("false", "disabled");
+        }});
+        m.put("enable_support", new HashMap<String, String>() {{
+            put("1", "everywhere");
+            put("0", "none");
+            put("true", "everywhere");
+            put("false", "none");
+        }});
+        m.put("support_style", new HashMap<String, String>() {{
+            put("default", "grid");
+        }});
+        m.put("support_base_pattern", new HashMap<String, String>() {{
+            put("default", "rectilinear");
         }});
         m.put("wall_sequence", new HashMap<String, String>() {{
             put("inner wall/outer wall", "0");
@@ -172,15 +202,26 @@ public final class DialectKeyMap {
             put("by_layer", "0");
             put("by_object", "1");
         }});
-        m.put("ironing_type", new HashMap<String, String>() {{
-            put("no ironing", "0");
-            put("no_ironing", "0");
-            put("all top surfaces", "1");
-            put("topmost surface", "1");
-            put("all solid layers", "1");
-            put("all_top_surfaces", "1");
-            put("topmost_surface", "1");
-            put("all_solid_layers", "1");
+        m.put("support_material", new HashMap<String, String>() {{
+            put("1", "everywhere");
+            put("0", "none");
+            put("true", "everywhere");
+            put("false", "none");
+        }});
+        m.put("gcode_label_objects", new HashMap<String, String>() {{
+            put("1", "octoprint");
+            put("0", "disabled");
+            put("true", "octoprint");
+            put("false", "disabled");
+        }});
+        m.put("brim_type", new HashMap<String, String>() {{
+            put("auto_brim", "outer_and_inner");
+        }});
+        m.put("ensure_vertical_shell_thickness", new HashMap<String, String>() {{
+            put("ensure_all", "enabled");
+        }});
+        m.put("fuzzy_skin", new HashMap<String, String>() {{
+            put("disabled_fuzzy", "none");
         }});
         return m;
     }
@@ -342,14 +383,44 @@ public final class DialectKeyMap {
         m.put("machine_max_speed_e", "machine_max_feedrate_e");
         m.put("wall_sequence", "external_perimeters_first");
         m.put("ironing_type", "ironing");
+        m.put("support_material", "support_material");
+        m.put("gcode_label_objects", "gcode_label_objects");
+        m.put("brim_type", "brim_type");
+        m.put("ensure_vertical_shell_thickness", "ensure_vertical_shell_thickness");
+        m.put("fuzzy_skin", "fuzzy_skin");
+        m.put("pressure_advance", "pressure_advance");
         return m;
     }
     private static Map<String, Map<String, String>> compatValues() {
         Map<String, Map<String, String>> m = new HashMap<>();
+        m.put("sparse_infill_pattern", new HashMap<String, String>() {{
+            put("crosshatch", "grid");
+        }});
         m.put("gap_fill_target", new HashMap<String, String>() {{
             put("everywhere", "1");
             put("topbottom", "1");
             put("nowhere", "0");
+        }});
+        m.put("top_surface_pattern", new HashMap<String, String>() {{
+            put("monotonicline", "monotoniclines");
+        }});
+        m.put("enable_arc_fitting", new HashMap<String, String>() {{
+            put("1", "emit_center");
+            put("0", "disabled");
+            put("true", "emit_center");
+            put("false", "disabled");
+        }});
+        m.put("enable_support", new HashMap<String, String>() {{
+            put("1", "everywhere");
+            put("0", "none");
+            put("true", "everywhere");
+            put("false", "none");
+        }});
+        m.put("support_style", new HashMap<String, String>() {{
+            put("default", "grid");
+        }});
+        m.put("support_base_pattern", new HashMap<String, String>() {{
+            put("default", "rectilinear");
         }});
         m.put("wall_sequence", new HashMap<String, String>() {{
             put("inner wall/outer wall", "0");
@@ -365,15 +436,26 @@ public final class DialectKeyMap {
             put("by_layer", "0");
             put("by_object", "1");
         }});
-        m.put("ironing_type", new HashMap<String, String>() {{
-            put("no ironing", "0");
-            put("no_ironing", "0");
-            put("all top surfaces", "1");
-            put("topmost surface", "1");
-            put("all solid layers", "1");
-            put("all_top_surfaces", "1");
-            put("topmost_surface", "1");
-            put("all_solid_layers", "1");
+        m.put("support_material", new HashMap<String, String>() {{
+            put("1", "everywhere");
+            put("0", "none");
+            put("true", "everywhere");
+            put("false", "none");
+        }});
+        m.put("gcode_label_objects", new HashMap<String, String>() {{
+            put("1", "octoprint");
+            put("0", "disabled");
+            put("true", "octoprint");
+            put("false", "disabled");
+        }});
+        m.put("brim_type", new HashMap<String, String>() {{
+            put("auto_brim", "outer_and_inner");
+        }});
+        m.put("ensure_vertical_shell_thickness", new HashMap<String, String>() {{
+            put("ensure_all", "enabled");
+        }});
+        m.put("fuzzy_skin", new HashMap<String, String>() {{
+            put("disabled_fuzzy", "none");
         }});
         return m;
     }
@@ -539,6 +621,12 @@ public final class DialectKeyMap {
     }
     private static Map<String, Map<String, String>> prusaslicerValues() {
         Map<String, Map<String, String>> m = new HashMap<>();
+        m.put("support_material", new HashMap<String, String>() {{
+            put("1", "everywhere");
+            put("0", "none");
+            put("true", "everywhere");
+            put("false", "none");
+        }});
         return m;
     }
     private static Set<String> prusaslicerRemoved() {
@@ -687,6 +775,12 @@ public final class DialectKeyMap {
     }
     private static Map<String, Map<String, String>> slic3rValues() {
         Map<String, Map<String, String>> m = new HashMap<>();
+        m.put("support_material", new HashMap<String, String>() {{
+            put("1", "everywhere");
+            put("0", "none");
+            put("true", "everywhere");
+            put("false", "none");
+        }});
         return m;
     }
     private static Set<String> slic3rRemoved() {
@@ -835,6 +929,12 @@ public final class DialectKeyMap {
     }
     private static Map<String, Map<String, String>> superslicerValues() {
         Map<String, Map<String, String>> m = new HashMap<>();
+        m.put("support_material", new HashMap<String, String>() {{
+            put("1", "everywhere");
+            put("0", "none");
+            put("true", "everywhere");
+            put("false", "none");
+        }});
         return m;
     }
     private static Set<String> superslicerRemoved() {

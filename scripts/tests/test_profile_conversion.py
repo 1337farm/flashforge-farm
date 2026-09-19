@@ -122,6 +122,7 @@ def test_full_convert_and_emit():
     assert out["spiral_vase"] == "0"
     assert out["gap_fill_enabled"] == "1"
     assert out["ironing"] == "1"
+    assert out["ironing_type"] == "topmost"  # valid type line preserved
     assert out["support_style"] == "organic"
     assert "single_extruder_multi_material" not in out
     assert s.removed == 1
@@ -151,7 +152,7 @@ def test_cli_directory_conversion(tmp_path):
 
     ss_out = (out_dir / "superslicer_sample.ini").read_text()
     assert "perimeters = 4" in ss_out      # legacy INI key passes through
-    assert "support_material = 1" in ss_out
+    assert "support_material = everywhere" in ss_out  # legacy bool -> 3.0 enum
 
 
 def test_legacy_stored_ini_migration(tmp_path):

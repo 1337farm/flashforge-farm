@@ -27,9 +27,30 @@ INI_DIALECTS = {"prusaslicer", "slic3r", "superslicer"}
 DIALECTS = JSON_DIALECTS | INI_DIALECTS
 
 # Converter-side transforms for keys flagged `type_changed` with a `transform`.
+def _to_float(value: str) -> float:
+    try:
+        return float(value.strip())
+    except (ValueError, TypeError, AttributeError):
+        return 0.0
+
+
 TRANSFORMS = {
     # Legacy support_type ("normal"/"tree(auto)"/...) -> Prusa support_style enum.
     "support_type": lambda v: [("support_style", "organic" if "tree" in v.lower() or "organic" in v.lower() else "snug")],
+    # Legacy pressure_advance float K-value -> 3.0 enum. A nonzero tuned K
+    # means the feature is on; calibration state is not inferable.
+    "pressure_advance": lambda v: [("pressure_advance", "disabled" if _to_float(v) == 0.0 else "enabled")],
+    # Legacy ironing_type enum -> Prusa ironing bool + type. "Off" spellings
+    # collapse to the bool alone; valid 3.0 type spellings (and Orca labels)
+    # keep the type line so the 3.0 enum validates.
+    "ironing_type": lambda v: (
+        [("ironing", "0")]
+        if v.strip() in ("no ironing", "no_ironing", "none")
+        else [("ironing", "1"),
+              ("ironing_type", {"all top surfaces": "top", "all_top_surfaces": "top",
+                                "topmost surface": "topmost", "topmost_surface": "topmost",
+                                "all solid layers": "solid", "all_solid_layers": "solid"}.get(v.strip(), v.strip()))]
+    ),
 }
 
 

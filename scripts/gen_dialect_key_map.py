@@ -75,12 +75,73 @@ LEGACY_ENUM_REMAPS: dict[str, dict] = {
     },
     "ironing_type": {
         "to": "ironing",
-        "values": {
-            "no ironing": "0", "no_ironing": "0",
-            "all top surfaces": "1", "topmost surface": "1", "all solid layers": "1",
-            "all_top_surfaces": "1", "topmost_surface": "1", "all_solid_layers": "1",
-        },
-        "note": "Legacy ironing_type enum -> Prusa ironing bool",
+        "kind": "type_changed",
+        "transform": "ironing_type",
+        "note": "Legacy ironing_type enum -> Prusa ironing bool (+ type when valid)",
+    },
+    # Legacy bools that became 3.0 enums: map both spellings; anything else
+    # passes through so the loader reports it verbatim instead of guessing.
+    "support_material": {
+        "to": "support_material",
+        "values": {"1": "everywhere", "0": "none", "true": "everywhere", "false": "none"},
+        "note": "Legacy bool -> 3.0 enum {none, enforcers_only, everywhere}",
+    },
+    "enable_support": {
+        "to": "support_material",
+        "values": {"1": "everywhere", "0": "none", "true": "everywhere", "false": "none"},
+        "note": "Orca bool -> 3.0 support_material enum (same as support_material)",
+    },
+    "gcode_label_objects": {
+        "to": "gcode_label_objects",
+        "values": {"1": "octoprint", "0": "disabled", "true": "octoprint", "false": "disabled"},
+        "note": "Legacy bool -> 3.0 enum; the 2.x feature emitted OctoPrint comments",
+    },
+    # Orca-only labels with no 3.0 counterpart: map to the closest setting.
+    "brim_type": {
+        "to": "brim_type",
+        "values": {"auto_brim": "outer_and_inner"},
+        "note": "Orca auto brim -> adhesion-safe superset (adds inner where useful)",
+    },
+    "ensure_vertical_shell_thickness": {
+        "to": "ensure_vertical_shell_thickness",
+        "values": {"ensure_all": "enabled"},
+        "note": "Strongest guarantee maps to enabled",
+    },
+    "fuzzy_skin": {
+        "to": "fuzzy_skin",
+        "values": {"disabled_fuzzy": "none"},
+        "note": "Disabled state maps to none",
+    },
+    "top_surface_pattern": {
+        "to": "top_fill_pattern",
+        "values": {"monotonicline": "monotoniclines"},
+        "note": "Orca singular spelling -> 3.0 monotoniclines",
+    },
+    "enable_arc_fitting": {
+        "to": "arc_fitting",
+        "values": {"1": "emit_center", "0": "disabled", "true": "emit_center", "false": "disabled"},
+        "note": "Legacy bool -> 3.0 enum {disabled, emit_center}",
+    },
+    "sparse_infill_pattern": {
+        "to": "fill_pattern",
+        "values": {"crosshatch": "grid"},
+        "note": "Orca Cross Hatch has no 3.0 counterpart; grid is the closest crossing-lines pattern",
+    },
+    "support_style": {
+        "to": "support_material_style",
+        "values": {"default": "grid"},
+        "note": "Orca default (normal) supports -> grid",
+    },
+    "support_base_pattern": {
+        "to": "support_material_pattern",
+        "values": {"default": "rectilinear"},
+        "note": "Orca default interface pattern -> rectilinear",
+    },
+    "pressure_advance": {
+        "to": "pressure_advance",
+        "kind": "type_changed",
+        "transform": "pressure_advance",
+        "note": "Legacy float K-value -> 3.0 enum (nonzero = enabled)",
     },
     # Tree/normal support is a two-key mapping in Prusa; handled as a converter-side
     # transform. Mark it type_changed so the dialect map flags it.
@@ -174,7 +235,22 @@ def build_table(
         for key in sorted(legacy_keys):
             target = PRUSA3_RENAMES.get(key, key)
             kind = "rename" if key in PRUSA3_RENAMES else "identity"
-            out[key] = {"key": target, "kind": kind, "note": ""}
+            row = {"key": target, "kind": kind, "note": ""}
+            # Value remaps keyed by this dialect's source spelling apply
+            # here too (e.g. a SuperSlicer INI carries support_material as
+            # a 2.x bool just like the legacy dialect does). Farm-spelled
+            # rows (enable_arc_fitting, ...) never match this key space and
+            # are skipped naturally.
+            spec = LEGACY_ENUM_REMAPS.get(key)
+            if spec:
+                if "values" in spec:
+                    row["values"] = spec["values"]
+                if spec.get("transform"):
+                    row["kind"] = "type_changed"
+                    row["transform"] = spec["transform"]
+                if spec.get("to"):
+                    row["key"] = spec["to"]
+            out[key] = row
 
     return out
 

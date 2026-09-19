@@ -211,7 +211,10 @@ std::string normalize_legacy_ini(const std::string& ini_path) {
         if (eq == std::string::npos) return std::string{};
         auto k = l.substr(0, eq);
         const auto last = k.find_last_not_of(" \t");
-        return last == std::string::npos ? std::string{} : k.substr(0, last + 1);
+        if (last == std::string::npos) return std::string{};
+        k = k.substr(0, last + 1);
+        const auto first = k.find_first_not_of(" \t");
+        return first == std::string::npos ? std::string{} : k.substr(first);
     };
     bool has_ironing_key = false;
     {

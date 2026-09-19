@@ -2113,6 +2113,67 @@ jobs:
         run: |
           cmake --build build/prusa30 --target libslic3r -j"$(nproc)"
 
+      - name: Compile farm_driver.cpp against libslic3r
+        run: |
+          # Locate libslic3r.a
+          SLIC3R_LIB="$(find build/prusa30 -name 'libslic3r.a' | head -1)"
+          test -n "$SLIC3R_LIB" || { echo "ERROR: libslic3r.a not found"; exit 1; }
+          echo "Found libslic3r.a: $SLIC3R_LIB"
+
+          # Collect include paths from upstream source + staged deps
+          INC=()
+          for d in $(find engine/build/prusaslicer-src/src -maxdepth 2 -type d -name include 2>/dev/null); do INC+=(-I"$d"); done
+          for d in $(find engine/build/prusaslicer-src/bundled_deps -type d 2>/dev/null \
+              -not -path '*/avrdude/*' \
+              -not -path '*/imgui/*' \
+              -not -path '*/webview2/*' \
+              -not -path '*/stb_dxt/*' \
+              -not -path '*/stb_image/*'); do INC+=(-I"$d"); done
+          for s in nlohmann_json spdlog fmt sol2 eigen cereal; do
+            if [ -d "engine/prusa30/jniImports/$s/include" ]; then INC+=(-I"engine/prusa30/jniImports/$s/include"); fi
+          done
+          for s in libassert-2.2.1 expected-1.1.0 magic_enum-0.9.7 cpptrace-1.0.4; do
+            if [ -d "engine/prusa30/jniImports/assert/include/$s" ]; then INC+=(-I"engine/prusa30/jniImports/assert/include/$s"); fi
+          done
+          if [ -d "engine/prusa30/jniImports/nanosvg_inc" ]; then INC+=(-I"engine/prusa30/jniImports/nanosvg_inc"); fi
+          if [ -d "engine/prusa30/jniImports/assert/include" ]; then INC+=(-I"engine/prusa30/jniImports/assert/include"); fi
+
+          # Compile farm_driver.cpp (syntax + link check against libslic3r.a)
+          clang++ -std=c++20 -c engine/prusa30/farm_driver.cpp \
+            "${INC[@]}" \
+            -Iengine/build/prusaslicer-src/src \
+            -Iengine/build/prusaslicer-src/bundled_deps \
+            -o /tmp/farm_driver.o
+
+          # Link check: verify symbols resolve against libslic3r.a
+          clang++ -std=c++20 /tmp/farm_driver.o "$SLIC3R_LIB" \
+            -Lengine/prusa30/jniImports/boost/lib/arm64-v8a/lib \
+            -Lengine/prusa30/jniImports/tbb/lib \
+            -Lengine/prusa30/jniImports/nlopt/lib \
+            -Lengine/prusa30/jniImports/expat/lib \
+            -Lengine/prusa30/jniImports/pngfmt/lib \
+            -Lengine/prusa30/jniImports/assert/lib \
+            -Lengine/prusa30/jniImports/qhull/lib \
+            -Lengine/prusa30/jniImports/mixer/lib \
+            -Lengine/prusa30/jniImports/gmpcgal/lib \
+            -Lengine/prusa30/jniImports/openssl/lib \
+            -Lengine/prusa30/jniImports/zstd/lib \
+            -Lengine/prusa30/jniImports/blosc/lib \
+            -Lengine/prusa30/jniImports/openvdb/lib \
+            -Lengine/prusa30/jniImports/heatshrink/lib \
+            -Lengine/prusa30/jniImports/bgcode/lib \
+            -Lengine/prusa30/jniImports/jpeg/lib \
+            -Lengine/prusa30/jniImports/lua/lib \
+            -lboost_system -lboost_filesystem -lboost_thread -lboost_regex \
+            -lboost_chrono -lboost_atomic -lboost_date_time -lboost_iostreams \
+            -ltbb -lnlopt_cxx -lexpat -lpng16 -lfmt -lassert \
+            -lqhull -lprusa_fdm_mixer -lgmp -lmpfr -lcrypto -lssl \
+            -lzstd -lblosc -lopenvdb -lheatshrink -lbgcode_convert -ljpeg \
+            -llua -ldl -lpthread -lz -lm \
+            -o /tmp/farm_driver_test 2>&1 | head -50
+
+          echo "farm_driver.cpp compiles and links successfully against libslic3r.a"
+
   # Terminal gate: this is the ONE prusa30 check branch protection/ruleset must
   # require, instead of every individual stage name. GitHub never auto-adds new
   # job names to required checks, so a per-job list silently goes stale when a

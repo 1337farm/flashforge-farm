@@ -30,7 +30,12 @@ public final class NodeIdentity {
 
     /** Load the node seed, generating and persisting it on first use. */
     public static synchronized byte[] getOrCreateSeed(Context ctx) {
-        File f = new File(ctx.getFilesDir(), SEED_FILE);
+        return getOrCreateSeed(ctx.getFilesDir());
+    }
+
+    /** File-backed seed load/generate; split out so JVM unit tests can use a temp dir. */
+    static synchronized byte[] getOrCreateSeed(File dir) {
+        File f = new File(dir, SEED_FILE);
         if (f.exists()) {
             try (FileInputStream in = new FileInputStream(f)) {
                 byte[] seed = new byte[32];
@@ -55,7 +60,16 @@ public final class NodeIdentity {
 
     /** This phone's iroh NodeId: Ed25519 public key of the node seed, lowercase hex. */
     public static String nodeIdHex(Context ctx) {
-        byte[] seed = getOrCreateSeed(ctx);
+        return nodeIdHex(getOrCreateSeed(ctx));
+    }
+
+    /**
+     * NodeId for an explicit seed. Pure function (no Android): must agree
+     * byte-for-byte with the Rust engine's {@code SecretKey::from_bytes} public
+     * key for the same seed — pinned by NodeIdentityTest against the
+     * nodeid_vector test in native_iroh_engine.
+     */
+    static String nodeIdHex(byte[] seed) {
         EdDSAPrivateKey priv = new EdDSAPrivateKey(new EdDSAPrivateKeySpec(seed, ED25519));
         return toHex(priv.getAbyte());
     }

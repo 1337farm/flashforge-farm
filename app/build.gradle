@@ -25,7 +25,12 @@ android {
         minSdk 23
         targetSdk 35
         versionCode 4
-        versionName "0.4.6"
+        // Human-readable build version is the committing SHA (forgerig /
+        // gatekeeper-demo style): every APK, crash log, and gcode header
+        // carries the exact commit it was built from. `commit` comes from
+        // getGitCommitHash() above (10-char short hash, "non-git build"
+        // fallback). versionCode stays a static int (Play/manager ordering).
+        versionName commit
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         testOptions {

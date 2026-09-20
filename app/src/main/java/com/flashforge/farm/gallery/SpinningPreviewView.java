@@ -65,7 +65,6 @@ public class SpinningPreviewView extends View {
 
     public void setMesh(GalleryMesh mesh) {
         this.mesh = mesh;
-        this.normals = null;
         if (mesh != null && mesh.triCount > 0) {
             float[] b = new float[6];
             mesh.bounds(b);
@@ -75,29 +74,6 @@ public class SpinningPreviewView extends View {
             float dx = b[3] - b[0], dy = b[4] - b[1], dz = b[5] - b[2];
             radius = (float) (Math.sqrt(dx * dx + dy * dy + dz * dz) / 2);
             if (radius <= 0) radius = 1;
-            normals = new float[mesh.triCount * 3];
-            float[] v = mesh.xyz;
-            for (int t = 0; t < mesh.triCount; t++) {
-                int o = t * 9;
-                float ux = v[o + 3] - v[o], uy = v[o + 4] - v[o + 1], uz = v[o + 5] - v[o + 2];
-                float wx = v[o + 6] - v[o], wy = v[o + 7] - v[o + 1], wz = v[o + 8] - v[o + 2];
-                float nx = uy * wz - uz * wy;
-                float ny = uz * wx - ux * wz;
-                float nz = ux * wy - uy * wx;
-                float len = (float) Math.sqrt(nx * nx + ny * ny + nz * nz);
-                if (len < 1e-12f) {
-                    nx = 0;
-                    ny = 0;
-                    nz = 0;
-                } else {
-                    nx /= len;
-                    ny /= len;
-                    nz /= len;
-                }
-                normals[t * 3] = nx;
-                normals[t * 3 + 1] = ny;
-                normals[t * 3 + 2] = nz;
-            }
         }
         invalidate();
     }
@@ -203,7 +179,7 @@ public class SpinningPreviewView extends View {
     private void render(int size) {
         for (int i = 0; i < pixels.length; i++) {
             pixels[i] = 0;
-            depth[i] = Float.MAX_VALUE;
+            depth[i] = -Float.MAX_VALUE;
         }
         float cosA = (float) Math.cos(yaw), sinA = (float) Math.sin(yaw);
         float cosT = (float) Math.cos(pitch), sinT = (float) Math.sin(pitch);
@@ -217,6 +193,7 @@ public class SpinningPreviewView extends View {
         // larger. fl ~2.5 radii gives visible depth; 6+ radii looks flat.
         float fl = 2.5f * radius;
         float[] v = mesh.xyz;
+        float[] n = mesh.normals;
         float[] xs = new float[3], ys = new float[3], zs = new float[3];
         for (int t = 0; t < mesh.triCount; t++) {
             for (int j = 0; j < 3; j++) {
@@ -229,11 +206,13 @@ public class SpinningPreviewView extends View {
                 float p = fl / (fl + z2);
                 xs[j] = size / 2f + x1 * k * p;
                 ys[j] = size / 2f - y2 * k * p;
-                zs[j] = -z2;
+                zs[j] = z2;
             }
+            // Skip triangles entirely behind the camera
+            if (zs[0] >= 0 && zs[1] >= 0 && zs[2] >= 0) continue;
             float area = (xs[1] - xs[0]) * (ys[2] - ys[0]) - (xs[2] - xs[0]) * (ys[1] - ys[0]);
             if (area > -0.25f && area < 0.25f) continue;
-            float nx = normals[t * 3], ny = normals[t * 3 + 1], nz = normals[t * 3 + 2];
+            float nx = n[t * 3], ny = n[t * 3 + 1], nz = n[t * 3 + 2];
             float nx1 = nx * cosA + nz * sinA;
             float nz1 = -nx * sinA + nz * cosA;
             float ny2 = ny * cosT - nz1 * sinT;
@@ -265,7 +244,7 @@ public class SpinningPreviewView extends View {
                     if (w0 < 0 || w1 < 0 || w2 < 0) continue;
                     float z = w0 * zs[0] + w1 * zs[1] + w2 * zs[2];
                     int idx = y * size + x;
-                    if (z < depth[idx]) {
+                    if (z > depth[idx]) {
                         depth[idx] = z;
                         pixels[idx] = color;
                     }

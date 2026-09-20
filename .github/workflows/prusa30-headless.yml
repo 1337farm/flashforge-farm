@@ -2165,9 +2165,10 @@ jobs:
             -o /tmp/slice_repro.o
 
           # Resolve dep archives dynamically: staged layouts drift (ABI
-          # subdirs, stage/lib bridges), so locate each archive instead of
-          # hardcoding -L paths. Prefer static archives for a self-contained
-          # test binary; fall back to shared with an rpath entry.
+          # subdirs, stage/lib bridges, version-suffixed archive names), so
+          # locate each archive instead of hardcoding -L paths. Exact name
+          # first, then version-suffixed wildcard; static preferred, shared
+          # with rpath fallback. Fail closed naming the missing lib.
           LIBS=()
           RPATHS=()
           for lib in boost_system boost_filesystem boost_thread boost_regex \
@@ -2176,8 +2177,9 @@ jobs:
               qhull prusa_fdm_mixer gmp gmpxx mpfr crypto ssl \
               zstd blosc openvdb heatshrink bgcode_convert jpeg lua; do
             f="$(find engine/prusa30/jniImports -name "lib${lib}.a" 2>/dev/null | head -1)"
+            [ -n "$f" ] || f="$(find engine/prusa30/jniImports -name "lib${lib}*.a" 2>/dev/null | sort | head -1)"
             if [ -z "$f" ]; then
-              f="$(find engine/prusa30/jniImports -name "lib${lib}.so" 2>/dev/null | head -1)"
+              f="$(find engine/prusa30/jniImports -name "lib${lib}.so*" 2>/dev/null | sort | head -1)"
               [ -n "$f" ] && RPATHS+=("$(dirname "$f")")
             fi
             [ -n "$f" ] || { echo "ERROR: lib${lib} not staged under engine/prusa30/jniImports"; exit 1; }

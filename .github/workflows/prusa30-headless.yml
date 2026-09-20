@@ -2138,7 +2138,11 @@ jobs:
             flags+=(-I"$STAGE/$s/include")
           done
           for s in libassert-2.2.1 expected-1.1.0 magic_enum-0.9.7 cpptrace-1.0.4; do
-            flags+=(-I"$STAGE/assert/include/$s")
+            if [ "$s" = "magic_enum-0.9.7" ]; then
+              flags+=(-I"$STAGE/magic_enum/include")
+            else
+              flags+=(-I"$STAGE/assert/include/$s")
+            fi
           done
           flags+=(-I"$STAGE/nanosvg_inc")
           flags+=(-I"$STAGE/assert/include")

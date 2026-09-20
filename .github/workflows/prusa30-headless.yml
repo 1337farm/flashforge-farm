@@ -2174,6 +2174,61 @@ jobs:
           echo "staged archives are Android arm64; execute on bionic/aarch64 via"
           echo "run_slice_regressions.sh against the CI libslic3r artifact)"
 
+          # Attempt headless slice verification via qemu-aarch64 (if available)
+          # This validates the slice pipeline end-to-end on a test model.
+          if command -v qemu-aarch64 >/dev/null 2>&1; then
+            echo "qemu-aarch64 found — attempting headless slice verification..."
+            # Link slice_repro + farm_driver against CI libslic3r.a + deps
+            clang++ -std=c++20 /tmp/slice_repro.o /tmp/farm_driver.o "$SLIC3R_LIB" \
+              -Lengine/prusa30/jniImports/boost/lib/arm64-v8a/lib \
+              -Lengine/prusa30/jniImports/tbb/lib \
+              -Lengine/prusa30/jniImports/nlopt/lib \
+              -Lengine/prusa30/jniImports/expat/lib \
+              -Lengine/prusa30/jniImports/pngfmt/lib \
+              -Lengine/prusa30/jniImports/assert/lib \
+              -Lengine/prusa30/jniImports/qhull/lib \
+              -Lengine/prusa30/jniImports/mixer/lib \
+              -Lengine/prusa30/jniImports/gmpcgal/lib \
+              -Lengine/prusa30/jniImports/openssl/lib \
+              -Lengine/prusa30/jniImports/zstd/lib \
+              -Lengine/prusa30/jniImports/blosc/lib \
+              -Lengine/prusa30/jniImports/openvdb/lib \
+              -Lengine/prusa30/jniImports/heatshrink/lib \
+              -Lengine/prusa30/jniImports/bgcode/lib \
+              -Lengine/prusa30/jniImports/jpeg/lib \
+              -Lengine/prusa30/jniImports/lua/lib \
+              -lboost_system -lboost_filesystem -lboost_thread -lboost_regex \
+              -lboost_chrono -lboost_atomic -lboost_date_time -lboost_iostreams \
+              -ltbb -lnlopt_cxx -lexpat -lpng16 -lfmt -lassert \
+              -lqhull -lprusa_fdm_mixer -lgmp -lmpfr -lcrypto -lssl \
+              -lzstd -lblosc -lopenvdb -lheatshrink -lbgcode_convert -ljpeg \
+              -llua -ldl -lpthread -lz -lm \
+              -o /tmp/slice_repro 2>&1 | head -50
+
+            # Run on a minimal test model + INI
+            if qemu-aarch64 /tmp/slice_repro \
+              scripts/tests/engine_repro/regress/minimal.ini \
+              scripts/tests/engine_repro/regress/cube_20mm_centered.stl \
+              /tmp/test_output.gcode 2>&1; then
+              echo "HEADLESS SLICE VERIFICATION: SUCCESS"
+              # Verify gcode is non-empty
+              if [ -s /tmp/test_output.gcode ]; then
+                echo "Generated gcode size: $(wc -c /tmp/test_output.gcode) bytes"
+                head -5 /tmp/test_output.gcode
+              else
+                echo "ERROR: generated gcode is empty"
+                exit 1
+              fi
+            else
+              echo "HEADLESS SLICE VERIFICATION: FAILED (exit code $?)"
+              exit 1
+            fi
+          else
+            echo "qemu-aarch64 not available — skipping headless slice execution"
+            echo "To run: build slice_repro binary on arm64 and execute via"
+            echo "  bash scripts/tests/engine_repro/regress/run_slice_regressions.sh <binary>"
+          fi
+
   # Terminal gate: this is the ONE prusa30 check branch protection/ruleset must
   # require, instead of every individual stage name. GitHub never auto-adds new
   # job names to required checks, so a per-job list silently goes stale when a

@@ -12,6 +12,7 @@ public final class ShapeGallery {
     }
 
     public static final int PREVIEW_MAX_TRIS = 1200;
+    private static final String PREVIEW_CACHE_PREFIX = "preview_";
 
     public static final int KIND_CUBE = 1;
     public static final int KIND_CYLINDER = 2;
@@ -92,8 +93,30 @@ public final class ShapeGallery {
     }
 
     public static GalleryMesh previewFor(Item item) throws IOException {
+        File cacheDir = FarmApp.getModelCacheDir();
+        File cacheFile = new File(cacheDir, PREVIEW_CACHE_PREFIX + item.id + ".bin");
+
+        // Check if cached preview exists and is valid
+        if (cacheFile.exists()) {
+            try {
+                return GalleryMesh.readFromFile(cacheFile);
+            } catch (IOException e) {
+                // Cache corrupted, fall through to regenerate
+                cacheFile.delete();
+            }
+        }
+
         GalleryMesh mesh = item.kind == KIND_CUSTOM ? MeshLoader.load(item.file) : meshFor(item);
-        return MeshDecimator.decimate(mesh, PREVIEW_MAX_TRIS);
+        GalleryMesh decimated = MeshDecimator.decimate(mesh, PREVIEW_MAX_TRIS);
+
+        // Cache the decimated mesh with normals
+        try {
+            decimated.writeToFile(cacheFile);
+        } catch (IOException ignored) {
+            // Non-fatal, continue with in-memory mesh
+        }
+
+        return decimated;
     }
 
     public static File fileFor(Item item) throws IOException {

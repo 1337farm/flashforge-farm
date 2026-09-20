@@ -1504,12 +1504,16 @@ jobs:
 
       - name: Publish APK rolling release
         if: github.ref == 'refs/heads/main'
-        uses: 1337farm/actions/publish-release@v1
-        with:
-          tag: farm-apk-latest
-          title: FlashForge Farm APK (latest)
-          notes: Rolling sideloadable debug APK built from source. Re-published on every green build.
-          files: ${{ env.RUNNER_TEMP }}/apk-release/$APK_NAME ${{ env.RUNNER_TEMP }}/apk-release/apk-manifest.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          OUT="$RUNNER_TEMP/apk-release"
+          TAG="farm-apk-latest"
+          gh release delete "$TAG" --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
+          gh release create "$TAG" "$OUT/$APK_NAME" "$OUT/apk-manifest.json" --repo "${{ github.repository }}" \
+            --title "FlashForge Farm APK (latest)" \
+            --notes "Rolling sideloadable debug APK built from source. Re-published on every green build."
 
   automerge:
     name: merge

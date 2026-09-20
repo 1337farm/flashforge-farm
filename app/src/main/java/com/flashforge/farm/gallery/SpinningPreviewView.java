@@ -179,7 +179,11 @@ public class SpinningPreviewView extends View {
     private void render(int size) {
         for (int i = 0; i < pixels.length; i++) {
             pixels[i] = 0;
-            depth[i] = -Float.MAX_VALUE;
+            // Depth buffer stores rotated view-space Z: the camera sits on
+            // the -Z side (p = fl/(fl+z2)), so nearer fragments have SMALLER
+            // z2 and win with z < depth. (-z2 with either test, and z2 with
+            // z > depth, both invert this and show inside-out geometry.)
+            depth[i] = Float.MAX_VALUE;
         }
         float cosA = (float) Math.cos(yaw), sinA = (float) Math.sin(yaw);
         float cosT = (float) Math.cos(pitch), sinT = (float) Math.sin(pitch);
@@ -212,11 +216,14 @@ public class SpinningPreviewView extends View {
             if (zs[0] >= 0 && zs[1] >= 0 && zs[2] >= 0) continue;
             float area = (xs[1] - xs[0]) * (ys[2] - ys[0]) - (xs[2] - xs[0]) * (ys[1] - ys[0]);
             if (area > -0.25f && area < 0.25f) continue;
-            float nx = n[t * 3], ny = n[t * 3 + 1], nz = n[t * 3 + 2];
-            float nx1 = nx * cosA + nz * sinA;
-            float nz1 = -nx * sinA + nz * cosA;
-            float ny2 = ny * cosT - nz1 * sinT;
-            float nz2 = ny * sinT + nz1 * cosT;
+            // Outward faces project CW in screen space (ys is flipped vs y2).
+            // Depth-test them; skip away-facing tris so back faces never win.
+            float nx0 = n[t * 3], ny0 = n[t * 3 + 1], nz0 = n[t * 3 + 2];
+            float nx1 = nx0 * cosA + nz0 * sinA;
+            float nz1 = -nx0 * sinA + nz0 * cosA;
+            float ny2 = ny0 * cosT - nz1 * sinT;
+            float nz2 = ny0 * sinT + nz1 * cosT;
+            if (area >= 0) continue;
             float diff = nx1 * lx + ny2 * ly + nz2 * lz;
             if (diff < 0) diff = 0;
             float shade = 0.38f + 0.62f * diff;
@@ -244,7 +251,7 @@ public class SpinningPreviewView extends View {
                     if (w0 < 0 || w1 < 0 || w2 < 0) continue;
                     float z = w0 * zs[0] + w1 * zs[1] + w2 * zs[2];
                     int idx = y * size + x;
-                    if (z > depth[idx]) {
+                    if (z < depth[idx]) {
                         depth[idx] = z;
                         pixels[idx] = color;
                     }

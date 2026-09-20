@@ -2137,6 +2137,7 @@ jobs:
           for s in nlohmann_json spdlog fmt sol2 eigen cereal; do
             flags+=(-I"$STAGE/$s/include")
           done
+          flags+=(-I"$STAGE/boost/include")
           for s in libassert-2.2.1 expected-1.1.0 magic_enum-0.9.7 cpptrace-1.0.4; do
             if [ "$s" = "magic_enum-0.9.7" ]; then
               flags+=(-I"$STAGE/magic_enum/include")

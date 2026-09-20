@@ -514,15 +514,6 @@ jobs:
             "${{ steps.sha.outputs.full_key }}" \
             "$TARBALL" "$SUM" > "$OUT/${{ matrix.dep }}-manifest.json"
 
-      - name: Publish ${{ matrix.name }} rolling release
-        if: always()
-        uses: 1337farm/actions/publish-release@v1
-        with:
-          tag: dep-${{ matrix.dep }}-latest
-          title: ${{ matrix.name }} deps (latest)
-          notes: Rolling release of the ${{ matrix.name }} native deps built from source. Re-published whenever the dep rebuilds.
-          files: $OUT/$TARBALL $OUT/${{ matrix.dep }}-manifest.json
-
   build-engine:
     name: engine
     runs-on: ubuntu-24.04

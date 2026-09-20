@@ -1523,6 +1523,12 @@ jobs:
           sdkmanager "platforms;android-37.0" "cmake;3.22.1"
           ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
 
+      - name: Install qemu-aarch64 (for headless slice verification)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-user qemu-aarch64
+          qemu-aarch64 --version
+
       - name: Fetch PrusaSlicer 3.0 source (pinned + patched)
         run: |
           chmod +x engine/prusa30/fetch_prusaslicer.sh

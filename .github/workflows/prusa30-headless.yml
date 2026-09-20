@@ -2164,30 +2164,37 @@ jobs:
             "${INC[@]}" \
             -o /tmp/slice_repro.o
 
+          # Resolve dep archives dynamically: staged layouts drift (ABI
+          # subdirs, stage/lib bridges), so locate each archive instead of
+          # hardcoding -L paths. Prefer static archives for a self-contained
+          # test binary; fall back to shared with an rpath entry.
+          LIBS=()
+          RPATHS=()
+          for lib in boost_system boost_filesystem boost_thread boost_regex \
+              boost_chrono boost_atomic boost_date_time boost_iostreams \
+              tbb nlopt_cxx expat png16 fmt assert \
+              qhull prusa_fdm_mixer gmp gmpxx mpfr crypto ssl \
+              zstd blosc openvdb heatshrink bgcode_convert jpeg lua; do
+            f="$(find engine/prusa30/jniImports -name "lib${lib}.a" 2>/dev/null | head -1)"
+            if [ -z "$f" ]; then
+              f="$(find engine/prusa30/jniImports -name "lib${lib}.so" 2>/dev/null | head -1)"
+              [ -n "$f" ] && RPATHS+=("$(dirname "$f")")
+            fi
+            [ -n "$f" ] || { echo "ERROR: lib${lib} not staged under engine/prusa30/jniImports"; exit 1; }
+            echo "dep: $f"
+            LIBS+=("$f")
+          done
+          RPATH_FLAGS=()
+          if [ "${#RPATHS[@]}" -gt 0 ]; then
+            for d in $(printf '%s\n' "${RPATHS[@]}" | sort -u); do
+              RPATH_FLAGS+=("-Wl,-rpath,$d")
+            done
+          fi
+
           clang++ -std=c++20 /tmp/slice_repro.o /tmp/farm_driver.o "$SLIC3R_LIB" \
-            -Lengine/prusa30/jniImports/boost/lib/arm64-v8a/lib \
-            -Lengine/prusa30/jniImports/tbb/lib \
-            -Lengine/prusa30/jniImports/nlopt/lib \
-            -Lengine/prusa30/jniImports/expat/lib \
-            -Lengine/prusa30/jniImports/pngfmt/lib \
-            -Lengine/prusa30/jniImports/assert/lib \
-            -Lengine/prusa30/jniImports/qhull/lib \
-            -Lengine/prusa30/jniImports/mixer/lib \
-            -Lengine/prusa30/jniImports/gmpcgal/lib \
-            -Lengine/prusa30/jniImports/openssl/lib \
-            -Lengine/prusa30/jniImports/zstd/lib \
-            -Lengine/prusa30/jniImports/blosc/lib \
-            -Lengine/prusa30/jniImports/openvdb/lib \
-            -Lengine/prusa30/jniImports/heatshrink/lib \
-            -Lengine/prusa30/jniImports/bgcode/lib \
-            -Lengine/prusa30/jniImports/jpeg/lib \
-            -Lengine/prusa30/jniImports/lua/lib \
-            -lboost_system -lboost_filesystem -lboost_thread -lboost_regex \
-            -lboost_chrono -lboost_atomic -lboost_date_time -lboost_iostreams \
-            -ltbb -lnlopt_cxx -lexpat -lpng16 -lfmt -lassert \
-            -lqhull -lprusa_fdm_mixer -lgmp -lmpfr -lcrypto -lssl \
-            -lzstd -lblosc -lopenvdb -lheatshrink -lbgcode_convert -ljpeg \
-            -llua -ldl -lpthread -lz -lm \
+            "${LIBS[@]}" \
+            "${RPATH_FLAGS[@]}" \
+            -ldl -lpthread -lz -lm \
             -o /tmp/slice_repro
           echo "slice_repro built; running fixture matrix"
           bash scripts/tests/engine_repro/regress/run_slice_regressions.sh /tmp/slice_repro

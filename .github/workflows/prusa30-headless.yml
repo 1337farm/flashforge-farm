@@ -2139,10 +2139,13 @@ jobs:
           if [ -d "engine/prusa30/jniImports/assert/include" ]; then INC+=(-I"engine/prusa30/jniImports/assert/include"); fi
 
           # Compile farm_driver.cpp (syntax + link check against libslic3r.a)
-          # NDK sysroot provides android/log.h (LOGx macros) for the host check compile.
-          ANDROID_SYSROOT="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          # android/log.h (LOGx macros) is NDK-only; provide a no-op shim for
+          # the host check compile instead of a full --sysroot (which breaks
+          # the host C++ stdlib include path).
+          mkdir -p /tmp/android_shim/android
+          printf '#pragma once\n#include <cstdarg>\n#include <cstdio>\n#define ANDROID_LOG_DEBUG 3\n#define ANDROID_LOG_INFO 4\n#define ANDROID_LOG_WARN 5\n#define ANDROID_LOG_ERROR 6\n#define ANDROID_LOG_FATAL 7\nstatic inline int __android_log_print(int prio, const char* tag, const char* fmt, ...) { (void)prio; (void)tag; (void)fmt; return 0; }\n' > /tmp/android_shim/android/log.h
           clang++ -std=c++20 -c engine/prusa30/farm_driver.cpp \
-            --sysroot="$ANDROID_SYSROOT" \
+            -I/tmp/android_shim \
             "${INC[@]}" \
             -Iengine/build/prusaslicer-src/src \
             -Iengine/build/prusaslicer-src/bundled_deps \

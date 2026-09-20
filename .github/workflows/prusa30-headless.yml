@@ -2130,17 +2130,20 @@ jobs:
               -not -path '*/stb_dxt/*' \
               -not -path '*/stb_image/*'); do INC+=(-I"$d"); done
           for s in nlohmann_json spdlog fmt sol2 eigen cereal; do
-            INC+=(-I"engine/prusa30/jniImports/$s/include")
+            [ -d "engine/prusa30/jniImports/$s/include" ] && INC+=(-I"engine/prusa30/jniImports/$s/include")
           done
           for s in libassert-2.2.1 expected-1.1.0 magic_enum-0.9.7 cpptrace-1.0.4; do
-            INC+=(-I"engine/prusa30/jniImports/assert/include/$s" 2>/dev/null || true)
+            [ -d "engine/prusa30/jniImports/assert/include/$s" ] && INC+=(-I"engine/prusa30/jniImports/assert/include/$s")
           done
-          INC+=(-I"engine/prusa30/jniImports/nanosvg_inc" 2>/dev/null || true)
-          INC+=(-I"engine/prusa30/jniImports/assert/include" 2>/dev/null || true)
+          [ -d "engine/prusa30/jniImports/nanosvg_inc" ] && INC+=(-I"engine/prusa30/jniImports/nanosvg_inc")
+          [ -d "engine/prusa30/jniImports/assert/include" ] && INC+=(-I"engine/prusa30/jniImports/assert/include")
 
           # Compile farm_driver.cpp (syntax + link check against libslic3r.a)
           # We only need to verify it compiles and links; no need to produce a final binary.
+          # NDK sysroot provides android/log.h (LOGx macros) for the host check compile.
+          ANDROID_SYSROOT="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
           clang++ -std=c++20 -c engine/prusa30/farm_driver.cpp \
+            --sysroot="$ANDROID_SYSROOT" \
             "${INC[@]}" \
             -Iengine/build/prusaslicer-src/src \
             -Iengine/build/prusaslicer-src/bundled_deps \

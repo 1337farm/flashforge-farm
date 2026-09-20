@@ -1510,6 +1510,9 @@ jobs:
           set -e
           OUT="$RUNNER_TEMP/apk-release"
           TAG="farm-apk-latest"
+          # APK_NAME is scoped to the Prepare step's shell: re-resolve here.
+          APK_NAME="$(basename "$(find "$OUT" -maxdepth 1 -name 'FlashForgeFarm_*.apk' | head -1)")"
+          test -n "$APK_NAME" || { echo "ERROR: no APK staged in $OUT"; exit 1; }
           gh release delete "$TAG" --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
           gh release create "$TAG" "$OUT/$APK_NAME" "$OUT/apk-manifest.json" --repo "${{ github.repository }}" \
             --title "FlashForge Farm APK (latest)" \

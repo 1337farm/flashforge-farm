@@ -2139,7 +2139,10 @@ jobs:
           if [ -d "engine/prusa30/jniImports/assert/include" ]; then INC+=(-I"engine/prusa30/jniImports/assert/include"); fi
 
           # Compile farm_driver.cpp (syntax + link check against libslic3r.a)
+          # NDK sysroot provides android/log.h (LOGx macros) for the host check compile.
+          ANDROID_SYSROOT="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
           clang++ -std=c++20 -c engine/prusa30/farm_driver.cpp \
+            --sysroot="$ANDROID_SYSROOT" \
             "${INC[@]}" \
             -Iengine/build/prusaslicer-src/src \
             -Iengine/build/prusaslicer-src/bundled_deps \

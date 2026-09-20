@@ -2116,10 +2116,17 @@ jobs:
       - name: Build + run slice_repro unit test
         run: |
           # Unit test for slice-stage "Slicing exception": compiles the REAL
-          # farm_driver.cpp plus the slice_repro harness, links against the
-          # just-built libslic3r.a, and runs the fixture matrix (baseline
-          # cube slice + loud-failure cases). Exit 3 from the harness with
+          # farm_driver.cpp plus the slice_repro harness against the
+          # just-built headers. Exit 3 from the harness with
           # SLICING_EXCEPTION code=N names the defect under test.
+          #
+          # Host deliberately does COMPILE ONLY: build/prusa30 libslic3r.a
+          # and the staged dep archives are Android arm64 (elf64-aarch64)
+          # while the runner is x86-64 — linking a runnable host binary is
+          # impossible here. EXECUTION happens where the ABI matches
+          # (bionic/aarch64 Termux or device): build slice_repro against
+          # the CI libslic3r-<src> artifact and run
+          #   bash scripts/tests/engine_repro/regress/run_slice_regressions.sh <binary>
           # (Supersedes the old syntax-only farm_driver check: the driver
           # compile is part of this build.)
           SLIC3R_LIB="$(find build/prusa30 -name 'libslic3r.a' | head -1)"
@@ -2163,43 +2170,9 @@ jobs:
           clang++ -std=c++20 -c scripts/tests/engine_repro/slice_repro.cpp \
             "${INC[@]}" \
             -o /tmp/slice_repro.o
-
-          # Resolve dep archives dynamically: staged layouts drift (ABI
-          # subdirs, stage/lib bridges, version-suffixed archive names), so
-          # locate each archive instead of hardcoding -L paths. Exact name
-          # first, then version-suffixed wildcard; static preferred, shared
-          # with rpath fallback. Fail closed naming the missing lib.
-          LIBS=()
-          RPATHS=()
-          for lib in boost_system boost_filesystem boost_thread boost_regex \
-              boost_chrono boost_atomic boost_date_time boost_iostreams \
-              tbb nlopt_cxx expat png16 fmt assert \
-              qhull prusa_fdm_mixer gmp gmpxx mpfr crypto ssl \
-              zstd blosc openvdb heatshrink bgcode_convert jpeg lua; do
-            f="$(find engine/prusa30/jniImports -name "lib${lib}.a" 2>/dev/null | head -1)"
-            [ -n "$f" ] || f="$(find engine/prusa30/jniImports -name "lib${lib}*.a" 2>/dev/null | sort | head -1)"
-            if [ -z "$f" ]; then
-              f="$(find engine/prusa30/jniImports -name "lib${lib}.so*" 2>/dev/null | sort | head -1)"
-              [ -n "$f" ] && RPATHS+=("$(dirname "$f")")
-            fi
-            [ -n "$f" ] || { echo "ERROR: lib${lib} not staged under engine/prusa30/jniImports"; exit 1; }
-            echo "dep: $f"
-            LIBS+=("$f")
-          done
-          RPATH_FLAGS=()
-          if [ "${#RPATHS[@]}" -gt 0 ]; then
-            for d in $(printf '%s\n' "${RPATHS[@]}" | sort -u); do
-              RPATH_FLAGS+=("-Wl,-rpath,$d")
-            done
-          fi
-
-          clang++ -std=c++20 /tmp/slice_repro.o /tmp/farm_driver.o "$SLIC3R_LIB" \
-            "${LIBS[@]}" \
-            "${RPATH_FLAGS[@]}" \
-            -ldl -lpthread -lz -lm \
-            -o /tmp/slice_repro
-          echo "slice_repro built; running fixture matrix"
-          bash scripts/tests/engine_repro/regress/run_slice_regressions.sh /tmp/slice_repro
+          echo "slice_repro + farm_driver compile OK (host link/run impossible:"
+          echo "staged archives are Android arm64; execute on bionic/aarch64 via"
+          echo "run_slice_regressions.sh against the CI libslic3r artifact)"
 
   # Terminal gate: this is the ONE prusa30 check branch protection/ruleset must
   # require, instead of every individual stage name. GitHub never auto-adds new

@@ -513,15 +513,11 @@ jobs:
             "$SHA" "$DATE" "$ABI" "${{ matrix.dep }}" \
             "${{ steps.sha.outputs.full_key }}" \
             "$TARBALL" "$SUM" > "$OUT/${{ matrix.dep }}-manifest.json"
-
-      - name: Publish ${{ matrix.name }} rolling release
-        if: always()
-        uses: 1337farm/actions/publish-release@v1
-        with:
-          tag: dep-${{ matrix.dep }}-latest
-          title: ${{ matrix.name }} deps (latest)
-          notes: Rolling release of the ${{ matrix.name }} native deps built from source. Re-published whenever the dep rebuilds.
-          files: $OUT/$TARBALL $OUT/${{ matrix.dep }}-manifest.json
+          TAG="dep-${{ matrix.dep }}-latest"
+          gh release delete "$TAG" --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
+          gh release create "$TAG" "$OUT/$TARBALL" "$OUT/${{ matrix.dep }}-manifest.json" --repo "${{ github.repository }}" \
+            --title "${{ matrix.name }} deps (latest)" \
+            --notes "Rolling release of the ${{ matrix.name }} native deps built from source. Re-published whenever the dep rebuilds."
 
   build-engine:
     name: engine
@@ -881,15 +877,10 @@ jobs:
           SUM="$(sha256sum "$OUT/gmp-deps.tar.gz" | cut -d' ' -f1)"
           printf '{"commit":"%s","built_at":"%s","abi":"%s","dep":"gmp","files":{"gmp-deps.tar.gz":"%s"}}\n' \
             "$SHA" "$DATE" "$ABI" "$SUM" > "$OUT/gmp-manifest.json"
-
-      - name: Publish GMP/MPFR rolling release
-        if: github.ref == 'refs/heads/main' && steps.gmp-rel.outputs.hit != '1'
-        uses: 1337farm/actions/publish-release@v1
-        with:
-          tag: dep-gmp-latest
-          title: GMP/MPFR deps (latest)
-          notes: Rolling release of the GMP/MPFR native deps built from source. Re-published whenever the dep rebuilds.
-          files: $OUT/gmp-deps.tar.gz $OUT/gmp-manifest.json
+          gh release delete dep-gmp-latest --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
+          gh release create dep-gmp-latest "$OUT/gmp-deps.tar.gz" "$OUT/gmp-manifest.json" --repo "${{ github.repository }}" \
+            --title "GMP/MPFR deps (latest)" \
+            --notes "Rolling release of the GMP/MPFR native deps built from source. Re-published whenever the dep rebuilds."
 
       - name: Fetch PrusaSlicer 3.0 core (vendored tree deleted in #210)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
@@ -1201,15 +1192,10 @@ jobs:
           SRC="$(git rev-parse HEAD:engine)"
           printf '{"commit":"%s","built_at":"%s","abi":"%s","engine_src":"%s","files":{"libslic3r.so":"%s"}}\n' \
             "$SHA" "$DATE" "$ABI" "$SRC" "$SUM" > "$OUT/engine-manifest.json"
-
-      - name: Publish engine rolling release
-        if: github.ref == 'refs/heads/main' && steps.engine-rel.outputs.hit != '1'
-        uses: 1337farm/actions/publish-release@v1
-        with:
-          tag: engine-latest
-          title: Engine libslic3r.so (latest)
-          notes: Rolling release of libslic3r.so built from source. Re-published whenever the engine rebuilds.
-          files: $OUT/libslic3r.so $OUT/engine-manifest.json
+          gh release delete engine-latest --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
+          gh release create engine-latest "$OUT/libslic3r.so" "$OUT/engine-manifest.json" --repo "${{ github.repository }}" \
+            --title "Engine libslic3r.so (latest)" \
+            --notes "Rolling release of libslic3r.so built from source. Re-published whenever the engine rebuilds."
 
   package-apk:
     name: apk
@@ -1493,7 +1479,7 @@ jobs:
           sccache --show-stats || true
           sccache --stop-server 2>/dev/null || true
 
-      - name: Prepare APK rolling release
+      - name: Publish APK release
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1510,15 +1496,10 @@ jobs:
           SUM="$(sha256sum "$OUT/$APK_NAME" | cut -d' ' -f1)"
           printf '{"commit":"%s","built_at":"%s","abi":"arm64-v8a","files":{"%s":"%s"}}\n' \
             "$SHA" "$DATE" "$APK_NAME" "$SUM" > "$OUT/apk-manifest.json"
-
-      - name: Publish APK rolling release
-        if: github.ref == 'refs/heads/main'
-        uses: 1337farm/actions/publish-release@v1
-        with:
-          tag: farm-apk-latest
-          title: FlashForge Farm APK (latest)
-          notes: Rolling sideloadable debug APK built from source. Re-published on every green build.
-          files: ${{ env.RUNNER_TEMP }}/apk-release/$APK_NAME ${{ env.RUNNER_TEMP }}/apk-release/apk-manifest.json
+          gh release delete farm-apk-latest --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
+          gh release create farm-apk-latest "$OUT/$APK_NAME" "$OUT/apk-manifest.json" --repo "${{ github.repository }}" \
+            --title "FlashForge Farm APK (latest)" \
+            --notes "Rolling sideloadable debug APK built from source. Re-published on every green build."
 
   automerge:
     name: merge

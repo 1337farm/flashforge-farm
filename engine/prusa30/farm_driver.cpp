@@ -437,6 +437,20 @@ SliceStats slice_to_gcode(Model& model,
     Domain::Bed bed = bed_from_config(*fdm);
     BedInstance bed_instance{bed};
 
+    // The bed only slices instances assigned to it: Print::update erases
+    // every instance not in bed.model_instances (with_limited_instances),
+    // and an emptied model slides past apply-validation straight into a
+    // bare EmptyPrint at the wipe-tower stage. Headless single-bed: assign
+    // every instance (mirrors Biz test ModelOnBed). Missing this dropped
+    // ALL geometry on every slice — the device "Slicing exception [47]".
+    for (Domain::ModelObject* object : model.objects) {
+        if (object == nullptr) continue;
+        for (Domain::ModelInstance* instance : object->instances) {
+            if (instance != nullptr)
+                bed_instance.model_instances.push_back(instance);
+        }
+    }
+
     // 3. Minimal preset metadata (gcode header data + the hardware tool
     //    list slicing validates): technology, one tool per INI nozzle
     //    diameter (nozzle_diameter feature), matching tool_count.
@@ -469,6 +483,15 @@ SliceStats slice_to_gcode(Model& model,
             os << "\n- " << error;
         LOGE("%s", os.str().c_str());
         throw std::runtime_error(os.str());
+    }
+    // update() does NOT throw for an empty print: with no printable
+    // instances on the bed it returns Empty and slicing later dies with a
+    // bare EmptyPrint. Fail loud here instead, naming the cause.
+    if (std::holds_alternative<ApplyStatus::Empty>(status)) {
+        const std::string msg =
+            "print input is empty: no printable instances on the bed";
+        LOGE("%s", msg.c_str());
+        throw std::runtime_error(msg);
     }
 
     // 5. slice(): synchronous; result lands via on_fdm_result.

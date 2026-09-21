@@ -185,6 +185,21 @@ std::string stage_name(Slic3r::Biz::Slicing::ProgressInfo stage) {
     return name.empty() ? "slicing" : name;
 }
 
+// Formats a SlicingStatus::Exception (whose what() is always the bare
+// "Slicing exception") with its numeric ErrorCode + item context, so both
+// the synchronous-throw and async-callback paths log the same diagnosis.
+std::string describe_slice_error(const char* where,
+        const Slic3r::Biz::Slicing::Exception& e) {
+    const auto& err = e.error();
+    std::ostringstream os;
+    os << "Slicing failed at " << where
+       << " (ErrorCode=" << static_cast<int>(err.code) << ")";
+    for (const auto& key : err.item_keys) os << " [" << key << "]";
+    if (err.model_object_id)
+        os << " object_id=" << err.model_object_id->id;
+    return os.str();
+}
+
 // Reads the legacy INI's nozzle_diameter (comma list, one entry per tool)
 // for the hardware tool metadata. SlicingInput rejects an empty tool list
 // (NoHwConfigTools) and tools without a nozzle_diameter feature
@@ -457,8 +472,17 @@ SliceStats slice_to_gcode(Model& model,
     }
 
     // 5. slice(): synchronous; result lands via on_fdm_result.
+    // NOTE: slice() can also throw SlicingStatus::Exception SYNCHRONOUSLY
+    // (not just via the on_exception callback). Its what() is the bare
+    // "Slicing exception" string — enrich both paths or device crash logs
+    // stay undiagnosable (seen on f4ec1be6cd: bare message despite the
+    // callback enrichment, because callbacks.exception() was empty).
     NoThumbnails thumbnails;
-    print->slice(id, thumbnails, std::nullopt);
+    try {
+        print->slice(id, thumbnails, std::nullopt);
+    } catch (const Slic3r::Biz::Slicing::Exception& e) {
+        throw std::runtime_error(describe_slice_error("sync slice()", e));
+    }
 
     // SlicingStatus::Exception's what() is just "Slicing exception" — the
     // real cause (NoLayers, EmptyPrint, ObjectExceedsHeight, ...) lives in
@@ -467,14 +491,9 @@ SliceStats slice_to_gcode(Model& model,
         try {
             std::rethrow_exception(callbacks.exception());
         } catch (const Slic3r::Biz::Slicing::Exception& e) {
-            const auto& err = e.error();
-            std::ostringstream os;
-            os << "Slicing failed (ErrorCode=" << static_cast<int>(err.code) << ")";
-            for (const auto& key : err.item_keys) os << " [" << key << "]";
-            if (err.model_object_id)
-                os << " object_id=" << err.model_object_id->id;
-            LOGE("%s", os.str().c_str());
-            throw std::runtime_error(os.str());
+            const std::string msg = describe_slice_error("async callback", e);
+            LOGE("%s", msg.c_str());
+            throw std::runtime_error(msg);
         }
     }
 

@@ -216,14 +216,17 @@ public class SpinningPreviewView extends View {
             if (zs[0] >= 0 && zs[1] >= 0 && zs[2] >= 0) continue;
             float area = (xs[1] - xs[0]) * (ys[2] - ys[0]) - (xs[2] - xs[0]) * (ys[1] - ys[0]);
             if (area > -0.25f && area < 0.25f) continue;
-            // Outward faces project CW in screen space (ys is flipped vs y2).
-            // Depth-test them; skip away-facing tris so back faces never win.
+            // Toward-camera faces project CCW in screen space (area > 0;
+            // verified numerically across rotations against rotated normals:
+            // toward ⟺ area>0 for all non-grazing faces). Cull the rest so
+            // away-facing (interior) tris never reach the depth test. This
+            // mirrors the plate path, where GL culls non-CCW-front faces.
             float nx0 = n[t * 3], ny0 = n[t * 3 + 1], nz0 = n[t * 3 + 2];
             float nx1 = nx0 * cosA + nz0 * sinA;
             float nz1 = -nx0 * sinA + nz0 * cosA;
             float ny2 = ny0 * cosT - nz1 * sinT;
             float nz2 = ny0 * sinT + nz1 * cosT;
-            if (area >= 0) continue;
+            if (area <= 0) continue;
             float diff = nx1 * lx + ny2 * ly + nz2 * lz;
             if (diff < 0) diff = 0;
             float shade = 0.38f + 0.62f * diff;

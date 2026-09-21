@@ -1,0 +1,53 @@
+# 0013: embed the numeric ErrorCode in SlicingStatus::Exception::what().
+# The bare "Slicing exception" string is undiagnosable in device crash logs,
+# and catching SlicingStatus::Exception by type from another DSO can miss:
+# the header-defined typeinfo exists both in libslic3r.so and in any TU that
+# includes this header and links separately (libfarm's farm_driver.o) — the
+# same cross-DSO RTTI duplication as the coEnums lesson. The message string
+# always survives the boundary, so construct it with the code + item context
+# here. Keeps the "Slicing exception" prefix so existing matches still hit.
+diff --git a/src/libslic3r/include/libslic3r/SlicingStatus.hpp b/src/libslic3r/include/libslic3r/SlicingStatus.hpp
+index 146d533..7a5d6cb 100644
+--- a/src/libslic3r/include/libslic3r/SlicingStatus.hpp
++++ b/src/libslic3r/include/libslic3r/SlicingStatus.hpp
+@@ -3,8 +3,9 @@
+ #include "Slic3r/Domain/ObjectID.hpp"
+ #include "Slic3r/Domain/Percentage.hpp"
+ #include "Slic3r/Exception.hpp"
+ #include <array>
+ #include <ostream>
++#include <string>
+ #include <variant>
+ #include <map>
+
+@@ -193,13 +194,29 @@ struct Error {
+ class Exception : public Slic3r::Exception
+ {
+ public:
+-    Exception(Error error) : Slic3r::Exception{"Slicing exception"}, m_error{std::move(error)} {}
++    Exception(Error error) : Slic3r::Exception{make_message(error)}, m_error{std::move(error)} {}
+
+     const Error& error() const
+     {
+         return m_error;
+     }
+
+ private:
+     Error m_error;
++
++    static std::string make_message(const Error& error) {
++        std::string msg = "Slicing exception [ErrorCode=";
++        msg += std::to_string(static_cast<int>(error.code));
++        msg += "]";
++        for (const auto& key : error.item_keys) {
++            msg += " [";
++            msg += key;
++            msg += "]";
++        }
++        if (error.model_object_id) {
++            msg += " object_id=";
++            msg += std::to_string(error.model_object_id->id);
++        }
++        return msg;
++    }
+ };

@@ -21,9 +21,13 @@ public final class Tags {
         GalleryMesh[] arr = new GalleryMesh[parts.size()];
         for (int i = 0; i < arr.length; i++) arr[i] = parts.get(i);
         GalleryMesh tag = GalleryMesh.concat(arr);
+        // The tag above is built Y-up (plate thin in Y, text facing +Y).
+        // Model space is Z-up: rotate once here (proper rotation preserves
+        // winding; rotatedX carries normals), then drop min-Z to the bed.
+        GalleryMesh upright = tag.rotatedX(Math.PI / 2);
         float[] b = new float[6];
-        tag.bounds(b);
-        return tag.translated(0, -b[1], 0);
+        upright.bounds(b);
+        return upright.translated(0, 0, -b[2]);
     }
 
     private static GalleryMesh arrows() {

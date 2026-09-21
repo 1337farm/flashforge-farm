@@ -12,7 +12,8 @@ public final class ShapeGallery {
     }
 
     public static final int PREVIEW_MAX_TRIS = 1200;
-    private static final String PREVIEW_CACHE_PREFIX = "preview_";
+    private static final String PREVIEW_CACHE_PREFIX = "preview2_";
+    private static final String LEGACY_PREVIEW_CACHE_PREFIX = "preview_";
 
     public static final int KIND_CUBE = 1;
     public static final int KIND_CYLINDER = 2;
@@ -68,17 +69,22 @@ public final class ShapeGallery {
     }
 
     public static GalleryMesh meshFor(Item item) throws IOException {
+        // Model space is Z-up (STL convention, matches the bed: fileFor
+        // writes this soup straight to STL). Primitives are built Y-up, so
+        // rotate +90° about X (+Y height -> +Z); proper rotation preserves
+        // winding and rotatedX carries the normals. CalibModels are already
+        // Z-up (levels stack along Z) and customs load Z-up: no transform.
         switch (item.kind) {
             case KIND_CUBE:
-                return Primitives.cube(20);
+                return Primitives.cube(20).rotatedX(Math.PI / 2);
             case KIND_CYLINDER:
-                return Primitives.cylinder(20, 20, 32);
+                return Primitives.cylinder(20, 20, 32).rotatedX(Math.PI / 2);
             case KIND_SPHERE:
-                return Primitives.sphere(20, 24, 16);
+                return Primitives.sphere(20, 24, 16).rotatedX(Math.PI / 2);
             case KIND_CONE:
-                return Primitives.cone(20, 20, 32);
+                return Primitives.cone(20, 20, 32).rotatedX(Math.PI / 2);
             case KIND_DISK:
-                return Primitives.cylinder(12, 0.8f, 32);
+                return Primitives.cylinder(12, 0.8f, 32).rotatedX(Math.PI / 2);
             case KIND_TAG:
                 return Tags.buildTag(item.tag);
             case KIND_CALIB_PA_LINE:
@@ -109,14 +115,35 @@ public final class ShapeGallery {
         GalleryMesh mesh = item.kind == KIND_CUSTOM ? MeshLoader.load(item.file) : meshFor(item);
         GalleryMesh decimated = MeshDecimator.decimate(mesh, PREVIEW_MAX_TRIS);
 
-        // Cache the decimated mesh with normals
+        // Display bake: model space is Z-up but the spinner is a Y-up
+        // turntable, so rotate once here (-90° about X maps +Z to screen-up
+        // and model front to the camera). Cached below, so zero per-frame
+        // cost. Cache key bumped (preview2_) because old preview_*.bin files
+        // hold unbaked meshes; sweep them best-effort.
+        GalleryMesh display = decimated.rotatedX(-Math.PI / 2);
         try {
-            decimated.writeToFile(cacheFile);
+            File[] stale = cacheDir.listFiles();
+            if (stale != null) {
+                for (File f : stale) {
+                    String name = f.getName();
+                    if (name.startsWith(LEGACY_PREVIEW_CACHE_PREFIX)
+                            && !name.startsWith(PREVIEW_CACHE_PREFIX)) {
+                        f.delete();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // Cache hygiene is best-effort.
+        }
+
+        // Cache the decimated display mesh with normals
+        try {
+            display.writeToFile(cacheFile);
         } catch (IOException ignored) {
             // Non-fatal, continue with in-memory mesh
         }
 
-        return decimated;
+        return display;
     }
 
     public static File fileFor(Item item) throws IOException {

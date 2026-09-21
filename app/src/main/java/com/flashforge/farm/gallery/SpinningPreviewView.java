@@ -115,8 +115,13 @@ public class SpinningPreviewView extends View {
                     if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
                 }
                 if (moved) {
-                    yaw += dx * 0.012f;
-                    pitch = Math.max(-1.2f, Math.min(0.3f, pitch + dy * 0.012f));
+                    // Grab-and-drag feel: the point under the finger follows
+                    // the finger. Drag-right must move the front face right
+                    // (yaw decreases: x1 = x*cosA + z*sinA), drag-down must
+                    // move it down (pitch decreases). The old += signs did
+                    // the opposite on both axes.
+                    yaw -= dx * 0.012f;
+                    pitch = Math.max(-1.2f, Math.min(0.3f, pitch - dy * 0.012f));
                     resumeAtMs = android.os.SystemClock.uptimeMillis() + RESUME_MS;
                     lastX = event.getX();
                     lastY = event.getY();
@@ -199,76 +204,12 @@ public class SpinningPreviewView extends View {
         float[] v = mesh.xyz;
         float[] n = mesh.normals;
         float[] xs = new float[3], ys = new float[3], zs = new float[3];
+        float[] tmp = new float[6];
         for (int t = 0; t < mesh.triCount; t++) {
-            for (int j = 0; j < 3; j++) {
-                int o = t * 9 + j * 3;
-                float x = v[o] - cx, y = v[o + 1] - cy, z = v[o + 2] - cz;
-                float x1 = x * cosA + z * sinA;
-                float z1 = -x * sinA + z * cosA;
-                float y2 = y * cosT - z1 * sinT;
-                float z2 = y * sinT + z1 * cosT;
-                float p = fl / (fl + z2);
-                xs[j] = size / 2f + x1 * k * p;
-                ys[j] = size / 2f - y2 * k * p;
-                zs[j] = z2;
-            }
-            // Skip triangles entirely behind the camera
-            if (zs[0] >= 0 && zs[1] >= 0 && zs[2] >= 0) continue;
-            float area = (xs[1] - xs[0]) * (ys[2] - ys[0]) - (xs[2] - xs[0]) * (ys[1] - ys[0]);
-            if (area > -0.25f && area < 0.25f) continue;
-            // Toward-camera faces project CCW in screen space (area > 0;
-            // verified numerically across rotations against rotated normals:
-            // toward ⟺ area>0 for all non-grazing faces). Cull the rest so
-            // away-facing (interior) tris never reach the depth test. This
-            // mirrors the plate path, where GL culls non-CCW-front faces.
-            float nx0 = n[t * 3], ny0 = n[t * 3 + 1], nz0 = n[t * 3 + 2];
-            float nx1 = nx0 * cosA + nz0 * sinA;
-            float nz1 = -nx0 * sinA + nz0 * cosA;
-            float ny2 = ny0 * cosT - nz1 * sinT;
-            float nz2 = ny0 * sinT + nz1 * cosT;
-            if (area <= 0) continue;
-            float diff = nx1 * lx + ny2 * ly + nz2 * lz;
-            if (diff < 0) diff = 0;
-            float shade = 0.38f + 0.62f * diff;
-            int r = (int) (186 * shade);
-            int g = (int) (191 * shade);
-            int b = (int) (198 * shade);
-            if (r > 255) r = 255;
-            if (g > 255) g = 255;
-            if (b > 255) b = 255;
-            int color = 0xFF000000 | (r << 16) | (g << 8) | b;
-            int x0 = (int) Math.max(0, Math.floor(min3(xs[0], xs[1], xs[2])));
-            int x1 = (int) Math.min(size - 1, Math.ceil(max3(xs[0], xs[1], xs[2])));
-            int y0 = (int) Math.max(0, Math.floor(min3(ys[0], ys[1], ys[2])));
-            int y1 = (int) Math.min(size - 1, Math.ceil(max3(ys[0], ys[1], ys[2])));
-            float d0x = xs[1] - xs[0], d0y = ys[1] - ys[0];
-            float d1x = xs[2] - xs[0], d1y = ys[2] - ys[0];
-            float denom = d0x * d1y - d1x * d0y;
-            if (denom > -1e-9f && denom < 1e-9f) continue;
-            for (int y = y0; y <= y1; y++) {
-                for (int x = x0; x <= x1; x++) {
-                    float ex = x + 0.5f - xs[0], ey = y + 0.5f - ys[0];
-                    float w1 = (ex * d1y - ey * d1x) / denom;
-                    float w2 = (d0x * ey - d0y * ex) / denom;
-                    float w0 = 1f - w1 - w2;
-                    if (w0 < 0 || w1 < 0 || w2 < 0) continue;
-                    float z = w0 * zs[0] + w1 * zs[1] + w2 * zs[2];
-                    int idx = y * size + x;
-                    if (z < depth[idx]) {
-                        depth[idx] = z;
-                        pixels[idx] = color;
-                    }
-                }
-            }
+            PreviewRaster.rasterTriangle(v, n, t, cx, cy, cz,
+                    cosA, sinA, cosT, sinT, size, k, fl,
+                    lx, ly, lz, pixels, depth, xs, ys, zs, tmp);
         }
         bitmap.setPixels(pixels, 0, size, 0, 0, size, size);
-    }
-
-    private static float min3(float a, float b, float c) {
-        return Math.min(a, Math.min(b, c));
-    }
-
-    private static float max3(float a, float b, float c) {
-        return Math.max(a, Math.max(b, c));
     }
 }

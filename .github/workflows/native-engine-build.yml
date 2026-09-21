@@ -875,12 +875,20 @@ jobs:
 
       - name: Publish GMP/MPFR rolling release
         if: github.ref == 'refs/heads/main' && steps.gmp-rel.outputs.hit != '1'
-        uses: 1337farm/actions/publish-release@v1
-        with:
-          tag: dep-gmp-latest
-          title: GMP/MPFR deps (latest)
-          notes: Rolling release of the GMP/MPFR native deps built from source. Re-published whenever the dep rebuilds.
-          files: $OUT/gmp-deps.tar.gz $OUT/gmp-manifest.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          OUT="$RUNNER_TEMP/gmp-release"
+          TAG="dep-gmp-latest"
+          GMP_TAR="$(find "$OUT" -maxdepth 1 -name 'gmp-deps.tar.gz' | head -1)"
+          GMP_MANIFEST="$(find "$OUT" -maxdepth 1 -name 'gmp-manifest.json' | head -1)"
+          test -n "$GMP_TAR" || { echo "ERROR: no gmp-deps.tar.gz staged in $OUT"; exit 1; }
+          test -n "$GMP_MANIFEST" || { echo "ERROR: no gmp-manifest.json staged in $OUT"; exit 1; }
+          gh release delete "$TAG" --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
+          gh release create "$TAG" "$GMP_TAR" "$GMP_MANIFEST" --repo "${{ github.repository }}" \
+            --title "GMP/MPFR deps (latest)" \
+            --notes "Rolling release of the GMP/MPFR native deps built from source. Re-published whenever the dep rebuilds."
 
       - name: Fetch PrusaSlicer 3.0 core (vendored tree deleted in #210)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
@@ -1195,12 +1203,20 @@ jobs:
 
       - name: Publish engine rolling release
         if: github.ref == 'refs/heads/main' && steps.engine-rel.outputs.hit != '1'
-        uses: 1337farm/actions/publish-release@v1
-        with:
-          tag: engine-latest
-          title: Engine libslic3r.so (latest)
-          notes: Rolling release of libslic3r.so built from source. Re-published whenever the engine rebuilds.
-          files: $OUT/libslic3r.so $OUT/engine-manifest.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          OUT="$RUNNER_TEMP/engine-release"
+          TAG="engine-latest"
+          ENG_SO="$(find "$OUT" -maxdepth 1 -name 'libslic3r.so' | head -1)"
+          ENG_MANIFEST="$(find "$OUT" -maxdepth 1 -name 'engine-manifest.json' | head -1)"
+          test -n "$ENG_SO" || { echo "ERROR: no libslic3r.so staged in $OUT"; exit 1; }
+          test -n "$ENG_MANIFEST" || { echo "ERROR: no engine-manifest.json staged in $OUT"; exit 1; }
+          gh release delete "$TAG" --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
+          gh release create "$TAG" "$ENG_SO" "$ENG_MANIFEST" --repo "${{ github.repository }}" \
+            --title "Engine libslic3r.so (latest)" \
+            --notes "Rolling release of libslic3r.so built from source. Re-published whenever the engine rebuilds."
 
   package-apk:
     name: apk

@@ -244,8 +244,8 @@ std::unique_ptr<PgProcessorResult> vgcode_parse_gcode_file(const std::string& pa
     std::string gcode = vgcode_read_file(path);
     const Slic3r::Biz::libpgcode::GCodeProducer producer =
         Slic3r::Biz::libpgcode::detect_producer(gcode);
-    // Diagnostic for libassert aborts inside the extractor (uncatchable
-    // SIGABRT): log the exact flavor line the extractor will read.
+    // Diagnostic context for any libassert abort inside the parse
+    // (uncatchable SIGABRT): log the flavor comment up front.
     std::string flavor = "<none>";
     {
         const char* key = "gcode_flavor";
@@ -260,9 +260,12 @@ std::unique_ptr<PgProcessorResult> vgcode_parse_gcode_file(const std::string& pa
     PgProcessorConfig config;
     config.reset();
     config.producer = producer;
-    if (producer == Slic3r::Biz::libpgcode::GCodeProducer::PrusaSlicer) {
-        config = Slic3r::Biz::libpgcode::extract_processor_config_from_prusaslicer_gcode(gcode);
-    }
+    // NOTE: never call extract_processor_config_from_*_gcode here. Upstream
+    // ends the PrusaSlicer extractor with an unconditional PANIC("Must load
+    // hw config!") — libassert aborts even in release, an uncatchable SIGABRT
+    // on the slice thread (device crash, proven by disassembly + the 20-char
+    // panic message in two crash dumps). Default config is what the 2.x
+    // GCodeProcessor path used; time estimates stay approximate.
     PgProcessor processor(std::move(config));
     processor.process_buffer(std::move(gcode));
     return std::make_unique<PgProcessorResult>(processor.finalize());

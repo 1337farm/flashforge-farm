@@ -55,7 +55,9 @@ name: native
 #   before save/publish.
 # - Publishing backfills: any verified content publishes, whether freshly
 #   built or restored, so a past run's unpublished-but-good outputs get
-#   released by the next green run.
+#   released by the next green run. EXCEPTION: the engine release/artifact
+#   paths never publish reused binaries — a restored .so stamped with the
+#   current tree poisons later runs with mismatched content (2026-09-22).
 #
 # Caching: heavy builds write their outputs both to a primary output cache and
 # to a compiler cache. The engine compile uses sccache with the distributed GHA
@@ -1174,7 +1176,12 @@ jobs:
           retention-days: 30
 
       - name: Publish engine release
-        if: github.ref == 'refs/heads/main' && steps.engine-rel.outputs.hit != '1'
+        # Never publish a reused .so: release and artifact reuse paths stage a
+        # binary built from a different tree, and stamping it with the current
+        # engine_src poisons every later consumer (2026-09-22: a cache-hit
+        # .so published under a patched tree kept shipping the SIGABRT the
+        # patch fixed). Publish only what this run actually compiled.
+        if: github.ref == 'refs/heads/main' && steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -1208,7 +1215,9 @@ jobs:
             "$SHA" "$DATE" "$ABI" "$SRC" "$SUM" > "$OUT/engine-manifest.json"
 
       - name: Publish engine rolling release
-        if: github.ref == 'refs/heads/main' && steps.engine-rel.outputs.hit != '1'
+        # Same no-reuse rule as above: only freshly compiled output may move
+        # the rolling tag.
+        if: github.ref == 'refs/heads/main' && steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

@@ -89,6 +89,11 @@ public class GLRenderer implements GLSurfaceView.Renderer {
     private GCodeProcessorResult gcodeResult;
     private GCodeViewer viewer;
     private boolean isViewerEnabled;
+    // App-side toolpath preview (gcode lines) while the libvgcode viewer is a stub (#212).
+    private com.flashforge.farm.slic3r.GCodeToolpaths.Parsed toolpaths;
+    private final List<GLModel> toolpathModels = new ArrayList<>();
+    private long toolpathFrom = 0, toolpathTo = Long.MAX_VALUE;
+    private boolean toolpathsDirty = true;
 
     // Primary selection (drives the transform gizmo, flatten, fill-bed, duplicate).
     // selectedObjects holds the full multi-selection; when non-empty it always contains selectedObject.
@@ -395,6 +400,11 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         } else {
             viewer.setViewType(GCodeViewer.VIEW_TYPE_FEATURE);
         }
+        // Seed the layers tab from the parsed toolpaths (native reports 0 layers).
+        if (toolpaths != null && toolpaths.getLayersCount() > 0) {
+            viewer.setLayersCountOverride(toolpaths.getLayersCount());
+            viewer.setLayersViewRange(toolpathFrom, Math.min(toolpathTo, toolpaths.getLayersCount() - 1));
+        }
     }
 
     public void setGCodeViewer(GCodeProcessorResult result) {
@@ -406,6 +416,116 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             }
         }
         this.gcodeResult = result;
+        clearToolpaths();
+    }
+
+    /** Parse + upload gcode extrusion lines for the given range (0-based, inclusive). */
+    public void setToolpathRange(long from, long to) {
+        this.toolpathFrom = Math.max(0, from);
+        this.toolpathTo = Math.max(this.toolpathFrom, to);
+        this.toolpathsDirty = true;
+    }
+
+    private void clearToolpaths() {
+        synchronized (this) {
+            toolpaths = null;
+            toolpathFrom = 0;
+            toolpathTo = Long.MAX_VALUE;
+            toolpathsDirty = true;
+        }
+        for (GLModel m : toolpathModels) {
+            m.release();
+        }
+        toolpathModels.clear();
+    }
+
+    public synchronized int getToolpathLayersCount() {
+        return toolpaths != null ? toolpaths.getLayersCount() : 0;
+    }
+
+    private synchronized com.flashforge.farm.slic3r.GCodeToolpaths.Parsed getToolpaths() {
+        return toolpaths;
+    }
+
+    private void ensureToolpaths() {
+        com.flashforge.farm.slic3r.GCodeToolpaths.Parsed parsed = getToolpaths();
+        if (parsed != null && !toolpathsDirty) return;
+        clearToolpathModelsOnly();
+        if (gcodeResult == null) {
+            synchronized (this) {
+                toolpaths = null;
+                toolpathsDirty = false;
+            }
+            return;
+        }
+        java.io.File gcode = com.flashforge.farm.fragment.BedFragment.getTempGCodePath();
+        if (gcode == null || !gcode.isFile() || !gcode.canRead()) return;
+        com.flashforge.farm.slic3r.GCodeToolpaths.Parsed fresh;
+        try {
+            // 4k verts/layer keeps a 300-layer print under ~5M floats worst case; decimated by stride.
+            fresh = com.flashforge.farm.slic3r.GCodeToolpaths.parse(gcode, 4096);
+        } catch (Exception e) {
+            android.util.Log.w("GLRenderer", "toolpath parse failed: " + e.getMessage());
+            return;
+        }
+        synchronized (this) {
+            toolpaths = fresh;
+            toolpathsDirty = false;
+            if (fresh.getLayersCount() > 0 && toolpathTo == Long.MAX_VALUE) {
+                toolpathTo = fresh.getLayersCount() - 1;
+            }
+        }
+    }
+
+    private void clearToolpathModelsOnly() {
+        for (GLModel m : toolpathModels) {
+            m.release();
+        }
+        toolpathModels.clear();
+    }
+
+    private void drawToolpaths(double[] viewMatrix) {
+        if (!isViewerEnabled || gcodeResult == null) return;
+        ensureToolpaths();
+        com.flashforge.farm.slic3r.GCodeToolpaths.Parsed parsed = getToolpaths();
+        if (parsed == null || parsed.layers.isEmpty()) return;
+        long from, to;
+        synchronized (this) {
+            from = toolpathFrom;
+            to = Math.min(toolpathTo, parsed.getLayersCount() - 1);
+        }
+        if (from > to) return;
+        GLShaderProgram shader = shadersManager.get(GLShadersManager.SHADER_FLAT);
+        shader.startUsing();
+        shader.setUniformMatrix4fv("view_model_matrix", viewMatrix);
+        shader.setUniformMatrix4fv("projection_matrix", projectionMatrix);
+        glLineWidth(com.flashforge.farm.utils.ViewUtils.dp(1.5f));
+        int layerIdx = 0;
+        for (int li = (int) from; li <= (int) to; li++) {
+            com.flashforge.farm.slic3r.GCodeToolpaths.Layer layer = parsed.layers.get(li);
+            GLModel gm;
+            if (layerIdx < toolpathModels.size()) {
+                gm = toolpathModels.get(layerIdx);
+            } else {
+                gm = new GLModel();
+                gm.initFromPath(layer.vertices, layer.indices, false);
+                if (!gm.isInitialized() || gm.isEmpty()) {
+                    gm.release();
+                    layerIdx++;
+                    continue;
+                }
+                toolpathModels.add(gm);
+            }
+            gm.setColor(com.flashforge.farm.theme.ThemesRepo.getColor(com.flashforge.farm.R.attr.modelHoverColor));
+            gm.render();
+            layerIdx++;
+        }
+        // Drop stale models when the range shrinks.
+        while (toolpathModels.size() > layerIdx) {
+            GLModel stale = toolpathModels.remove(toolpathModels.size() - 1);
+            stale.release();
+        }
+        shader.stopUsing();
     }
 
     public synchronized void setInMeasureMode(boolean enabled) {
@@ -669,6 +789,8 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             if (viewer != null) {
                 viewer.render(viewMatrix, projectionMatrix);
             }
+            // Native vgcode is a stub (#212): draw parsed toolpath lines so the layers tab is live.
+            drawToolpaths(viewMatrix);
         }
         // Models on inactive plates: plain dimmed render, no selection/paint/gizmo handling.
         if (viewer == null && !isViewerEnabled && !inactivePlateModels.isEmpty()) {
@@ -1927,6 +2049,10 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         return viewer;
     }
 
+    public int getToolpathCountForTest() {
+        return getToolpathLayersCount();
+    }
+
     private void configureBed() {
         try {
             lastConfigUid = FarmApp.CONFIG_UID;
@@ -2001,6 +2127,14 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         if (measurePointModel != null) {
             measurePointModel.release();
             measurePointModel = null;
+        }
+        for (GLModel m : toolpathModels) {
+            m.release();
+        }
+        toolpathModels.clear();
+        synchronized (this) {
+            toolpaths = null;
+            toolpathsDirty = true;
         }
         for (int i = 0; i < glModels.size(); i++) {
             glModels.get(i).release();

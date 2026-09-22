@@ -738,6 +738,26 @@ public class BedFragment extends Fragment {
                             ViewUtils.postOnMainThread(()-> {
                                 glView.queueEvent(()->{
                                     glView.getRenderer().setGCodeViewer(gCodeResult);
+                                    // Parse the sliced file on the GL thread (line uploads need the
+                                    // GL context) and seed the layers tab + viewer ranges with the
+                                    // real layer count; native vgcode is a stub (#212).
+                                    try {
+                                        com.flashforge.farm.slic3r.GCodeToolpaths.Parsed parsed =
+                                                com.flashforge.farm.slic3r.GCodeToolpaths.parse(getTempGCodePath(), 4096);
+                                        long count = parsed.getLayersCount();
+                                        if (count > 0) {
+                                            com.flashforge.farm.slic3r.GCodeViewer v =
+                                                    glView.getRenderer().getViewer();
+                                            if (v == null) {
+                                                v = new com.flashforge.farm.slic3r.GCodeViewer();
+                                            }
+                                            v.setLayersCountOverride(count);
+                                            v.setLayersViewRange(0, count - 1);
+                                            glView.getRenderer().setToolpathRange(0, count - 1);
+                                        }
+                                    } catch (Exception e) {
+                                        android.util.Log.w("BedFragment", "toolpath parse failed: " + e.getMessage());
+                                    }
                                     glView.requestRender();
                                 });
 

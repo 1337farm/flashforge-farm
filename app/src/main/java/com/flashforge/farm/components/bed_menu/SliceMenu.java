@@ -784,6 +784,10 @@ public class SliceMenu extends ListBedMenu {
                 viewer.setInfillVisibilityDepth(-1);
             }
             viewer.setLayersViewRange(from - 1, to - 1);
+            fragment.getGlView().queueEvent(() -> {
+                fragment.getGlView().getRenderer().setToolpathRange(from - 1, to - 1);
+                fragment.getGlView().requestRender();
+            });
             fragment.getGlView().requestRender();
 
             title.setText(fragment.getContext().getString(R.string.MenuSliceInfoLayers, from, to));

@@ -827,6 +827,44 @@ extern "C" {
         ref->model.init_from(Slic3r::GUI::stilized_arrow(16, tip_radius, tip_length, stem_radius, stem_length));
     }
 
+    JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1from_1path(JNIEnv* env, jclass, jlong ptr, jfloatArray verticesArr, jintArray indicesArr, jboolean lineStrip) {
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        if (ref == nullptr || verticesArr == nullptr || indicesArr == nullptr) return;
+        const jsize vertexCount = env->GetArrayLength(verticesArr);
+        const jsize indexCount = env->GetArrayLength(indicesArr);
+        if (vertexCount % 3 != 0 || vertexCount <= 0 || indexCount <= 0) return;
+        jfloat* vertices = env->GetFloatArrayElements(verticesArr, nullptr);
+        jint* indices = env->GetIntArrayElements(indicesArr, nullptr);
+        if (vertices == nullptr || indices == nullptr) {
+            if (vertices != nullptr) env->ReleaseFloatArrayElements(verticesArr, vertices, JNI_ABORT);
+            if (indices != nullptr) env->ReleaseIntArrayElements(indicesArr, indices, JNI_ABORT);
+            return;
+        }
+        Slic3r::GUI::GLModel::Geometry g;
+        g.format = {lineStrip == JNI_TRUE
+                            ? Slic3r::GUI::GLModel::Geometry::EPrimitiveType::LineStrip
+                            : Slic3r::GUI::GLModel::Geometry::EPrimitiveType::Lines,
+                    Slic3r::GUI::GLModel::Geometry::EVertexLayout::P3};
+        g.reserve_vertices((size_t) (vertexCount / 3));
+        g.reserve_indices((size_t) indexCount);
+        for (jsize i = 0; i < vertexCount; i += 3) {
+            g.add_vertex(Domain::Vec3f(vertices[i], vertices[i + 1], vertices[i + 2]));
+        }
+        for (jsize i = 0; i < indexCount; ++i) {
+            const jint id = indices[i];
+            if (id < 0 || id * 3 + 2 >= vertexCount) {
+                env->ReleaseFloatArrayElements(verticesArr, vertices, JNI_ABORT);
+                env->ReleaseIntArrayElements(indicesArr, indices, JNI_ABORT);
+                return;
+            }
+            g.add_index((unsigned int) id);
+        }
+        env->ReleaseFloatArrayElements(verticesArr, vertices, JNI_ABORT);
+        env->ReleaseIntArrayElements(indicesArr, indices, JNI_ABORT);
+        ref->model.reset();
+        ref->model.init_from(std::move(g));
+    }
+
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1background_1triangles(JNIEnv* env, jclass, jlong ptr) {
         (void) env;
         GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;

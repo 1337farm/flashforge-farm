@@ -56,6 +56,11 @@ public class GLModel {
         Native.glmodel_init_background_triangles(pointer);
     }
 
+    /** Build a line-strip/triangle path directly from packed vertex/index arrays. */
+    public void initFromPath(float[] vertices, int[] indices, boolean lineStrip) {
+        Native.glmodel_init_from_path(pointer, vertices, indices, lineStrip);
+    }
+
     /** Build a simple rectangular prism with origin at the front-left-bottom corner. */
     public void initBox(float width, float depth, float height) {
         Native.glmodel_init_box(pointer, width, depth, height);

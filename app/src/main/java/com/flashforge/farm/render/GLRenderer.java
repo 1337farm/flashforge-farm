@@ -238,6 +238,56 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         return viewportHeight;
     }
 
+    /**
+     * World-space point where the ray through a screen position (render
+     * pixels) meets the shared build-plate plane (z = 0), or null when the
+     * ray runs parallel to the plane or points away from it. Used for 1:1
+     * grab-panning and anchored pinch zoom in both projections. Safe to call
+     * off the GL thread: matrices are defensively copied.
+     */
+    public Vec3d screenToBedPlane(float x, float y) {
+        int w = viewportWidth, h = viewportHeight;
+        if (w <= 0 || h <= 0 || camera == null) return null;
+        double[] viewCopy = camera.getViewModelMatrix().clone();
+        double[] projCopy = projectionMatrix.clone();
+        double px = camera.position.x, py = camera.position.y, pz = camera.position.z;
+        double[] near;
+        try {
+            near = com.flashforge.farm.slic3r.Native.utils_unproject(viewCopy, projCopy, w, h, x, y);
+        } catch (Exception e) {
+            android.util.Log.w("GLRenderer", "unproject failed", e);
+            return null;
+        }
+        if (near == null || near.length < 3) return null;
+        double dx = near[0] - px, dy = near[1] - py, dz = near[2] - pz;
+        if (Math.abs(dz) < 1e-9) return null;
+        double t = -pz / dz;
+        if (!(t > 0)) return null;
+        return new Vec3d(px + dx * t, py + dy * t, 0);
+    }
+
+    /**
+     * Approximate world units per screen pixel at the focus plane, for the
+     * pan fallback when the bed-plane ray misses (camera looking horizontal).
+     */
+    public double worldPerPixel() {
+        if (viewportHeight <= 0) return 0;
+        if (com.flashforge.farm.utils.Prefs.isOrthoProjectionEnabled() && bed != null && bed.isValid()) {
+            Vec3d vmin = bed.getVolumeMin(), vmax = bed.getVolumeMax();
+            double scale = (Math.max(vmax.x - vmin.x, vmax.y - vmin.y) / 2f + 10f) / camera.getZoom();
+            double aspect = viewportWidth > 0 ? (double) viewportWidth / viewportHeight : 1;
+            double halfH = scale * (aspect > 1 ? 1 : 1f / aspect);
+            return 2 * halfH / viewportHeight;
+        }
+        double dx = camera.position.x - camera.origin.x;
+        double dy = camera.position.y - camera.origin.y;
+        double dz = camera.position.z - camera.origin.z;
+        double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (!(dist > 0)) return 0;
+        double halfFovTan = Math.tan(Math.toRadians(30f));
+        return 2 * dist * halfFovTan / (camera.getZoom() * viewportHeight);
+    }
+
     public void setCurrentPlateIndex(int currentPlateIndex) {
         this.currentPlateIndex = Math.max(0, currentPlateIndex);
         primeTowerPreviewX = Double.NaN;
@@ -609,8 +659,12 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         float aspectRatio = (float) viewportWidth / viewportHeight;
         float invZoom = 1f / camera.getZoom();
         if (Prefs.isOrthoProjectionEnabled()) {
-            Vec3d diff = bed.getVolumeMax().clone().add(bed.getVolumeMin().clone());
-            double scale = (Math.max(diff.x, diff.y) / 2f + 10f) * invZoom;
+            // Frame the bed volume: half-extent of the volume size plus a
+            // margin, scaled by zoom. Both projections share the camera zoom
+            // range, so min/max zoom framing stays comparable.
+            Vec3d vmin = bed.getVolumeMin(), vmax = bed.getVolumeMax();
+            double sizeX = vmax.x - vmin.x, sizeY = vmax.y - vmin.y;
+            double scale = (Math.max(sizeX, sizeY) / 2f + 10f) * invZoom;
 
             float ratioHorizontal = aspectRatio > 1 ? aspectRatio : 1;
             float ratioVertical = aspectRatio < 1 ? 1f / aspectRatio : 1;

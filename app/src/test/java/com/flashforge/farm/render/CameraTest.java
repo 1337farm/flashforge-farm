@@ -53,6 +53,48 @@ public class CameraTest {
     }
 
     @Test
+    public void testZoomBy_multiplicativeAndClamped() {
+        Camera c = defaultCamera();
+        c.zoomBy(2f);
+        assertEquals(2f, c.getZoom(), 0f);
+        c.zoomBy(0.5f);
+        assertEquals(1f, c.getZoom(), 0f);
+        c.zoomBy(100f);
+        assertEquals(10f, c.getZoom(), 0f);
+        c.zoomBy(0.0001f);
+        assertEquals(0.25f, c.getZoom(), 0f);
+        // Non-positive / NaN factors are ignored, never corrupt zoom.
+        c.setZoom(1f);
+        c.zoomBy(0f);
+        assertEquals(1f, c.getZoom(), 0f);
+        c.zoomBy(Float.NaN);
+        assertEquals(1f, c.getZoom(), 0f);
+    }
+
+    @Test
+    public void testMoveByWorld_translatesPositionAndOriginEqually() {
+        Camera c = defaultCamera();
+        c.moveByWorld(3.0, -4.0, 0.0);
+        assertEquals(3.0, c.position.x, DELTA);
+        assertEquals(-204.0, c.position.y, DELTA);
+        assertEquals(200.0, c.position.z, DELTA);
+        assertEquals(3.0, c.origin.x, DELTA);
+        assertEquals(-4.0, c.origin.y, DELTA);
+        assertEquals(0.0, c.origin.z, DELTA);
+    }
+
+    @Test
+    public void testMoveWorld_matchesMoveAtZoomOne() {
+        Camera a = defaultCamera();
+        Camera b = defaultCamera();
+        a.move(10f, -5f);
+        b.moveWorld(10f, -5f);
+        assertEquals(a.position.x, b.position.x, DELTA);
+        assertEquals(a.position.y, b.position.y, DELTA);
+        assertEquals(a.position.z, b.position.z, DELTA);
+    }
+
+    @Test
     public void testRotateAround_keepsDistance() {
         Camera c = defaultCamera();
         double dx = c.position.x - c.origin.x;

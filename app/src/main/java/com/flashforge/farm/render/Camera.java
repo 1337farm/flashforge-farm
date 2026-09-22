@@ -67,6 +67,23 @@ public class Camera {
         this.zoom = MathUtils.clamp(zoom, 0.25f, 10f);
     }
 
+    /**
+     * Multiplicative pinch zoom: factor > 1 zooms in, < 1 zooms out.
+     * Shares the [0.25, 10] clamp with {@link #zoom(float)} so perspective
+     * and orthographic projections always offer the same zoom range.
+     */
+    public void zoomBy(float factor) {
+        if (!(factor > 0f) || Float.isNaN(factor) || Float.isInfinite(factor)) return;
+        this.zoom = MathUtils.clamp(this.zoom * factor, 0.25f, 10f);
+    }
+
+    /** Translate camera and focus point together by a world-space delta. */
+    public void moveByWorld(double dx, double dy, double dz) {
+        position.x += dx; position.y += dy; position.z += dz;
+        origin.x += dx; origin.y += dy; origin.z += dz;
+        viewMatrixDirty = true;
+    }
+
     public Vec3d calcScreenMovement(float x, float y) {
         x /= zoom;
         y /= zoom;
@@ -102,6 +119,22 @@ public class Camera {
         scratchScreenY.x = scratchDir.y * scratchRight.z - scratchDir.z * scratchRight.y;
         scratchScreenY.y = scratchDir.z * scratchRight.x - scratchDir.x * scratchRight.z;
         scratchScreenY.z = scratchDir.x * scratchRight.y - scratchDir.y * scratchRight.x;
+    }
+
+    /**
+     * Screen-basis pan for pre-scaled world-unit deltas (no zoom scaling;
+     * callers scale by world-per-pixel themselves).
+     */
+    public void moveWorld(float x, float y) {
+        computeScreenBasis();
+
+        double mx = scratchRight.x * x + scratchScreenY.x * y;
+        double my = scratchRight.y * x + scratchScreenY.y * y;
+        double mz = scratchRight.z * x + scratchScreenY.z * y;
+
+        position.x += mx; position.y += my; position.z += mz;
+        origin.x += mx; origin.y += my; origin.z += mz;
+        viewMatrixDirty = true;
     }
 
     public void move(float x, float y) {

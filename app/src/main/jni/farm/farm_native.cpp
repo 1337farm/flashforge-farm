@@ -244,6 +244,7 @@ std::unique_ptr<PgProcessorResult> vgcode_parse_gcode_file(const std::string& pa
     std::string gcode = vgcode_read_file(path);
     const Slic3r::Biz::libpgcode::GCodeProducer producer =
         Slic3r::Biz::libpgcode::detect_producer(gcode);
+    LOGD("vgcode_parse: path=%s bytes=%zu producer=%d", path.c_str(), gcode.size(), (int) producer);
     PgProcessorConfig config;
     config.reset();
     config.producer = producer;
@@ -817,6 +818,9 @@ extern "C" {
             } catch (const std::exception& e) {
                 LOGE("model_slice: libpgcode parse failed (viewer empty): path=%s: %s",
                     cppGcodePath.c_str(), e.what());
+            } catch (...) {
+                LOGE("model_slice: libpgcode parse failed with unknown exception (viewer empty): path=%s",
+                    cppGcodePath.c_str());
             }
             return (jlong) (intptr_t) result;
         } catch (const std::exception& e) {
@@ -869,6 +873,10 @@ extern "C" {
         } catch (const std::exception& e) {
             LOGE("gcoderesult_load_file failed: path=%s: %s", cppPath.c_str(), e.what());
             env->ThrowNew(env->FindClass("java/lang/RuntimeException"), e.what());
+            return 0;
+        } catch (...) {
+            LOGE("gcoderesult_load_file failed with unknown exception: path=%s", cppPath.c_str());
+            env->ThrowNew(env->FindClass("java/lang/RuntimeException"), "unknown native error while parsing gcode");
             return 0;
         }
     }

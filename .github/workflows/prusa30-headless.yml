@@ -1523,6 +1523,13 @@ jobs:
           sdkmanager "platforms;android-37.0" "cmake;3.22.1"
           ln -sfn "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
 
+      - name: Install qemu-user (for headless slice verification)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-user binfmt-support
+          which qemu-aarch64
+          qemu-aarch64 --version
+
       - name: Fetch PrusaSlicer 3.0 source (pinned + patched)
         run: |
           chmod +x engine/prusa30/fetch_prusaslicer.sh
@@ -2174,7 +2181,7 @@ jobs:
           echo "staged archives are Android arm64; execute on bionic/aarch64 via"
           echo "run_slice_regressions.sh against the CI libslic3r artifact)"
 
-          # Attempt headless slice verification via qemu-aarch64 (if available)
+          # Attempt headless slice verification via qemu-aarch64
           # This validates the slice pipeline end-to-end on a test model.
           if command -v qemu-aarch64 >/dev/null 2>&1; then
             echo "qemu-aarch64 found — attempting headless slice verification..."

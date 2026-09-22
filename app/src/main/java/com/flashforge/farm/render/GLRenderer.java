@@ -789,8 +789,13 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             if (viewer != null) {
                 viewer.render(viewMatrix, projectionMatrix);
             }
-            // Native vgcode is a stub (#212): draw parsed toolpath lines so the layers tab is live.
-            drawToolpaths(viewMatrix);
+            // Fallback while the native viewer has no layers (stub builds, or
+            // load still pending): draw parsed toolpath lines so the layers
+            // tab stays live. Yields to the native viewer once it reports a
+            // real layer count.
+            if (viewer == null || viewer.getLayersCount() == 0) {
+                drawToolpaths(viewMatrix);
+            }
         }
         // Models on inactive plates: plain dimmed render, no selection/paint/gizmo handling.
         if (viewer == null && !isViewerEnabled && !inactivePlateModels.isEmpty()) {

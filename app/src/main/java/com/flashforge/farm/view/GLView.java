@@ -46,6 +46,15 @@ public class GLView extends GLSurfaceView implements IThemeView {
     private float lastX, lastY;
     private float lastLength;
     private int touchSlop;
+    private float pixelsPerInch = 160f;
+
+    // Bed-plane grab point for 1:1 panning: the world point under the gesture
+    // midpoint when the drag started. Null when the ray misses the plane
+    // (camera looking horizontal) or no pan is active.
+    private Vec3d panGrabPoint = null;
+    // Last midpoint in render pixels, for the physical-gain pan fallback.
+    private float lastPanX, lastPanY;
+    private boolean hasLastPan = false;
 
     private boolean fromTwoPointers;
     private boolean onePointerGesture;
@@ -149,7 +158,54 @@ public class GLView extends GLSurfaceView implements IThemeView {
         setRenderer(renderer);
         setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        try {
+            float xdpi = context.getResources().getDisplayMetrics().xdpi;
+            if (xdpi > 0) pixelsPerInch = xdpi;
+        } catch (Exception ignored) {
+        }
         setWillNotDraw(false);
+    }
+
+    /** Degrees of orbit per inch of finger travel (trackball feel). */
+    private float rotateDegreesPerInch() {
+        return 90f * (Prefs.getCameraSensitivity() / 5f);
+    }
+
+    /** Anchor a pan gesture: remember the bed-plane point under (x, y) in view pixels. */
+    private void grabPanAnchor(float x, float y) {
+        float rs = Prefs.getRenderScale();
+        panGrabPoint = renderer.screenToBedPlane(x * rs, y * rs);
+        lastPanX = x * rs;
+        lastPanY = y * rs;
+        hasLastPan = true;
+    }
+
+    /**
+     * Drag the world so the grabbed bed-plane point follows the finger at
+     * (x, y) in view pixels (exact 1:1). Falls back to a physical-gain screen
+     * pan when the ray misses the plane.
+     */
+    private void dragPanTo(float x, float y) {
+        float rs = Prefs.getRenderScale();
+        float rx = x * rs, ry = y * rs;
+        Vec3d hit = renderer.screenToBedPlane(rx, ry);
+        if (panGrabPoint != null && hit != null) {
+            renderer.getCamera().moveByWorld(panGrabPoint.x - hit.x, panGrabPoint.y - hit.y, 0);
+        } else if (hasLastPan) {
+            double wpp = renderer.worldPerPixel();
+            if (wpp > 0) {
+                renderer.getCamera().moveWorld((float) ((lastPanX - rx) * wpp), (float) ((lastPanY - ry) * wpp));
+            }
+        }
+        lastPanX = rx;
+        lastPanY = ry;
+        hasLastPan = true;
+        requestRender();
+    }
+
+    private void clearPanAnchor() {
+        panGrabPoint = null;
+        hasLastPan = false;
     }
 
     public void setOnModelLongPressListener(OnModelLongPressListener onModelLongPressListener) {
@@ -426,9 +482,11 @@ public class GLView extends GLSurfaceView implements IThemeView {
                 removeCallbacks(longClick);
                 removeCallbacks(bedLongClick);
                 longClickGesture = false;
+                clearPanAnchor();
                 calcStartFocus(e);
                 fromTwoPointers = true;
             } else {
+                clearPanAnchor();
                 lastX = e.getX();
                 lastY = e.getY();
                 longClickTargetObject = -1;
@@ -458,6 +516,7 @@ public class GLView extends GLSurfaceView implements IThemeView {
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP || action == MotionEvent.ACTION_CANCEL) {
             removeCallbacks(longClick);
             removeCallbacks(bedLongClick);
+            clearPanAnchor();
             if (primeTowerGesture) {
                 renderer.finishPrimeTowerDrag(action != MotionEvent.ACTION_CANCEL);
                 primeTowerGesture = false;
@@ -529,6 +588,7 @@ public class GLView extends GLSurfaceView implements IThemeView {
                 if (deltaMs > 128) {
                     isScaling = false;
                     twoPointerGesture = false;
+                    clearPanAnchor();
                 }
 
                 boolean startingGesture = false;
@@ -539,15 +599,27 @@ public class GLView extends GLSurfaceView implements IThemeView {
                     } else if (Math.sqrt(distanceX * distanceX + distanceY * distanceY) >= touchSlop) {
                         twoPointerGesture = true;
                         startingGesture = true;
+                        grabPanAnchor(x, y);
                     }
                 }
                 if (isScaling) {
-                    float delta = len - lastLength;
+                    float last = lastLength;
                     lastLength = len;
 
-                    if (!startingGesture) {
-                        renderer.getCamera().zoom(delta / touchSlop * Prefs.getCameraSensitivity());
+                    if (!startingGesture && last > 0) {
+                        // Multiplicative pinch centered on the gesture midpoint:
+                        // the bed-plane point under the midpoint stays put.
+                        float factor = len / last;
+                        if (factor > 2f) factor = 2f;
+                        else if (factor < 0.5f) factor = 0.5f;
+                        float rs = Prefs.getRenderScale();
+                        Vec3d before = renderer.screenToBedPlane(x * rs, y * rs);
+                        renderer.getCamera().zoomBy(factor);
                         renderer.updateProjection();
+                        Vec3d after = renderer.screenToBedPlane(x * rs, y * rs);
+                        if (before != null && after != null) {
+                            renderer.getCamera().moveByWorld(before.x - after.x, before.y - after.y, 0);
+                        }
                         requestRender();
                     }
 
@@ -557,11 +629,13 @@ public class GLView extends GLSurfaceView implements IThemeView {
                     if (!startingGesture) {
                         int mode = Prefs.getCameraControlMode();
                         if (mode == Prefs.CAMERA_CONTROL_MODE_ROTATE_MOVE || mode == Prefs.CAMERA_CONTROL_MODE_MOVE_ONLY) {
-                            renderer.getCamera().move(distanceX / touchSlop * Prefs.getCameraSensitivity(), distanceY / touchSlop * Prefs.getCameraSensitivity());
+                            // Two-finger pan grabs the bed plane at the midpoint.
+                            dragPanTo(x, y);
                         } else {
-                            renderer.getCamera().rotateAround(distanceX / touchSlop * Prefs.getCameraSensitivity(), distanceY / touchSlop * Prefs.getCameraSensitivity());
+                            float gain = rotateDegreesPerInch();
+                            renderer.getCamera().rotateAround(distanceX / pixelsPerInch * gain, distanceY / pixelsPerInch * gain);
+                            requestRender();
                         }
-                        requestRender();
                     }
 
                     lastX = x;
@@ -577,6 +651,10 @@ public class GLView extends GLSurfaceView implements IThemeView {
                         startingGesture = true;
                         removeCallbacks(longClick);
                         removeCallbacks(bedLongClick);
+                        int mode = Prefs.getCameraControlMode();
+                        if (mode != Prefs.CAMERA_CONTROL_MODE_ROTATE_MOVE && !longClickGesture) {
+                            grabPanAnchor(e.getX(), e.getY());
+                        }
                     }
                 }
 
@@ -599,9 +677,12 @@ public class GLView extends GLSurfaceView implements IThemeView {
                         } else {
                             int mode = Prefs.getCameraControlMode();
                             if (mode == Prefs.CAMERA_CONTROL_MODE_ROTATE_MOVE) {
-                                renderer.getCamera().rotateAround(distanceX / touchSlop * Prefs.getCameraSensitivity(), distanceY / touchSlop * Prefs.getCameraSensitivity());
+                                // Trackball orbit in physical units: same angular
+                                // travel per inch on every display density.
+                                float gain = rotateDegreesPerInch();
+                                renderer.getCamera().rotateAround(distanceX / pixelsPerInch * gain, distanceY / pixelsPerInch * gain);
                             } else {
-                                renderer.getCamera().move(distanceX / touchSlop * Prefs.getCameraSensitivity(), distanceY / touchSlop * Prefs.getCameraSensitivity());
+                                dragPanTo(e.getX(), e.getY());
                             }
                             requestRender();
                         }

@@ -343,5 +343,5 @@ public class Native {
     static native void utils_config_release(long ptr);
 
     static native void utils_calc_view_normal_matrix(double[] viewMatrix, double[] worldMatrix, double[] normalMatrix);
-    static native double[] utils_unproject(double[] viewMatrix, double[] projectionMatrix, int screenWidth, int screenHeight, double x, double y);
+    public static native double[] utils_unproject(double[] viewMatrix, double[] projectionMatrix, int screenWidth, int screenHeight, double x, double y);
 }

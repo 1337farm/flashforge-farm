@@ -117,7 +117,7 @@ public class Prefs {
     }
 
     public static boolean isOrthoProjectionEnabled() {
-        return mPrefs.getBoolean("ortho_projection", true);
+        return mPrefs.getBoolean("ortho_projection", false);
     }
 
     public static void setOrthoProjectionEnabled(boolean e) {

@@ -809,8 +809,14 @@ extern "C" {
             // the viewer then stays empty and the app-side fallback still draws.
             try {
                 result->parsed = farm_vgcode::vgcode_parse_gcode_file(cppGcodePath);
+                const auto moves = result->parsed->const_moves();
+                LOGD("model_slice: libpgcode parse ok: path=%s moves=%zu tool_colors=%zu",
+                    cppGcodePath.c_str(),
+                    moves != nullptr ? moves->size() : 0,
+                    result->parsed->extruder_str_colors.size());
             } catch (const std::exception& e) {
-                LOGE("model_slice: libpgcode parse failed (viewer empty): %s", e.what());
+                LOGE("model_slice: libpgcode parse failed (viewer empty): path=%s: %s",
+                    cppGcodePath.c_str(), e.what());
             }
             return (jlong) (intptr_t) result;
         } catch (const std::exception& e) {
@@ -854,10 +860,14 @@ extern "C" {
                     ref->per_role[static_cast<int>(entry.first)] = {entry.second.first, entry.second.second};
                 }
             }, parsed->print_statistics);
+            const auto moves = parsed->const_moves();
+            LOGD("gcoderesult_load_file ok: path=%s moves=%zu tool_colors=%zu roles=%zu",
+                cppPath.c_str(), moves != nullptr ? moves->size() : 0,
+                parsed->extruder_str_colors.size(), ref->per_role.size());
             ref->parsed = std::move(parsed);
             return (jlong) (intptr_t) ref;
         } catch (const std::exception& e) {
-            LOGE("gcoderesult_load_file failed: %s", e.what());
+            LOGE("gcoderesult_load_file failed: path=%s: %s", cppPath.c_str(), e.what());
             env->ThrowNew(env->FindClass("java/lang/RuntimeException"), e.what());
             return 0;
         }
@@ -1643,18 +1653,26 @@ extern "C" {
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1load(JNIEnv* env, jclass, jlong ptr, jlong resultPtr) {
         GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
         GCodeResultRef* resultRef = (GCodeResultRef*) (intptr_t) resultPtr;
-        if (ref == nullptr || resultRef == nullptr) return;
+        if (ref == nullptr || resultRef == nullptr) {
+            LOGE("vgcode_load: null viewer (%p) or result (%p), nothing to load",
+                (void*) ref, (void*) resultRef);
+            return;
+        }
         if (resultRef->parsed == nullptr) {
             // Slice succeeded but the libpgcode pass did not (see model_slice):
             // keep the viewer empty rather than breaking the GL thread; the
             // app-side toolpath fallback still draws (#244).
-            LOGE("vgcode_load: no parsed gcode result, viewer stays empty");
+            LOGE("vgcode_load: no parsed gcode result (result=%p name=%s), viewer stays empty",
+                (void*) resultRef, resultRef->name.c_str());
             return;
         }
         try {
             ref->data = farm_vgcode::vgcode_convert_input_data(*resultRef->parsed);
+            const size_t vertices = ref->data.vertices.size();
             ref->viewer.load(std::move(ref->data));
             ref->viewer.set_time_mode(libvgcode::ETimeMode::Normal);
+            LOGD("vgcode_load ok: vertices=%zu layers=%zu tools=%zu", vertices,
+                ref->viewer.get_layers_count(), ref->viewer.get_tool_colors_count());
         } catch (const std::exception& e) {
             LOGE("vgcode_load failed: %s", e.what());
             env->ThrowNew(env->FindClass("java/lang/RuntimeException"), e.what());

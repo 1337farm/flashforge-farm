@@ -21,10 +21,14 @@
 #include <fstream>
 #include <memory>
 #include <numbers>
+#include <sstream>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include <jni.h>
+
+#include <GLES3/gl3.h>
 
 #include "Slic3r/Domain/Model.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
@@ -55,10 +59,21 @@ using Domain::TriangleSelector::TriangleStateType;
 // for mesh draw + raycast, GLShaderProgram for program lifecycle, and
 // bed_utils.hpp for the plate/gridline/contour builders.
 #include "Slic3r/Biz/Algorithms/Scaling.hpp"
+#include "Slic3r/Biz/Algorithms/Color.hpp"
+#include "Slic3r/Biz/libpgcode/Processor.hpp"
+#include "Slic3r/Biz/libpgcode/ProcessorConfig.hpp"
+#include "Slic3r/Biz/libpgcode/ProcessorResult.hpp"
+#include "Slic3r/Biz/libpgcode/Types.hpp"
+#include "Slic3r/Domain/Color.hpp"
+#include "Slic3r/Domain/GCodeExtrusionRole.hpp"
 #include "render/GLShader.hpp"
 #include "render/Program.hpp"   // declares Slic3r::get_current_shader() (defined below)
 #include "render/GLModel.hpp"
 #include "render/bed_utils.hpp"
+#include "Viewer.hpp"
+#include "GCodeInputData.hpp"
+#include "PathVertex.hpp"
+#include "Types.hpp"
 
 #define LOG_TAG "NativeCut"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
@@ -107,13 +122,150 @@ struct FarmBedRef {
     std::unique_ptr<GLModelRef> gridlines;
     std::unique_ptr<GLModelRef> contourlines;
 };
-// TODO(#212): opaque until the gcode preview stack ports to 3.0.
+// Real native gcode preview: the vendored libvgcode viewer renders parsed
+// libpgcode moves. GCodeResultRef owns one parsed result; GCodeViewerRef owns
+// the viewer plus the last input data handed to Viewer::load().
+namespace farm_vgcode {
+
+using PgMoveType = Slic3r::Biz::libpgcode::MoveType;
+using PgMoveVertex = Slic3r::Biz::libpgcode::MoveVertex;
+using PgProcessor = Slic3r::Biz::libpgcode::Processor;
+using PgProcessorConfig = Slic3r::Biz::libpgcode::ProcessorConfig;
+using PgProcessorResult = Slic3r::Biz::libpgcode::ProcessorResult;
+
+libvgcode::Vec3 vgcode_convert_position(const Domain::Vec3f& v) {
+    return {v.x(), v.y(), v.z()};
+}
+
+libvgcode::EGCodeExtrusionRole vgcode_convert_role(Domain::GCodeExtrusionRole role) {
+    switch (role) {
+        case Domain::GCodeExtrusionRole::None: return libvgcode::EGCodeExtrusionRole::None;
+        case Domain::GCodeExtrusionRole::Perimeter: return libvgcode::EGCodeExtrusionRole::Perimeter;
+        case Domain::GCodeExtrusionRole::ExternalPerimeter: return libvgcode::EGCodeExtrusionRole::ExternalPerimeter;
+        case Domain::GCodeExtrusionRole::OverhangPerimeter: return libvgcode::EGCodeExtrusionRole::OverhangPerimeter;
+        case Domain::GCodeExtrusionRole::InternalInfill: return libvgcode::EGCodeExtrusionRole::InternalInfill;
+        case Domain::GCodeExtrusionRole::SolidInfill: return libvgcode::EGCodeExtrusionRole::SolidInfill;
+        case Domain::GCodeExtrusionRole::TopSolidInfill: return libvgcode::EGCodeExtrusionRole::TopSolidInfill;
+        case Domain::GCodeExtrusionRole::Ironing: return libvgcode::EGCodeExtrusionRole::Ironing;
+        case Domain::GCodeExtrusionRole::BridgeInfill: return libvgcode::EGCodeExtrusionRole::BridgeInfill;
+        case Domain::GCodeExtrusionRole::GapFill: return libvgcode::EGCodeExtrusionRole::GapFill;
+        case Domain::GCodeExtrusionRole::Skirt: return libvgcode::EGCodeExtrusionRole::Skirt;
+        case Domain::GCodeExtrusionRole::SupportMaterial: return libvgcode::EGCodeExtrusionRole::SupportMaterial;
+        case Domain::GCodeExtrusionRole::SupportMaterialInterface: return libvgcode::EGCodeExtrusionRole::SupportMaterialInterface;
+        case Domain::GCodeExtrusionRole::WipeTower: return libvgcode::EGCodeExtrusionRole::WipeTower;
+        case Domain::GCodeExtrusionRole::Custom: return libvgcode::EGCodeExtrusionRole::Custom;
+        default: return libvgcode::EGCodeExtrusionRole::None;
+    }
+}
+
+libvgcode::EMoveType vgcode_convert_move_type(PgMoveType type) {
+    switch (type) {
+        case PgMoveType::Noop: return libvgcode::EMoveType::Noop;
+        case PgMoveType::Retract: return libvgcode::EMoveType::Retract;
+        case PgMoveType::Unretract: return libvgcode::EMoveType::Unretract;
+        case PgMoveType::Seam: return libvgcode::EMoveType::Seam;
+        case PgMoveType::ToolChange: return libvgcode::EMoveType::ToolChange;
+        case PgMoveType::ColorChange: return libvgcode::EMoveType::ColorChange;
+        case PgMoveType::PausePrint: return libvgcode::EMoveType::PausePrint;
+        case PgMoveType::CustomGCode: return libvgcode::EMoveType::CustomGCode;
+        case PgMoveType::Travel: return libvgcode::EMoveType::Travel;
+        case PgMoveType::Wipe: return libvgcode::EMoveType::Wipe;
+        case PgMoveType::Extrude: return libvgcode::EMoveType::Extrude;
+        case PgMoveType::Flush: return libvgcode::EMoveType::CustomGCode;
+        default: return libvgcode::EMoveType::Noop;
+    }
+}
+
+libvgcode::Color vgcode_convert_color(const std::string& color_str) {
+    Domain::ColorRGBA color;
+    if (Slic3r::Biz::Algorithms::Color::decode_color(color_str, color)) {
+        return {color.r_uchar(), color.g_uchar(), color.b_uchar()};
+    }
+    return libvgcode::DUMMY_COLOR;
+}
+
+// Matches the old 2.x conversion: phantom vertices let libvgcode detect path
+// boundaries for travels/wipes/options whose role/type changes.
+libvgcode::GCodeInputData vgcode_convert_input_data(const PgProcessorResult& result) {
+    libvgcode::GCodeInputData out;
+    out.spiral_vase_mode = result.spiral_vase_enabled;
+
+    out.tools_colors.reserve(result.extruder_str_colors.size());
+    for (const std::string& color : result.extruder_str_colors) {
+        out.tools_colors.emplace_back(vgcode_convert_color(color));
+    }
+    const std::vector<std::string> print_colors = result.color_strings_for_color_print();
+    const std::vector<std::string>& color_source = print_colors.empty() ? result.extruder_str_colors : print_colors;
+    out.color_print_colors.reserve(color_source.size());
+    for (const std::string& color : color_source) {
+        out.color_print_colors.emplace_back(vgcode_convert_color(color));
+    }
+
+    const std::shared_ptr<const Slic3r::Biz::libpgcode::MoveVertices> moves = result.const_moves();
+    if (moves == nullptr || moves->size() < 2) return out;
+    out.vertices.reserve(2 * moves->size());
+    for (size_t i = 1; i < moves->size(); ++i) {
+        const PgMoveVertex& curr = (*moves)[i];
+        const PgMoveVertex& prev = (*moves)[i - 1];
+        const libvgcode::EMoveType curr_type = vgcode_convert_move_type(curr.type);
+        const libvgcode::EOptionType option_type = libvgcode::move_type_to_option(curr_type);
+        if (option_type == libvgcode::EOptionType::COUNT || option_type == libvgcode::EOptionType::Travels ||
+            option_type == libvgcode::EOptionType::Wipes) {
+            if (out.vertices.empty() || prev.type != curr.type || prev.extrusion_role != curr.extrusion_role) {
+                libvgcode::PathVertex vertex = {
+                    vgcode_convert_position(prev.position), curr.height, curr.width, curr.feedrate, prev.actual_feedrate,
+                    curr.mm3_per_mm, curr.fan_speed, curr.temperature, vgcode_convert_role(curr.extrusion_role), curr_type,
+                    curr.gcode_id, curr.layer_id, curr.extruder_id, curr.cp_color_id, -1, {0.0f, 0.0f}};
+                out.vertices.emplace_back(vertex);
+            }
+        }
+        libvgcode::PathVertex vertex = {
+            vgcode_convert_position(curr.position), curr.height, curr.width, curr.feedrate, curr.actual_feedrate,
+            curr.mm3_per_mm, curr.fan_speed, curr.temperature, vgcode_convert_role(curr.extrusion_role), curr_type,
+            curr.gcode_id, curr.layer_id, curr.extruder_id, curr.cp_color_id, -1, {curr.time[0], curr.time[1]}};
+        out.vertices.emplace_back(vertex);
+    }
+    out.vertices.shrink_to_fit();
+    return out;
+}
+
+std::string vgcode_read_file(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) throw std::runtime_error("cannot open gcode file: " + path);
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
+
+// Parse a gcode file with the 3.0 libpgcode processor (the successor of the
+// 2.x GCodeProcessor::process_file/extract_result pair). Throws std::exception
+// on IO/parse failure; never returns a half-parsed result.
+std::unique_ptr<PgProcessorResult> vgcode_parse_gcode_file(const std::string& path) {
+    std::string gcode = vgcode_read_file(path);
+    const Slic3r::Biz::libpgcode::GCodeProducer producer =
+        Slic3r::Biz::libpgcode::detect_producer(gcode);
+    PgProcessorConfig config;
+    config.reset();
+    config.producer = producer;
+    if (producer == Slic3r::Biz::libpgcode::GCodeProducer::PrusaSlicer) {
+        config = Slic3r::Biz::libpgcode::extract_processor_config_from_prusaslicer_gcode(gcode);
+    }
+    PgProcessor processor(std::move(config));
+    processor.process_buffer(std::move(gcode));
+    return std::make_unique<PgProcessorResult>(processor.finalize());
+}
+
+} // namespace farm_vgcode
+
 struct GCodeViewerRef {
+    libvgcode::Viewer viewer;
+    libvgcode::GCodeInputData data;
     bool initialized = false;
 };
 struct GCodeResultRef {
     std::string name;
     farm::RoleFilamentStats per_role; // Java GCodeViewer.ExtrusionRole int -> (mm, g)
+    std::unique_ptr<farm_vgcode::PgProcessorResult> parsed;
 };
 // TODO(#212): opaque until Java passes JSON presets (Biz::Config::load_preset_and_config).
 struct ConfigRef {
@@ -651,6 +803,15 @@ extern "C" {
             const size_t slash = cppGcodePath.find_last_of('/');
             result->name = slash == std::string::npos ? cppGcodePath : cppGcodePath.substr(slash + 1);
             result->per_role = std::move(stats.per_role);
+            // The native viewer needs parsed moves, not just the file: run the
+            // same libpgcode pass the load-file path uses. A parse failure must
+            // not fail the slice itself (the gcode file is already written);
+            // the viewer then stays empty and the app-side fallback still draws.
+            try {
+                result->parsed = farm_vgcode::vgcode_parse_gcode_file(cppGcodePath);
+            } catch (const std::exception& e) {
+                LOGE("model_slice: libpgcode parse failed (viewer empty): %s", e.what());
+            }
             return (jlong) (intptr_t) result;
         } catch (const std::exception& e) {
             LOGE("model_slice failed: %s", e.what());
@@ -676,14 +837,30 @@ extern "C" {
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_gcoderesult_1load_1file(JNIEnv* env, jclass, jstring path, jstring name) {
-        // TODO(#212): GCodeProcessor::process_file/extract_result have no verified 3.0
-        // counterpart (preview moved to libpgcode/slic3r-gcode-reader); throw, never
-        // return an empty-but-successful handle.
-        (void) path; (void) name;
-        LOGE("gcoderesult_load_file: 3.0 gcode-parse path not wired");
-        env->ThrowNew(env->FindClass("java/lang/RuntimeException"),
-            "G-code preview is not available in this build yet (#212)");
-        return 0;
+        const char* pathChars = env->GetStringUTFChars(path, JNI_FALSE);
+        const char* nameChars = env->GetStringUTFChars(name, JNI_FALSE);
+        std::string cppPath(pathChars != nullptr ? pathChars : "");
+        std::string cppName(nameChars != nullptr ? nameChars : "");
+        if (pathChars != nullptr) env->ReleaseStringUTFChars(path, pathChars);
+        if (nameChars != nullptr) env->ReleaseStringUTFChars(name, nameChars);
+
+        try {
+            auto parsed = farm_vgcode::vgcode_parse_gcode_file(cppPath);
+            GCodeResultRef* ref = new GCodeResultRef();
+            ref->name = cppName;
+            // print_statistics is a Basic/Full variant; both carry per-role filament stats.
+            std::visit([&ref](const auto& stats) {
+                for (const auto& entry : stats.used_filaments_per_role) {
+                    ref->per_role[static_cast<int>(entry.first)] = {entry.second.first, entry.second.second};
+                }
+            }, parsed->print_statistics);
+            ref->parsed = std::move(parsed);
+            return (jlong) (intptr_t) ref;
+        } catch (const std::exception& e) {
+            LOGE("gcoderesult_load_file failed: %s", e.what());
+            env->ThrowNew(env->FindClass("java/lang/RuntimeException"), e.what());
+            return 0;
+        }
     }
 
     JNIEXPORT jstring JNICALL Java_com_flashforge_farm_slic3r_Native_gcoderesult_1get_1recommended_1name(JNIEnv* env, jclass, jlong ptr) {
@@ -1402,132 +1579,219 @@ extern "C" {
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1create(JNIEnv* env, jclass) {
-        // TODO(#212): libvgcode Viewer stack still 2.x (Viewer.hpp needs deleted headers).
         (void) env;
-        return 0;
+        return (jlong) (intptr_t) new GCodeViewerRef();
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1set_1colors(JNIEnv* env, jclass, jlong ptr, jintArray colorsArr) {
-        // TODO(#212): see vgcode_create. Silent: called on preview setup paths.
-        (void) env; (void) ptr; (void) colorsArr;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr || colorsArr == nullptr) return;
+        jint* colors = env->GetIntArrayElements(colorsArr, JNI_FALSE);
+        if (colors == nullptr) return;
+        ref->viewer.set_extrusion_role_color(libvgcode::EGCodeExtrusionRole::Skirt,                    { (unsigned char) colors[0],  (unsigned char) colors[1],  (unsigned char) colors[2] });
+        ref->viewer.set_extrusion_role_color(libvgcode::EGCodeExtrusionRole::ExternalPerimeter,        { (unsigned char) colors[3],  (unsigned char) colors[4],  (unsigned char) colors[5] });
+        ref->viewer.set_extrusion_role_color(libvgcode::EGCodeExtrusionRole::SupportMaterial,          { (unsigned char) colors[6],  (unsigned char) colors[7],  (unsigned char) colors[8] });
+        ref->viewer.set_extrusion_role_color(libvgcode::EGCodeExtrusionRole::SupportMaterialInterface, { (unsigned char) colors[9],  (unsigned char) colors[10], (unsigned char) colors[11] });
+        ref->viewer.set_extrusion_role_color(libvgcode::EGCodeExtrusionRole::InternalInfill,           { (unsigned char) colors[12], (unsigned char) colors[13], (unsigned char) colors[14] });
+        ref->viewer.set_extrusion_role_color(libvgcode::EGCodeExtrusionRole::SolidInfill,              { (unsigned char) colors[15], (unsigned char) colors[16], (unsigned char) colors[17] });
+        ref->viewer.set_extrusion_role_color(libvgcode::EGCodeExtrusionRole::WipeTower,                { (unsigned char) colors[18], (unsigned char) colors[19], (unsigned char) colors[20] });
+        env->ReleaseIntArrayElements(colorsArr, colors, JNI_ABORT);
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1render(JNIEnv* env, jclass, jlong ptr, jfloatArray viewMatrixArr, jfloatArray projectionMatrixArr) {
-        // TODO(#212): see vgcode_create. Silent: called per frame, must not log-spam.
-        (void) env; (void) ptr; (void) viewMatrixArr; (void) projectionMatrixArr;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr || viewMatrixArr == nullptr || projectionMatrixArr == nullptr) return;
+        jfloat* viewMatrix = env->GetFloatArrayElements(viewMatrixArr, JNI_FALSE);
+        jfloat* projectionMatrix = env->GetFloatArrayElements(projectionMatrixArr, JNI_FALSE);
+        if (viewMatrix == nullptr || projectionMatrix == nullptr) {
+            if (viewMatrix != nullptr) env->ReleaseFloatArrayElements(viewMatrixArr, viewMatrix, JNI_ABORT);
+            if (projectionMatrix != nullptr) env->ReleaseFloatArrayElements(projectionMatrixArr, projectionMatrix, JNI_ABORT);
+            return;
+        }
+        libvgcode::Mat4x4 converted_view_matrix;
+        std::memcpy(converted_view_matrix.data(), viewMatrix, 16 * sizeof(float));
+        libvgcode::Mat4x4 converted_projection_matrix;
+        std::memcpy(converted_projection_matrix.data(), projectionMatrix, 16 * sizeof(float));
+        // Per-frame path: never let a viewer exception take down the GL thread.
+        try {
+            ref->viewer.render(converted_view_matrix, converted_projection_matrix);
+        } catch (const std::exception& e) {
+            LOGE("vgcode_render failed: %s", e.what());
+        }
+        env->ReleaseFloatArrayElements(viewMatrixArr, viewMatrix, JNI_ABORT);
+        env->ReleaseFloatArrayElements(projectionMatrixArr, projectionMatrix, JNI_ABORT);
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1init(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr;
-        LOGD("vgcode_init: stub, preview stack pending");
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr || ref->initialized) return;
+        try {
+            ref->viewer.init(reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+            ref->initialized = true;
+        } catch (const std::exception& e) {
+            LOGE("vgcode_init failed: %s", e.what());
+            env->ThrowNew(env->FindClass("java/lang/RuntimeException"), e.what());
+        }
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1is_1initialized(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr;
-        return false;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        return (ref != nullptr && ref->initialized) ? JNI_TRUE : JNI_FALSE;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1load(JNIEnv* env, jclass, jlong ptr, jlong resultPtr) {
-        // TODO(#212): needs the 3.0 gcode result (see gcoderesult_load_file).
-        (void) env; (void) ptr; (void) resultPtr;
-        LOGD("vgcode_load: stub, gcode result pending");
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        GCodeResultRef* resultRef = (GCodeResultRef*) (intptr_t) resultPtr;
+        if (ref == nullptr || resultRef == nullptr) return;
+        if (resultRef->parsed == nullptr) {
+            // Slice succeeded but the libpgcode pass did not (see model_slice):
+            // keep the viewer empty rather than breaking the GL thread; the
+            // app-side toolpath fallback still draws (#244).
+            LOGE("vgcode_load: no parsed gcode result, viewer stays empty");
+            return;
+        }
+        try {
+            ref->data = farm_vgcode::vgcode_convert_input_data(*resultRef->parsed);
+            ref->viewer.load(std::move(ref->data));
+            ref->viewer.set_time_mode(libvgcode::ETimeMode::Normal);
+        } catch (const std::exception& e) {
+            LOGE("vgcode_load failed: %s", e.what());
+            env->ThrowNew(env->FindClass("java/lang/RuntimeException"), e.what());
+        }
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1reset(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.reset();
+        ref->initialized = false;
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1get_1layers_1count(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr;
-        return 0;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        return ref == nullptr ? 0 : (jlong) ref->viewer.get_layers_count();
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1set_1layers_1view_1range(JNIEnv* env, jclass, jlong ptr, jlong min, jlong max) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) min; (void) max;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.set_layers_view_range(static_cast<uint32_t>(std::max<jlong>(0, min)), static_cast<uint32_t>(std::max<jlong>(0, max)));
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1set_1infill_1visibility_1depth(JNIEnv* env, jclass, jlong ptr, jint depth) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) depth;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.set_infill_visibility_depth(depth);
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1set_1fast_1mode(JNIEnv* env, jclass, jlong ptr, jboolean fastMode) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) fastMode;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.set_fast_mode(fastMode == JNI_TRUE);
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1set_1selected_1object_1id(JNIEnv* env, jclass, jlong ptr, jint id) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) id;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.set_selected_object_id(id);
     }
 
     JNIEXPORT jlongArray JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1get_1layers_1view_1range(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create.
-        (void) ptr;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
         jlongArray arr = env->NewLongArray(2);
-        jlong range[2] = { 0, 0 };
+        jlong range[2] = {0, 0};
+        if (ref != nullptr) {
+            const auto native = ref->viewer.get_layers_view_range();
+            range[0] = (jlong) native[0];
+            range[1] = (jlong) native[1];
+        }
         env->SetLongArrayRegion(arr, 0, 2, range);
         return arr;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1release(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create. create() returns 0: nothing to free.
-        (void) env; (void) ptr;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.shutdown();
+        delete ref;
     }
 
     JNIEXPORT jfloat JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1get_1estimated_1time(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr;
-        return 0;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        return ref == nullptr ? 0.0f : ref->viewer.get_estimated_time();
     }
 
     JNIEXPORT jfloat JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1get_1estimated_1time_1role(JNIEnv* env, jclass, jlong ptr, jint role) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) role;
-        return 0;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return 0.0f;
+        return ref->viewer.get_extrusion_role_estimated_time(farm_vgcode::vgcode_convert_role(static_cast<Domain::GCodeExtrusionRole>(role)));
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1is_1extrusion_1role_1visible(JNIEnv* env, jclass, jlong ptr, jint role) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) role;
-        return false;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return JNI_FALSE;
+        return ref->viewer.is_extrusion_role_visible(farm_vgcode::vgcode_convert_role(static_cast<Domain::GCodeExtrusionRole>(role))) ? JNI_TRUE : JNI_FALSE;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1toggle_1extrusion_1role_1visibility(JNIEnv* env, jclass, jlong ptr, jint role) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) role;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.toggle_extrusion_role_visibility(farm_vgcode::vgcode_convert_role(static_cast<Domain::GCodeExtrusionRole>(role)));
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1set_1view_1type(JNIEnv* env, jclass, jlong ptr, jint type) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) type;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.set_view_type(static_cast<libvgcode::EViewType>(type));
     }
 
     JNIEXPORT jint JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1get_1view_1type(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr;
-        return 0;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        return ref == nullptr ? 0 : static_cast<jint>(ref->viewer.get_view_type());
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1set_1tool_1colors(JNIEnv* env, jclass, jlong ptr, jintArray colorsArr) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) colorsArr;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr || colorsArr == nullptr) return;
+        const jsize n = env->GetArrayLength(colorsArr);
+        jint* colors = env->GetIntArrayElements(colorsArr, JNI_FALSE);
+        if (colors == nullptr) return;
+        libvgcode::Palette palette;
+        palette.reserve((size_t) n);
+        for (jsize i = 0; i < n; ++i) {
+            const int v = colors[i];
+            palette.push_back({(unsigned char) ((v >> 16) & 0xFF), (unsigned char) ((v >> 8) & 0xFF), (unsigned char) (v & 0xFF)});
+        }
+        env->ReleaseIntArrayElements(colorsArr, colors, JNI_ABORT);
+        if (!palette.empty()) ref->viewer.set_tool_colors(palette);
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1is_1option_1visible(JNIEnv* env, jclass, jlong ptr, jint optionType) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) optionType;
-        return false;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return JNI_FALSE;
+        return ref->viewer.is_option_visible(static_cast<libvgcode::EOptionType>(optionType)) ? JNI_TRUE : JNI_FALSE;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1toggle_1option_1visibility(JNIEnv* env, jclass, jlong ptr, jint optionType) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) optionType;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.toggle_option_visibility(static_cast<libvgcode::EOptionType>(optionType));
     }
 
     // ---- Multi-color painting (mm segmentation) ----

@@ -244,7 +244,19 @@ std::unique_ptr<PgProcessorResult> vgcode_parse_gcode_file(const std::string& pa
     std::string gcode = vgcode_read_file(path);
     const Slic3r::Biz::libpgcode::GCodeProducer producer =
         Slic3r::Biz::libpgcode::detect_producer(gcode);
-    LOGD("vgcode_parse: path=%s bytes=%zu producer=%d", path.c_str(), gcode.size(), (int) producer);
+    // Diagnostic for libassert aborts inside the extractor (uncatchable
+    // SIGABRT): log the exact flavor line the extractor will read.
+    std::string flavor = "<none>";
+    {
+        const char* key = "gcode_flavor";
+        size_t pos = gcode.find(key);
+        if (pos != std::string::npos) {
+            size_t end = gcode.find('\n', pos);
+            flavor = gcode.substr(pos, end == std::string::npos ? 64 : std::min(end - pos, (size_t) 64));
+        }
+    }
+    LOGD("vgcode_parse: path=%s bytes=%zu producer=%d flavor=[%s]", path.c_str(), gcode.size(),
+        (int) producer, flavor.c_str());
     PgProcessorConfig config;
     config.reset();
     config.producer = producer;

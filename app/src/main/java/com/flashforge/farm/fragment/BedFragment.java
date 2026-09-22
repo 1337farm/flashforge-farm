@@ -740,23 +740,46 @@ public class BedFragment extends Fragment {
                                     glView.getRenderer().setGCodeViewer(gCodeResult);
                                     // Parse the sliced file on the GL thread (line uploads need the
                                     // GL context) and seed the layers tab + viewer ranges with the
-                                    // real layer count; native vgcode is a stub (#212).
+                                    // real layer count.
                                     try {
+                                        java.io.File parsedFile = getTempGCodePath();
                                         com.flashforge.farm.slic3r.GCodeToolpaths.Parsed parsed =
-                                                com.flashforge.farm.slic3r.GCodeToolpaths.parse(getTempGCodePath(), 4096);
+                                                com.flashforge.farm.slic3r.GCodeToolpaths.parse(parsedFile, 4096);
                                         long count = parsed.getLayersCount();
+                                        android.util.Log.i("BedFragment",
+                                                "toolpath parse ok: file=" + (parsedFile != null ? parsedFile.getAbsolutePath() : "null")
+                                                        + " bytes=" + (parsedFile != null ? parsedFile.length() : -1)
+                                                        + " layers=" + count);
                                         if (count > 0) {
                                             com.flashforge.farm.slic3r.GCodeViewer v =
                                                     glView.getRenderer().getViewer();
-                                            if (v == null) {
-                                                v = new com.flashforge.farm.slic3r.GCodeViewer();
+                                            if (v != null) {
+                                                v.setLayersCountOverride(count);
+                                                v.setLayersViewRange(0, count - 1);
+                                            } else {
+                                                // Renderer creates its viewer on the next frame;
+                                                // initViewer() applies the same seeding from toolpaths.
+                                                android.util.Log.d("BedFragment",
+                                                        "renderer viewer not yet created, layer seeding defers to initViewer for "
+                                                                + count + " layers");
                                             }
-                                            v.setLayersCountOverride(count);
-                                            v.setLayersViewRange(0, count - 1);
                                             glView.getRenderer().setToolpathRange(0, count - 1);
+                                        } else {
+                                            android.util.Log.w("BedFragment",
+                                                    "toolpath parse yielded 0 layers: file="
+                                                            + (parsedFile != null ? parsedFile.getAbsolutePath() : "null"));
                                         }
                                     } catch (Exception e) {
-                                        android.util.Log.w("BedFragment", "toolpath parse failed: " + e.getMessage());
+                                        java.io.File parsedFile = null;
+                                        try {
+                                            parsedFile = getTempGCodePath();
+                                        } catch (Exception ignored) {
+                                        }
+                                        android.util.Log.w("BedFragment",
+                                                "toolpath parse failed: file="
+                                                        + (parsedFile != null ? parsedFile.getAbsolutePath() : "null")
+                                                        + " exists=" + (parsedFile != null && parsedFile.isFile())
+                                                        + " bytes=" + (parsedFile != null ? parsedFile.length() : -1), e);
                                     }
                                     glView.requestRender();
                                 });

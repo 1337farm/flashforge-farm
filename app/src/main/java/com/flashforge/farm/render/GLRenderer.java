@@ -384,23 +384,43 @@ public class GLRenderer implements GLSurfaceView.Renderer {
 
     private void initViewer() {
         if (gcodeResult == null) return;
-        viewer = new GCodeViewer();
-        viewer.initGL();
-        viewer.setThemeColors();
-        viewer.load(gcodeResult);
-        if (!viewer.isOptionVisible(GCodeViewer.OPTION_TYPE_SEAMS)) {
-            viewer.toggleOptionVisibility(GCodeViewer.OPTION_TYPE_SEAMS);
+        GCodeViewer created = null;
+        try {
+            created = new GCodeViewer();
+            created.initGL();
+            created.setThemeColors();
+            created.load(gcodeResult);
+            if (!created.isOptionVisible(GCodeViewer.OPTION_TYPE_SEAMS)) {
+                created.toggleOptionVisibility(GCodeViewer.OPTION_TYPE_SEAMS);
+            }
+            if (isModelMultiColor()) {
+                int[] pal = com.flashforge.farm.utils.Prefs.getFilamentPalette();
+                int[] rgb = new int[pal.length];
+                for (int i = 0; i < pal.length; i++) rgb[i] = pal[i] & 0xFFFFFF;
+                created.setToolColors(rgb);
+                created.setViewType(GCodeViewer.VIEW_TYPE_TOOL);
+            } else {
+                created.setViewType(GCodeViewer.VIEW_TYPE_FEATURE);
+            }
+            viewer = created;
+            created = null;
+            android.util.Log.i("GLRenderer",
+                    "viewer loaded: nativeLayers=" + viewer.getLayersCount());
+        } catch (Exception e) {
+            android.util.Log.e("GLRenderer",
+                    "viewer init/load failed, falling back to parsed toolpaths", e);
+            if (created != null) {
+                try {
+                    created.release();
+                } catch (Exception releaseError) {
+                    android.util.Log.w("GLRenderer", "failed to release broken viewer", releaseError);
+                }
+            }
+            viewer = null;
+            return;
         }
-        if (isModelMultiColor()) {
-            int[] pal = com.flashforge.farm.utils.Prefs.getFilamentPalette();
-            int[] rgb = new int[pal.length];
-            for (int i = 0; i < pal.length; i++) rgb[i] = pal[i] & 0xFFFFFF;
-            viewer.setToolColors(rgb);
-            viewer.setViewType(GCodeViewer.VIEW_TYPE_TOOL);
-        } else {
-            viewer.setViewType(GCodeViewer.VIEW_TYPE_FEATURE);
-        }
-        // Seed the layers tab from the parsed toolpaths (native reports 0 layers).
+        // Seed the layers tab from the parsed toolpaths when the native
+        // viewer reports no layers (stub builds, or load still pending).
         if (toolpaths != null && toolpaths.getLayersCount() > 0) {
             viewer.setLayersCountOverride(toolpaths.getLayersCount());
             viewer.setLayersViewRange(toolpathFrom, Math.min(toolpathTo, toolpaths.getLayersCount() - 1));
@@ -459,13 +479,26 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             return;
         }
         java.io.File gcode = com.flashforge.farm.fragment.BedFragment.getTempGCodePath();
-        if (gcode == null || !gcode.isFile() || !gcode.canRead()) return;
+        if (gcode == null || !gcode.isFile() || !gcode.canRead()) {
+            android.util.Log.w("GLRenderer",
+                    "toolpath preview skipped, gcode file unreadable: path="
+                            + (gcode != null ? gcode.getAbsolutePath() : "null")
+                            + " isFile=" + (gcode != null && gcode.isFile())
+                            + " canRead=" + (gcode != null && gcode.canRead()));
+            return;
+        }
         com.flashforge.farm.slic3r.GCodeToolpaths.Parsed fresh;
         try {
             // 4k verts/layer keeps a 300-layer print under ~5M floats worst case; decimated by stride.
             fresh = com.flashforge.farm.slic3r.GCodeToolpaths.parse(gcode, 4096);
+            android.util.Log.i("GLRenderer",
+                    "toolpath parse ok: file=" + gcode.getAbsolutePath()
+                            + " bytes=" + gcode.length()
+                            + " layers=" + fresh.getLayersCount());
         } catch (Exception e) {
-            android.util.Log.w("GLRenderer", "toolpath parse failed: " + e.getMessage());
+            android.util.Log.w("GLRenderer",
+                    "toolpath parse failed: file=" + gcode.getAbsolutePath()
+                            + " bytes=" + gcode.length(), e);
             return;
         }
         synchronized (this) {
@@ -787,7 +820,24 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             }
 
             if (viewer != null) {
-                viewer.render(viewMatrix, projectionMatrix);
+                try {
+                    viewer.render(viewMatrix, projectionMatrix);
+                } catch (Exception e) {
+                    long layers = -1;
+                    try {
+                        layers = viewer.getLayersCount();
+                    } catch (Exception ignored) {
+                    }
+                    android.util.Log.e("GLRenderer",
+                            "viewer render failed, dropping viewer and falling back to parsed toolpaths: layers="
+                                    + layers, e);
+                    try {
+                        viewer.release();
+                    } catch (Exception releaseError) {
+                        android.util.Log.w("GLRenderer", "failed to release broken viewer", releaseError);
+                    }
+                    viewer = null;
+                }
             }
             // Fallback while the native viewer has no layers (stub builds, or
             // load still pending): draw parsed toolpath lines so the layers

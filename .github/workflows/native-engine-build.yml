@@ -550,7 +550,13 @@ jobs:
         id: engine-key
         run: |
           DEPKEY="${{ needs.build-dep.outputs.tbb_dep_key }}|${{ needs.build-dep.outputs.boost_dep_key }}|${{ needs.build-dep.outputs.occt_dep_key }}"
-          echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','engine/src/main/jni/**','app/build.gradle','scripts/build_all_deps_android.sh') }}-ndk${{ env.NDK_VERSION }}-$ABI-$DEPKEY" >> "$GITHUB_OUTPUT"
+          # engine/prusa30/** MUST be in the key: fetch_prusaslicer.sh applies
+          # patches/*.patch and farm_driver.cpp feeds the build, so a patch or
+          # driver change with an unchanged key restores a stale .so that then
+          # gets uploaded under the NEW tree-bound artifact name, poisoning
+          # every later reuse (2026-09-22: patch 0011 never reached the APK and
+          # slicing kept SIGABRTing on the unknown-flavor assert).
+          echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','engine/src/main/jni/**','engine/prusa30/**','app/build.gradle','scripts/build_all_deps_android.sh') }}-ndk${{ env.NDK_VERSION }}-$ABI-$DEPKEY" >> "$GITHUB_OUTPUT"
 
       - name: Compute engine source tree
         id: engine-src

@@ -8,22 +8,21 @@ public final class MeshDecimator {
     }
 
     public static GalleryMesh decimate(GalleryMesh mesh, int maxTris) {
-        if (mesh.triCount <= maxTris) return mesh;
+        if (mesh.triCount <= maxTris || maxTris <= 0) return mesh;
+        // Finest-first: always cluster the ORIGINAL mesh and coarsen only
+        // while still over budget, so dense models (e.g. Benchy) keep as much
+        // detail as the budget allows instead of collapsing into one coarse
+        // pass that eats chimneys/text into holes. Best effort within 8 passes.
+        int grid = (int) Math.ceil(Math.cbrt((double) maxTris * 8.0));
+        if (grid < 8) grid = 8;
+        if (grid > 256) grid = 256;
         GalleryMesh out = mesh;
-        int grid = gridFor(out.triCount, maxTris);
-        for (int pass = 0; pass < 4 && out.triCount > maxTris; pass++) {
-            out = cluster(out, grid);
-            grid = Math.max(1, grid / 2);
+        for (int pass = 0; pass < 8 && out.triCount > maxTris; pass++) {
+            GalleryMesh clustered = cluster(mesh, grid);
+            if (clustered != mesh) out = clustered;
+            grid = Math.max(4, grid / 2);
         }
         return out;
-    }
-
-    private static int gridFor(int tris, int maxTris) {
-        double ratio = (double) tris / (double) Math.max(1, maxTris);
-        int grid = (int) Math.ceil(Math.cbrt(ratio) * 4.0);
-        if (grid < 4) grid = 4;
-        if (grid > 512) grid = 512;
-        return grid;
     }
 
     private static GalleryMesh cluster(GalleryMesh mesh, int grid) {

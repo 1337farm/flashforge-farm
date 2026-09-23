@@ -47,6 +47,7 @@
     <string name="ModelContextDeleteAll">Delete all</string>
     <string name="ModelContextDeletedAll">All models deleted.</string>
     <string name="MenuFileCalibrations">Calibrat.</string>
+    <string name="MenuFileGalleryButton">Gallery</string>
     <string name="MenuFileShapeGallery">Shape gallery</string>
     <string name="MenuFileShapeGalleryAdd">Add model…</string>
     <string name="MenuFileShapeGalleryAdded">Model added to gallery.</string>

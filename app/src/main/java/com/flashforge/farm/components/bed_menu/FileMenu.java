@@ -159,6 +159,14 @@ public class FileMenu extends ListBedMenu {
                 new SpaceItem(portrait ? ViewUtils.dp(3) : 0, portrait ? 0 : ViewUtils.dp(3))));
 
         list.addAll(Arrays.asList(
+                new BedMenuItem(R.string.MenuFileGalleryButton, R.drawable.grid_layout_outline_28).setSingleLine(true).onClick(v -> {
+                    if (!fragment.getGlView().getRenderer().getBed().isValid()) {
+                        Toast.makeText(fragment.getContext(), R.string.BedConfigurationError, Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    fragment.showUnfoldMenu(new ShapeGalleryMenu(), v);
+                }),
+                new SpaceItem(portrait ? ViewUtils.dp(3) : 0, portrait ? 0 : ViewUtils.dp(3)),
                 new BedMenuItem(R.string.MenuFileCalibrations, R.drawable.wrench_outline_28).setSingleLine(true).onClick(v -> {
                     if (!fragment.getGlView().getRenderer().getBed().isValid()) {
                         Toast.makeText(fragment.getContext(), R.string.BedConfigurationError, Toast.LENGTH_SHORT).show();
@@ -463,9 +471,6 @@ public class FileMenu extends ListBedMenu {
                         Toast.makeText(ctx, "PA Pattern armed — go to the Slice tab", Toast.LENGTH_LONG).show();
                         Bus.DISMISS_CALIBRATIONS_MENU.postValue(new NeedDismissCalibrationsMenu(this));
                         dismiss(true);
-                    }),
-                    new PreferenceItem().setIcon(R.drawable.grid_layout_outline_28).setTitle(ctx.getString(R.string.MenuFileShapeGallery)).setSubtitle("Primitives, tags and your own models").setOnClickListener(v -> {
-                        fragment.showUnfoldMenu(new ShapeGalleryMenu(), v);
                     })
             ));
             rv.setAdapter(adapter);

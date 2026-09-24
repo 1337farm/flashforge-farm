@@ -67,6 +67,7 @@ public final class Bus {
     public static final Emitter<EmbossSurfaceClickedEvent> EMBOSS_SURFACE_CLICKED = new Emitter<>();
     public static final Emitter<MeasurePointsChangedEvent> MEASURE_POINTS_CHANGED = new Emitter<>();
     public static final Emitter<NeedDismissCalibrationsMenu> DISMISS_CALIBRATIONS_MENU = new Emitter<>();
+    public static final Emitter<com.flashforge.farm.events.GalleryChangedEvent> GALLERY_CHANGED = new Emitter<>();
 
     private Bus() {
     }

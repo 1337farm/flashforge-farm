@@ -38,6 +38,7 @@ import java.util.List;
 
 public class ShapeGalleryMenu extends UnfoldMenu {
     private SimpleRecyclerAdapter adapter;
+    private final Bus.Listener<com.flashforge.farm.events.GalleryChangedEvent> onGalleryChanged = e -> reload();
 
     @Override
     public int getRequestedSize(FrameLayout into, boolean portrait) {
@@ -95,8 +96,19 @@ public class ShapeGalleryMenu extends UnfoldMenu {
         return ll;
     }
 
-    private void reload() {
-        new Thread(() -> {
+    @Override
+    protected void onCreate() {
+        super.onCreate();
+        Bus.GALLERY_CHANGED.observeForever(onGalleryChanged);
+    }
+
+    @Override
+    protected void onDestroy() {
+        Bus.GALLERY_CHANGED.removeObserver(onGalleryChanged);
+        super.onDestroy();
+    }
+
+    private void reload() {        new Thread(() -> {
             final List<SimpleRecyclerItem> rows = buildRows();
             ViewUtils.postOnMainThread(() -> {
                 if (adapter != null) adapter.setItems(rows);

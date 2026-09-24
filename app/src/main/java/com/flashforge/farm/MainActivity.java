@@ -413,8 +413,10 @@ public class MainActivity extends AppCompatActivity {
                         String name = IOUtils.getDisplayName(importUri);
                         in = getContentResolver().openInputStream(importUri);
                         com.flashforge.farm.gallery.GalleryStore.importStream(in, name);
-                        ViewUtils.postOnMainThread(() ->
-                                Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuFileShapeGalleryAdded)));
+                        ViewUtils.postOnMainThread(() -> {
+                            Bus.GALLERY_CHANGED.postValue(new com.flashforge.farm.events.GalleryChangedEvent());
+                            Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuFileShapeGalleryAdded));
+                        });
                     } catch (Exception e) {
                         ViewUtils.postOnMainThread(() ->
                             new FarmAlertDialogBuilder(this)

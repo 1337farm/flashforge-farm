@@ -11,7 +11,7 @@ import android.view.View;
 import android.view.ViewConfiguration;
 
 public class SpinningPreviewView extends View {
-    private static final int MAX_BUF = 144;
+    private static final int MAX_BUF = 230;
     /** Slow turntable: full revolution in ~12s (was STEP/frame ~2s/rev). */
     private static final float AUTO_SPEED = 0.52f;
     private static final float DEFAULT_TILT = -0.35f;

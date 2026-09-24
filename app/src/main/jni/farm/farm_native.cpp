@@ -38,6 +38,7 @@
 #include "Slic3r/Domain/CutConnector.hpp"
 #include "Slic3r/Domain/LayerHeightProfile.hpp"
 #include "farm_driver.hpp"
+#include "farm_progress.hpp"
 #include "Slic3r/Biz/FileLoadingLogic.hpp"
 #include "Slic3r/Biz/Algorithms/Model.hpp"
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
@@ -288,13 +289,10 @@ struct ConfigRef {
     bool unused = false;
 };
 
-static jclass sliceListenerClass;
-static jmethodID sliceListenerOnProgress;
+static JavaVM* staticVM;
 
 static jclass shadersManagerClass = nullptr;
 static jmethodID shadersManagerGetCurrent = nullptr;
-
-static JavaVM* staticVM;
 
 // The Java GLShadersManager owns the programs (built via shader_init_from_texts)
 // and tracks GLES30.glGetIntegerv(GL_CURRENT_PROGRAM); ask it for the matching
@@ -326,9 +324,6 @@ extern "C" {
         }
 
         staticVM = vm;
-
-        sliceListenerClass = env->FindClass("com/flashforge/farm/slic3r/SliceListener");
-        sliceListenerOnProgress = env->GetMethodID(sliceListenerClass, "onProgress", "(ILjava/lang/String;)V");
 
         shadersManagerClass = static_cast<jclass>(env->NewGlobalRef(env->FindClass("com/flashforge/farm/slic3r/GLShadersManager")));
         shadersManagerGetCurrent = env->GetStaticMethodID(shadersManagerClass, "getCurrentShaderPointer", "()J");
@@ -805,12 +800,20 @@ extern "C" {
         (void) numFilaments; (void) colorsArr;
         (void) calibMode; (void) calibStart; (void) calibEnd; (void) calibStep;
 
-        // model_slice runs on the app's farm-slice Java thread, so the
-        // captured env is valid for the whole call.
+        // Progress callbacks fire on arbitrary TBB worker threads during
+        // print->process() (worse with 2+ models), so reporting must go
+        // through the mailbox pump: calling JNI env methods captured from
+        // this thread on a worker thread is a CheckJNI abort (SIGABRT).
+        JavaVM* vm = nullptr;
+        if (env->GetJavaVM(&vm) != JNI_OK || vm == nullptr) {
+            LOGE("model_slice: GetJavaVM failed");
+            env->ThrowNew(env->FindClass("com/flashforge/farm/slic3r/Slic3rRuntimeError"),
+                "slice progress channel unavailable");
+            return 0;
+        }
+        farm::ScopedProgress scopedProgress(env, vm, listener);
         auto progress = [&](int percent, const std::string& stage) {
-            jstring js = env->NewStringUTF(stage.c_str());
-            env->CallVoidMethod(listener, sliceListenerOnProgress, (jint) percent, js);
-            env->DeleteLocalRef(js);
+            farm::progress_set(percent, stage.c_str());
         };
 
         try {

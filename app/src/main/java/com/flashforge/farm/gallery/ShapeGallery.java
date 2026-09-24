@@ -11,12 +11,12 @@ public final class ShapeGallery {
     private ShapeGallery() {
     }
 
-    public static final int PREVIEW_MAX_TRIS = 1200;
-    // preview3_: the finest-first decimator (MeshDecimator rewrite) changed
-    // what a cached preview looks like; stale preview2_ files hold the old
-    // coarse mush (e.g. Benchy with eaten features). Bump forces regeneration.
-    private static final String PREVIEW_CACHE_PREFIX = "preview3_";
-    private static final String[] LEGACY_PREVIEW_CACHE_PREFIXES = {"preview_", "preview2_"};
+    public static final int PREVIEW_MAX_TRIS = 8000;
+    // preview4_: the 8000-tri budget changes preview content vs the 1200-tri
+    // era (e.g. Benchy keeps full height and small features); stale files
+    // are regenerated, legacy swept below.
+    private static final String PREVIEW_CACHE_PREFIX = "preview4_";
+    private static final String[] LEGACY_PREVIEW_CACHE_PREFIXES = {"preview_", "preview2_", "preview3_"};
 
     public static final int KIND_CUBE = 1;
     public static final int KIND_CYLINDER = 2;

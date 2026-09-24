@@ -647,12 +647,13 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         float worldH = 14f;
         float worldW = worldH * bmp.getWidth() / (float) bmp.getHeight();
         bmp.recycle();
-        // Off the plate, in front of it (below min.y), so the tag never
-        // covers the print area and stays readable at any orbit angle.
+        // Off the plate, in front of it (below min.y), left-aligned, so the
+        // tag never covers the print area and stays readable at any orbit
+        // angle.
         float margin = 8f;
         float gap = 4f;
-        float x1 = (float) (vmax.x - margin);
-        float x0 = x1 - worldW;
+        float x0 = (float) (vmin.x + margin);
+        float x1 = x0 + worldW;
         float y1 = (float) (vmin.y - gap);
         float y0 = y1 - worldH;
         float z = 0.06f;

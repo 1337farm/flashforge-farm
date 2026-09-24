@@ -50,7 +50,7 @@ public class ShapeGalleryMenu extends UnfoldMenu {
         ll.setOrientation(LinearLayout.VERTICAL);
 
         TextView header = new TextView(ctx);
-        header.setText(R.string.MenuFileShapeGallery);
+        header.setText(R.string.MenuFileGalleryButton);
         header.setTypeface(ViewUtils.getTypeface(ViewUtils.ROBOTO_MEDIUM));
         header.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
         header.setTextColor(ThemesRepo.getColor(android.R.attr.textColorPrimary));

@@ -52,6 +52,12 @@ public class GLView extends GLSurfaceView implements IThemeView {
     // midpoint when the drag started. Null when the ray misses the plane
     // (camera looking horizontal) or no pan is active.
     private Vec3d panGrabPoint = null;
+    // Last pinch finger positions in view pixels (UI thread only).
+    private float lastPinchX0, lastPinchY0, lastPinchX1, lastPinchY1;
+    private boolean hasLastPinch = false;
+    // World point pinned under the pinch midpoint. Written and read on the GL
+    // thread only (inside queued runnables); volatile for UI visibility.
+    private volatile Vec3d pinchAnchor = null;
     // Last midpoint in render pixels, for the physical-gain pan fallback.
     private float lastPanX, lastPanY;
     private boolean hasLastPan = false;
@@ -206,6 +212,8 @@ public class GLView extends GLSurfaceView implements IThemeView {
     private void clearPanAnchor() {
         panGrabPoint = null;
         hasLastPan = false;
+        hasLastPinch = false;
+        pinchAnchor = null;
     }
 
     public void setOnModelLongPressListener(OnModelLongPressListener onModelLongPressListener) {
@@ -603,36 +611,63 @@ public class GLView extends GLSurfaceView implements IThemeView {
                     }
                 }
                 if (isScaling) {
+                    float x0 = e.getX(0), y0 = e.getY(0), x1 = e.getX(1), y1 = e.getY(1);
                     float last = lastLength;
                     lastLength = len;
 
-                    if (!startingGesture && last > 0) {
-                        // Multiplicative pinch centered on the gesture midpoint:
-                        // the bed-plane point under the midpoint stays put.
-                        // Runs on the GL thread: updateProjection rewrites the
-                        // projection matrix, which the draw loop reads without
-                        // locking — doing it here on the UI thread tears the
-                        // matrix mid-frame (quarter-screen blip / mirror flip).
-                        final float factor;
-                        {
-                            float f = len / last;
-                            if (f > 2f) f = 2f;
-                            else if (f < 0.5f) f = 0.5f;
-                            factor = f;
+                    if (!startingGesture) {
+                        // Dual-ray pinch: raycast from BOTH fingers under the
+                        // pre-zoom view. The world-space span ratio drives the
+                        // zoom (correct under perspective foreshortening, where
+                        // a screen-pixel ratio is wrong), and the pinned anchor
+                        // absorbs pan so content never slides under the fingers.
+                        // The zoom + anchor correction run on the GL thread:
+                        // updateProjection rewrites the matrix the draw loop
+                        // reads without locking.
+                        float rs = Prefs.getRenderScale();
+                        Vec3d p0a = hasLastPinch ? renderer.screenToBedPlane(lastPinchX0 * rs, lastPinchY0 * rs) : null;
+                        Vec3d p1a = hasLastPinch ? renderer.screenToBedPlane(lastPinchX1 * rs, lastPinchY1 * rs) : null;
+                        Vec3d p0b = renderer.screenToBedPlane(x0 * rs, y0 * rs);
+                        Vec3d p1b = renderer.screenToBedPlane(x1 * rs, y1 * rs);
+                        float f;
+                        if (p0a != null && p1a != null && p0b != null && p1b != null) {
+                            double spanA = Math.hypot(p1a.x - p0a.x, p1a.y - p0a.y);
+                            double spanB = Math.hypot(p1b.x - p0b.x, p1b.y - p0b.y);
+                            f = (spanA > 1e-6 && spanB > 0 && last > 0) ? (float) (spanB / spanA) : (last > 0 ? len / last : 1f);
+                        } else if (last > 0) {
+                            f = len / last;
+                        } else {
+                            f = 1f;
                         }
+                        if (f > 2f) f = 2f;
+                        else if (f < 0.5f) f = 0.5f;
+                        final float factor = f;
                         final float mx = x, my = y;
                         queueEvent(() -> {
-                            float rs = Prefs.getRenderScale();
-                            Vec3d before = renderer.screenToBedPlane(mx * rs, my * rs);
+                            float r2 = Prefs.getRenderScale();
+                            Vec3d target = pinchAnchor;
+                            if (target == null) {
+                                target = renderer.screenToBedPlane(mx * r2, my * r2);
+                            }
                             renderer.getCamera().zoomBy(factor);
                             renderer.updateProjection();
-                            Vec3d after = renderer.screenToBedPlane(mx * rs, my * rs);
-                            if (before != null && after != null) {
-                                renderer.getCamera().moveByWorld(before.x - after.x, before.y - after.y, 0);
+                            if (target != null) {
+                                Vec3d cur = renderer.screenToBedPlane(mx * r2, my * r2);
+                                if (cur != null) {
+                                    renderer.getCamera().moveByWorld(target.x - cur.x, target.y - cur.y, 0);
+                                    pinchAnchor = target;
+                                } else {
+                                    pinchAnchor = null;
+                                }
                             }
                             requestRender();
                         });
                     }
+                    lastPinchX0 = x0;
+                    lastPinchY0 = y0;
+                    lastPinchX1 = x1;
+                    lastPinchY1 = y1;
+                    hasLastPinch = true;
 
                     lastX = x;
                     lastY = y;

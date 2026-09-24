@@ -15,6 +15,9 @@ package com.flashforge.farm.gallery;
  * including per-vertex perspective — grazing/edge-on slivers excepted), so
  * {@link #keepTriangle(float)} culls the rest. This mirrors the build-plate
  * path, where GL culls non-CCW-front faces of the same outward soup.
+ * Sub-pixel front faces are KEPT (epsilon band only): culling them by screen
+ * area punched holes in dense models (Benchy lost ~25% coverage at 144px),
+ * while depth-tested splatting stays correct.
  */
 public final class PreviewRaster {
     private PreviewRaster() {
@@ -22,8 +25,8 @@ public final class PreviewRaster {
 
     /** Focal length in bounding-sphere radii; 2.5 gives visible depth. */
     public static final float FOCAL_RADII = 2.5f;
-    /** Half-width of the degenerate-triangle screen-area band (px^2). */
-    public static final float MIN_AREA = 0.25f;
+    /** Degenerate-triangle screen-area epsilon (px^2): only truly collapsed tris are dropped. */
+    public static final float MIN_AREA = 1e-6f;
     /** Flat-shade ramp: base + diffuse * clamped Lambert term. */
     public static final float BASE_SHADE = 0.38f;
     public static final float DIFF_SHADE = 0.62f;
@@ -73,10 +76,9 @@ public final class PreviewRaster {
     }
 
     /**
-     * Keep iff the triangle faces the camera: {@code area >= MIN_AREA}.
-     * This is exactly the old two-line rule (degenerate band
-     * {@code |area| < MIN_AREA} plus away-face cull {@code area <= 0})
-     * fused into one predicate so the facing convention has a single home.
+     * Keep iff the triangle faces the camera: {@code area} strictly positive
+     * past a degenerate epsilon. Backfaces ({@code area <= 0} modulo epsilon)
+     * are culled; sub-pixel front faces splat and depth-test normally.
      */
     public static boolean keepTriangle(float area) {
         return area >= MIN_AREA;

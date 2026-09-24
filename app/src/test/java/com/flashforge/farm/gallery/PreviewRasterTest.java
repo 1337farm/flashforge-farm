@@ -80,8 +80,9 @@ public class PreviewRasterTest {
         // projects CCW (area > 0), the +Z face CW (area < 0).
         assertTrue(PreviewRaster.keepTriangle(400f));
         assertFalse(PreviewRaster.keepTriangle(-400f));
-        // Degenerate band on both sides.
-        assertFalse(PreviewRaster.keepTriangle(0.1f));
+        // Only truly degenerate tris are dropped; sub-pixel front faces must
+        // splat (dense models lost ~25% coverage to the old 0.25 band).
+        assertTrue(PreviewRaster.keepTriangle(0.1f));
         assertFalse(PreviewRaster.keepTriangle(-0.1f));
         assertFalse(PreviewRaster.keepTriangle(0f));
     }

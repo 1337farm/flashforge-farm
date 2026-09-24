@@ -244,13 +244,18 @@ public class GLRenderer implements GLSurfaceView.Renderer {
      * ray runs parallel to the plane or points away from it. Used for 1:1
      * grab-panning and anchored pinch zoom in both projections. Safe to call
      * off the GL thread: matrices are defensively copied.
+     *
+     * Ray construction differs by projection: perspective rays fan out from
+     * the camera position, while orthographic rays are parallel, so the ray
+     * origin is the unprojected near-plane point and the direction is the
+     * camera forward vector. Using the perspective form for ortho skews the
+     * mapping and makes panning fast and wrong.
      */
     public Vec3d screenToBedPlane(float x, float y) {
         int w = viewportWidth, h = viewportHeight;
         if (w <= 0 || h <= 0 || camera == null) return null;
         double[] viewCopy = camera.getViewModelMatrix().clone();
         double[] projCopy = projectionMatrix.clone();
-        double px = camera.position.x, py = camera.position.y, pz = camera.position.z;
         double[] near;
         try {
             near = com.flashforge.farm.slic3r.Native.utils_unproject(viewCopy, projCopy, w, h, x, y);
@@ -259,11 +264,28 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             return null;
         }
         if (near == null || near.length < 3) return null;
-        double dx = near[0] - px, dy = near[1] - py, dz = near[2] - pz;
+        double ox, oy, oz, dx, dy, dz;
+        if (com.flashforge.farm.utils.Prefs.isOrthoProjectionEnabled()) {
+            ox = near[0];
+            oy = near[1];
+            oz = near[2];
+            Vec3d fwd = camera.getDirForward();
+            dx = fwd.x;
+            dy = fwd.y;
+            dz = fwd.z;
+        } else {
+            double px = camera.position.x, py = camera.position.y, pz = camera.position.z;
+            ox = px;
+            oy = py;
+            oz = pz;
+            dx = near[0] - px;
+            dy = near[1] - py;
+            dz = near[2] - pz;
+        }
         if (Math.abs(dz) < 1e-9) return null;
-        double t = -pz / dz;
+        double t = -oz / dz;
         if (!(t > 0)) return null;
-        return new Vec3d(px + dx * t, py + dy * t, 0);
+        return new Vec3d(ox + dx * t, oy + dy * t, 0);
     }
 
     /**

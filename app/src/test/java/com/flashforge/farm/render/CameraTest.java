@@ -95,6 +95,23 @@ public class CameraTest {
     }
 
     @Test
+    public void testRotateAround_clampsPitchBelow89() {
+        // Straight-down/up makes the view direction parallel to the up
+        // vector and setLookAtM degenerate (frame flip). Huge drags must
+        // stop at ±89° with finite direction.
+        Camera c = defaultCamera();
+        c.rotateAround(0, 10000);
+        Vec3d down = c.getDirForward();
+        assertTrue(Double.isFinite(down.x + down.y + down.z));
+        assertTrue(Math.abs(down.z) <= Math.sin(Math.toRadians(89)) + 1e-9);
+        Camera c2 = defaultCamera();
+        c2.rotateAround(0, -10000);
+        Vec3d up = c2.getDirForward();
+        assertTrue(Double.isFinite(up.x + up.y + up.z));
+        assertTrue(Math.abs(up.z) <= Math.sin(Math.toRadians(89)) + 1e-9);
+    }
+
+    @Test
     public void testRotateAround_keepsDistance() {
         Camera c = defaultCamera();
         double dx = c.position.x - c.origin.x;

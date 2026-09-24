@@ -140,8 +140,12 @@ public class CameraMenu extends ListBedMenu {
                 }),
                 new BedMenuItem(R.string.MenuCameraOrtho, R.drawable.image_format_32).setCheckable((buttonView, isChecked) -> {
                     Prefs.setOrthoProjectionEnabled(isChecked);
-                    fragment.getGlView().getRenderer().updateProjection();
-                    fragment.getGlView().requestRender();
+                    // GL thread: updateProjection rewrites the matrix the draw
+                    // loop reads without locking.
+                    fragment.getGlView().queueEvent(() -> {
+                        fragment.getGlView().getRenderer().updateProjection();
+                        fragment.getGlView().requestRender();
+                    });
                 }, Prefs.isOrthoProjectionEnabled()));
     }
 
@@ -178,8 +182,13 @@ public class CameraMenu extends ListBedMenu {
                             ViewUtils.lerpd(fromOrigin.y, toOrigin.y, value),
                             ViewUtils.lerpd(fromOrigin.z, toOrigin.z, value)
                     );
-                    glView.getRenderer().updateProjection();
-                    glView.requestRender();
+                    // Projection update on the GL thread (see above); the
+                    // camera fields themselves are plain doubles also read
+                    // by the frame loop, matching existing behavior.
+                    glView.queueEvent(() -> {
+                        glView.getRenderer().updateProjection();
+                        glView.requestRender();
+                    });
                 })
                 .start();
     }

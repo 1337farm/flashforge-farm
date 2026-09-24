@@ -609,18 +609,29 @@ public class GLView extends GLSurfaceView implements IThemeView {
                     if (!startingGesture && last > 0) {
                         // Multiplicative pinch centered on the gesture midpoint:
                         // the bed-plane point under the midpoint stays put.
-                        float factor = len / last;
-                        if (factor > 2f) factor = 2f;
-                        else if (factor < 0.5f) factor = 0.5f;
-                        float rs = Prefs.getRenderScale();
-                        Vec3d before = renderer.screenToBedPlane(x * rs, y * rs);
-                        renderer.getCamera().zoomBy(factor);
-                        renderer.updateProjection();
-                        Vec3d after = renderer.screenToBedPlane(x * rs, y * rs);
-                        if (before != null && after != null) {
-                            renderer.getCamera().moveByWorld(before.x - after.x, before.y - after.y, 0);
+                        // Runs on the GL thread: updateProjection rewrites the
+                        // projection matrix, which the draw loop reads without
+                        // locking — doing it here on the UI thread tears the
+                        // matrix mid-frame (quarter-screen blip / mirror flip).
+                        final float factor;
+                        {
+                            float f = len / last;
+                            if (f > 2f) f = 2f;
+                            else if (f < 0.5f) f = 0.5f;
+                            factor = f;
                         }
-                        requestRender();
+                        final float mx = x, my = y;
+                        queueEvent(() -> {
+                            float rs = Prefs.getRenderScale();
+                            Vec3d before = renderer.screenToBedPlane(mx * rs, my * rs);
+                            renderer.getCamera().zoomBy(factor);
+                            renderer.updateProjection();
+                            Vec3d after = renderer.screenToBedPlane(mx * rs, my * rs);
+                            if (before != null && after != null) {
+                                renderer.getCamera().moveByWorld(before.x - after.x, before.y - after.y, 0);
+                            }
+                            requestRender();
+                        });
                     }
 
                     lastX = x;

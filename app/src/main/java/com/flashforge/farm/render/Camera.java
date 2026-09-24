@@ -168,10 +168,15 @@ public class Camera {
         double pitch = Math.toDegrees(Math.asin(-scratchDir.z));
 
         double mry = -ry;
-        if (pitch + mry > 90) {
-            mry = 0;
-        } else if (pitch + mry < -90) {
-            mry = 0;
+        // Keep the orbit clear of exactly straight-down/up: at ±90° the view
+        // direction goes parallel to the up vector, setLookAtM degenerates,
+        // and the frame flips. Clamp instead of zeroing so the view slides
+        // along the limit instead of sticking.
+        double targetPitch = pitch + mry;
+        if (targetPitch > 89) {
+            mry = 89 - pitch;
+        } else if (targetPitch < -89) {
+            mry = -89 - pitch;
         }
 
         DoubleMatrix.rotateM(tempMatrix, 0, -mry * Math.cos(yaw), 1, 0, 0);

@@ -644,7 +644,7 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         GLUtils.texImage2D(GL_TEXTURE_2D, 0, bmp, 0);
         glBindTexture(GL_TEXTURE_2D, 0);
-        float worldH = 14f;
+        float worldH = 19.6f;
         float worldW = worldH * bmp.getWidth() / (float) bmp.getHeight();
         bmp.recycle();
         // Off the plate, in front of it (below min.y), left-aligned, so the

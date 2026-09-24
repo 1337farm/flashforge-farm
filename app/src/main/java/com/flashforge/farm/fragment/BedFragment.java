@@ -870,27 +870,36 @@ public class BedFragment extends Fragment {
                         com.flashforge.farm.utils.DoubleMatrix.multiplyMM(vpMatrix, 0, proj, 0, view, 0);
                         com.flashforge.farm.utils.DoubleMatrix.multiplyMV(outVec, 0, vpMatrix, 0, inVec, 0);
 
-                        if (outVec[3] != 0 && outVec[2] > 0 && outVec[2] < outVec[3]) {
+                        if (outVec[3] > 1e-9) {
                             float ndcX = (float) (outVec[0] / outVec[3]);
                             float ndcY = (float) (outVec[1] / outVec[3]);
-                            
+                            float ndcZ = (float) (outVec[2] / outVec[3]);
+                            // Portable clip test for both projections: behind
+                            // the camera (w <= 0, mirrored NDC) or outside
+                            // depth range hides the label. The old
+                            // outVec[2] > 0 test only fits perspective clip
+                            // space and blanked the label in ortho almost
+                            // everywhere.
+                            if (Math.abs(ndcX) > 1f || Math.abs(ndcY) > 1f || Math.abs(ndcZ) > 1f) {
+                                plateIndicatorText.setAlpha(0.0f);
+                                return;
+                            }
                             float screenX = (ndcX + 1.0f) / 2.0f * glView.getWidth();
                             float screenY = (1.0f - ndcY) / 2.0f * glView.getHeight();
-                            
+
                             plateIndicatorText.setTranslationX(screenX - plateIndicatorText.getWidth() / 2f);
                             plateIndicatorText.setTranslationY(screenY - plateIndicatorText.getHeight() / 2f);
 
-                            com.flashforge.farm.utils.Vec3d dir = r.getCamera().getDirForward();
-                            double yaw = Math.atan2(dir.x, dir.y);
-                            double pitch = Math.asin(-dir.z);
+                            // The label stays upright on screen: no 3D tilt or
+                            // yaw spin, so it never mirrors or edge-ons away
+                            // at steep orbit angles.
+                            plateIndicatorText.setRotationX(0f);
+                            plateIndicatorText.setRotation(0f);
 
-                            plateIndicatorText.setRotationX((float) Math.toDegrees(Math.PI / 2 - pitch));
-                            plateIndicatorText.setRotation((float) Math.toDegrees(-yaw));
-                            
                             float scale = Math.max(0.2f, r.getCamera().getZoom() * 0.8f);
                             plateIndicatorText.setScaleX(scale);
                             plateIndicatorText.setScaleY(scale);
-                            
+
                             plateIndicatorText.setAlpha(1.0f);
                         } else {
                             plateIndicatorText.setAlpha(0.0f);

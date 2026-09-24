@@ -5,8 +5,13 @@ import com.flashforge.farm.Bus;
 import static android.opengl.GLES30.*;
 import static com.flashforge.farm.utils.DebugUtils.assertTrue;
 
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Typeface;
 import android.opengl.GLSurfaceView;
+import android.opengl.GLUtils;
 import android.util.Log;
 
 import androidx.core.graphics.ColorUtils;
@@ -94,6 +99,13 @@ public class GLRenderer implements GLSurfaceView.Renderer {
     private final List<GLModel> toolpathModels = new ArrayList<>();
     private long toolpathFrom = 0, toolpathTo = Long.MAX_VALUE;
     private boolean toolpathsDirty = true;
+
+    // Plate name tag painted flat on the build plate (front-right corner):
+    // a textured quad fixed in bed coordinates. It never rotates or tracks
+    // the camera, so it cannot mirror or edge-on away like an overlay can.
+    private GLModel plateLabelModel = null;
+    private int plateLabelTexId = 0;
+    private String plateLabelKey = "";
 
     // Primary selection (drives the transform gizmo, flatten, fill-bed, duplicate).
     // selectedObjects holds the full multi-selection; when non-empty it always contains selectedObject.
@@ -589,6 +601,94 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         toolpathModels.clear();
     }
 
+    private static Bitmap renderPlateLabelBitmap(String text) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setTypeface(Typeface.DEFAULT_BOLD);
+        paint.setTextSize(96f);
+        paint.setColor(0xFFFFFFFF);
+        paint.setShadowLayer(6f, 0f, 3f, 0xCC000000);
+        float w = paint.measureText(text);
+        Paint.FontMetrics fm = paint.getFontMetrics();
+        float h = fm.descent - fm.ascent;
+        Bitmap bmp = Bitmap.createBitmap(Math.max(2, (int) Math.ceil(w + 32)),
+                Math.max(2, (int) Math.ceil(h + 32)), Bitmap.Config.ARGB_8888);
+        new Canvas(bmp).drawText(text, 16f, 16f - fm.ascent, paint);
+        return bmp;
+    }
+
+    private void releasePlateLabel() {
+        if (plateLabelModel != null) {
+            plateLabelModel.release();
+            plateLabelModel = null;
+        }
+        if (plateLabelTexId != 0) {
+            glDeleteTextures(1, new int[]{plateLabelTexId}, 0);
+            plateLabelTexId = 0;
+        }
+        plateLabelKey = "";
+    }
+
+    private void rebuildPlateLabel(String text, Vec3d vmin, Vec3d vmax) {
+        releasePlateLabel();
+        Bitmap bmp = renderPlateLabelBitmap(text);
+        int[] tex = new int[1];
+        glGenTextures(1, tex, 0);
+        if (tex[0] == 0) {
+            bmp.recycle();
+            return;
+        }
+        glBindTexture(GL_TEXTURE_2D, tex[0]);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        GLUtils.texImage2D(GL_TEXTURE_2D, 0, bmp, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        float worldH = 14f;
+        float worldW = worldH * bmp.getWidth() / (float) bmp.getHeight();
+        bmp.recycle();
+        float margin = 8f;
+        float x1 = (float) (vmax.x - margin);
+        float x0 = (float) Math.max(vmin.x + 2, x1 - worldW);
+        float y0 = (float) (vmin.y + margin);
+        float y1 = y0 + worldH;
+        float z = 0.06f;
+        GLModel gm = new GLModel();
+        gm.initTexturedQuad(
+                new float[]{x0, y0, z, x1, y0, z, x1, y1, z, x0, y1, z},
+                new float[]{0, 1, 1, 1, 1, 0, 0, 0});
+        if (!gm.isInitialized() || gm.isEmpty()) {
+            gm.release();
+            glDeleteTextures(1, tex, 0);
+            return;
+        }
+        plateLabelModel = gm;
+        plateLabelTexId = tex[0];
+    }
+
+    private void drawPlateLabel(double[] viewMatrix) {
+        if (bed == null || !bed.isValid() || shadersManager == null) return;
+        String text = "Plate " + (currentPlateIndex + 1);
+        Vec3d vmin = bed.getVolumeMin(), vmax = bed.getVolumeMax();
+        String key = text + "|" + vmin.x + "," + vmin.y + "," + vmax.x + "," + vmax.y;
+        if (plateLabelModel == null || plateLabelTexId == 0 || !key.equals(plateLabelKey)) {
+            rebuildPlateLabel(text, vmin, vmax);
+            if (plateLabelModel == null || plateLabelTexId == 0) return;
+            plateLabelKey = key;
+        }
+        GLShaderProgram shader = shadersManager.get(GLShadersManager.SHADER_FLAT_TEXTURE);
+        shader.startUsing();
+        shader.setUniformMatrix4fv("view_model_matrix", viewMatrix);
+        shader.setUniformMatrix4fv("projection_matrix", projectionMatrix);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glBindTexture(GL_TEXTURE_2D, plateLabelTexId);
+        plateLabelModel.render();
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glDisable(GL_BLEND);
+        shader.stopUsing();
+    }
+
     private void drawToolpaths(double[] viewMatrix) {
         if (!isViewerEnabled || gcodeResult == null) return;
         ensureToolpaths();
@@ -876,6 +976,7 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         }
         if (bed.isValid()) {
             bed.render(shadersManager, bottom, viewMatrix, projectionMatrix, 1f / camera.getZoom());
+            drawPlateLabel(viewMatrix);
             // Multi-plate grid: draw the other plates' beds at their offsets (edit mode only).
             if (viewer == null && !isViewerEnabled) {
                 for (int p = 0; p < inactivePlateOffsets.size(); p++) {
@@ -2259,6 +2360,7 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             measurePointModel.release();
             measurePointModel = null;
         }
+        releasePlateLabel();
         for (GLModel m : toolpathModels) {
             m.release();
         }

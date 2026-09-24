@@ -1078,6 +1078,34 @@ extern "C" {
         ref->model.init_from(std::move(g));
     }
 
+    JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1textured_1quad(JNIEnv* env, jclass, jlong ptr, jfloatArray xyzArr, jfloatArray uvArr) {
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        if (ref == nullptr || xyzArr == nullptr || uvArr == nullptr) return;
+        if (env->GetArrayLength(xyzArr) != 12 || env->GetArrayLength(uvArr) != 8) return;
+        jfloat* xyz = env->GetFloatArrayElements(xyzArr, nullptr);
+        jfloat* uv = env->GetFloatArrayElements(uvArr, nullptr);
+        if (xyz == nullptr || uv == nullptr) {
+            if (xyz != nullptr) env->ReleaseFloatArrayElements(xyzArr, xyz, JNI_ABORT);
+            if (uv != nullptr) env->ReleaseFloatArrayElements(uvArr, uv, JNI_ABORT);
+            return;
+        }
+        Slic3r::GUI::GLModel::Geometry g;
+        g.format = {Slic3r::GUI::GLModel::Geometry::EPrimitiveType::Triangles,
+                    Slic3r::GUI::GLModel::Geometry::EVertexLayout::P3T2};
+        g.reserve_vertices(4);
+        g.reserve_indices(6);
+        for (int i = 0; i < 4; ++i) {
+            g.add_vertex(Domain::Vec3f(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]),
+                         Domain::Vec2f(uv[i * 2], uv[i * 2 + 1]));
+        }
+        g.add_triangle(0, 1, 2);
+        g.add_triangle(0, 2, 3);
+        env->ReleaseFloatArrayElements(xyzArr, xyz, JNI_ABORT);
+        env->ReleaseFloatArrayElements(uvArr, uv, JNI_ABORT);
+        ref->model.reset();
+        ref->model.init_from(std::move(g));
+    }
+
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1background_1triangles(JNIEnv* env, jclass, jlong ptr) {
         (void) env;
         GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;

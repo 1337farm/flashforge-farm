@@ -338,6 +338,7 @@ public class Native {
     public static void glmodel_stilized_arrow(long ptr, float tipRadius, float tipLength, float stemRadius, float stemLength) {}
     public static void glmodel_init_background_triangles(long ptr) {}
     public static void glmodel_init_from_path(long ptr, float[] vertices, int[] indices, boolean lineStrip) {}
+    public static void glmodel_init_textured_quad(long ptr, float[] xyz, float[] uv) {}
     public static void glmodel_init_bounding_box(long ptr, long modelPtr, int i) {}
     public static boolean glmodel_is_initialized(long ptr) { return true; }
     public static boolean glmodel_is_empty(long ptr) { return false; }

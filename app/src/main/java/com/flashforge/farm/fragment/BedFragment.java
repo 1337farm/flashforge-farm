@@ -138,7 +138,6 @@ public class BedFragment extends Fragment {
 
     private int totalPlates = 1; // used for importing
     private File currentProjectFile;
-    private TextView plateIndicatorText;
 
     public Model getCurrentModel() {
         if (platesModels.isEmpty()) return null;
@@ -560,16 +559,6 @@ public class BedFragment extends Fragment {
             }
         };
 
-        plateIndicatorText = new TextView(ctx);
-        plateIndicatorText.setTextSize(16);
-        plateIndicatorText.setTextColor(0xAAFFFFFF);
-        plateIndicatorText.setShadowLayer(4, 0, 0, 0xFF000000);
-        plateIndicatorText.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        plateIndicatorText.setText("Plate " + (currentPlateIndex + 1));
-        FrameLayout.LayoutParams indicatorParams = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        indicatorParams.gravity = Gravity.TOP | Gravity.START;
-        indicatorParams.topMargin = ViewUtils.dp(80);
-        indicatorParams.leftMargin = ViewUtils.dp(16);
         LinearLayout ll = new LinearLayout(ctx);
         DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
         boolean portrait = dm.widthPixels < dm.heightPixels;
@@ -840,76 +829,9 @@ public class BedFragment extends Fragment {
                 leftMargin = ViewUtils.dp(80 * 2);
             }
         }});
-        indicatorParams.gravity = Gravity.TOP | Gravity.START;
-        indicatorParams.topMargin = 0;
-        indicatorParams.leftMargin = 0;
-        overlayLayout.addView(plateIndicatorText, indicatorParams);
-
-        android.view.Choreographer.getInstance().postFrameCallback(new android.view.Choreographer.FrameCallback() {
-            private double[] vpMatrix = new double[16];
-            private double[] inVec = new double[4];
-            private double[] outVec = new double[4];
-
-            @Override
-            public void doFrame(long frameTimeNanos) {
-                if (glView != null && glView.getRenderer() != null && plateIndicatorText != null) {
-                    com.flashforge.farm.render.GLRenderer r = glView.getRenderer();
-                    com.flashforge.farm.slic3r.Bed3D bed = r.getBed();
-                    if (bed != null && bed.isValid() && r.getCamera() != null) {
-                        com.flashforge.farm.utils.Vec3d min = bed.getVolumeMin();
-                        com.flashforge.farm.utils.Vec3d max = bed.getVolumeMax();
-                        
-                        // Place it above the top left corner, aligned with the left edge
-                        inVec[0] = min.x + 30;
-                        inVec[1] = max.y + 15;
-                        inVec[2] = 0;
-                        inVec[3] = 1.0;
-
-                        double[] view = r.getCamera().getViewModelMatrix();
-                        double[] proj = r.getProjectionMatrix();
-                        com.flashforge.farm.utils.DoubleMatrix.multiplyMM(vpMatrix, 0, proj, 0, view, 0);
-                        com.flashforge.farm.utils.DoubleMatrix.multiplyMV(outVec, 0, vpMatrix, 0, inVec, 0);
-
-                        if (outVec[3] > 1e-9) {
-                            float ndcX = (float) (outVec[0] / outVec[3]);
-                            float ndcY = (float) (outVec[1] / outVec[3]);
-                            float ndcZ = (float) (outVec[2] / outVec[3]);
-                            // Portable clip test for both projections: behind
-                            // the camera (w <= 0, mirrored NDC) or outside
-                            // depth range hides the label. The old
-                            // outVec[2] > 0 test only fits perspective clip
-                            // space and blanked the label in ortho almost
-                            // everywhere.
-                            if (Math.abs(ndcX) > 1f || Math.abs(ndcY) > 1f || Math.abs(ndcZ) > 1f) {
-                                plateIndicatorText.setAlpha(0.0f);
-                                return;
-                            }
-                            float screenX = (ndcX + 1.0f) / 2.0f * glView.getWidth();
-                            float screenY = (1.0f - ndcY) / 2.0f * glView.getHeight();
-
-                            plateIndicatorText.setTranslationX(screenX - plateIndicatorText.getWidth() / 2f);
-                            plateIndicatorText.setTranslationY(screenY - plateIndicatorText.getHeight() / 2f);
-
-                            // The label stays upright on screen: no 3D tilt or
-                            // yaw spin, so it never mirrors or edge-ons away
-                            // at steep orbit angles.
-                            plateIndicatorText.setRotationX(0f);
-                            plateIndicatorText.setRotation(0f);
-
-                            float scale = Math.max(0.2f, r.getCamera().getZoom() * 0.8f);
-                            plateIndicatorText.setScaleX(scale);
-                            plateIndicatorText.setScaleY(scale);
-
-                            plateIndicatorText.setAlpha(1.0f);
-                        } else {
-                            plateIndicatorText.setAlpha(0.0f);
-                        }
-                    }
-                }
-                if (glView != null) android.view.Choreographer.getInstance().postFrameCallback(this);
-            }
-        });
-
+        // Plate name/number now renders as a texture quad lying on the plate
+        // itself (GLRenderer.drawPlateLabel): fixed to the ground plane, no
+        // overlay tracking needed.
         return overlayLayout;
     }
 
@@ -1233,10 +1155,11 @@ public class BedFragment extends Fragment {
     }
 
     private void updatePlateIndicator() {
-        if (plateIndicatorText != null) {
-            com.flashforge.farm.utils.ViewUtils.postOnMainThread(() -> {
-                plateIndicatorText.setText("Plate " + (currentPlateIndex + 1));
-            });
+        // The plate name/number is painted on the plate itself by the
+        // renderer (drawPlateLabel reads the current plate index); the label
+        // quad rebuilds automatically when the index changes.
+        if (glView != null) {
+            glView.requestRender();
         }
     }
 

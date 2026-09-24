@@ -236,6 +236,7 @@ public class Native {
     static native void glmodel_stilized_arrow(long ptr, float tipRadius, float tipLength, float stemRadius, float stemLength);
     static native void glmodel_init_background_triangles(long ptr);
     static native void glmodel_init_from_path(long ptr, float[] vertices, int[] indices, boolean lineStrip);
+    static native void glmodel_init_textured_quad(long ptr, float[] xyz, float[] uv);
     static native void glmodel_init_box(long ptr, float width, float depth, float height);
     static native void glmodel_init_bounding_box(long ptr, long modelPtr, int i);
     static native boolean glmodel_is_initialized(long ptr);

@@ -55,9 +55,9 @@ name: native
 #   before save/publish.
 # - Publishing backfills: any verified content publishes, whether freshly
 #   built or restored, so a past run's unpublished-but-good outputs get
-#   released by the next green run. EXCEPTION: the engine release/artifact
-#   paths never publish reused binaries — a restored .so stamped with the
-#   current tree poisons later runs with mismatched content (2026-09-22).
+#   released by the next green run. This relies on the cache keys covering
+#   every input that affects the output (2026-09-24: a key missing
+#   engine/prusa30/** let a stale .so publish under a fresh tree name).
 #
 # Caching: heavy builds write their outputs both to a primary output cache and
 # to a compiler cache. The engine compile uses sccache with the distributed GHA
@@ -1176,12 +1176,13 @@ jobs:
           retention-days: 30
 
       - name: Publish engine release
-        # Never publish a reused .so: release and artifact reuse paths stage a
-        # binary built from a different tree, and stamping it with the current
-        # engine_src poisons every later consumer (2026-09-22: a cache-hit
-        # .so published under a patched tree kept shipping the SIGABRT the
-        # patch fixed). Publish only what this run actually compiled.
-        if: github.ref == 'refs/heads/main' && steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        # Backfill is safe again: the tree-bound artifact name guarantees the
+        # staged .so was built (or correctly restored) from the current tree
+        # now that the cache key covers all engine inputs (2026-09-24), and
+        # without backfill the rolling release can never repopulate after a
+        # revocation (2026-09-23: empty engine-latest broke every non-native
+        # PR's apk job, which restores the engine from the release only).
+        if: github.ref == 'refs/heads/main' && steps.engine-rel.outputs.hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -1215,9 +1216,9 @@ jobs:
             "$SHA" "$DATE" "$ABI" "$SRC" "$SUM" > "$OUT/engine-manifest.json"
 
       - name: Publish engine rolling release
-        # Same no-reuse rule as above: only freshly compiled output may move
-        # the rolling tag.
-        if: github.ref == 'refs/heads/main' && steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
+        # Same backfill rule as above: publish whatever verified content this
+        # main run staged.
+        if: github.ref == 'refs/heads/main' && steps.engine-rel.outputs.hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

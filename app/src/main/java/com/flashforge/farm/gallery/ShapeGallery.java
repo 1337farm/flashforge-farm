@@ -12,8 +12,11 @@ public final class ShapeGallery {
     }
 
     public static final int PREVIEW_MAX_TRIS = 1200;
-    private static final String PREVIEW_CACHE_PREFIX = "preview2_";
-    private static final String LEGACY_PREVIEW_CACHE_PREFIX = "preview_";
+    // preview3_: the finest-first decimator (MeshDecimator rewrite) changed
+    // what a cached preview looks like; stale preview2_ files hold the old
+    // coarse mush (e.g. Benchy with eaten features). Bump forces regeneration.
+    private static final String PREVIEW_CACHE_PREFIX = "preview3_";
+    private static final String[] LEGACY_PREVIEW_CACHE_PREFIXES = {"preview_", "preview2_"};
 
     public static final int KIND_CUBE = 1;
     public static final int KIND_CYLINDER = 2;
@@ -118,17 +121,20 @@ public final class ShapeGallery {
         // Display bake: model space is Z-up but the spinner is a Y-up
         // turntable, so rotate once here (-90° about X maps +Z to screen-up
         // and model front to the camera). Cached below, so zero per-frame
-        // cost. Cache key bumped (preview2_) because old preview_*.bin files
-        // hold unbaked meshes; sweep them best-effort.
+        // cost. Sweep best-effort.
         GalleryMesh display = decimated.rotatedX(-Math.PI / 2);
         try {
             File[] stale = cacheDir.listFiles();
             if (stale != null) {
                 for (File f : stale) {
                     String name = f.getName();
-                    if (name.startsWith(LEGACY_PREVIEW_CACHE_PREFIX)
-                            && !name.startsWith(PREVIEW_CACHE_PREFIX)) {
-                        f.delete();
+                    if (!name.startsWith(PREVIEW_CACHE_PREFIX)) {
+                        for (String legacy : LEGACY_PREVIEW_CACHE_PREFIXES) {
+                            if (name.startsWith(legacy)) {
+                                f.delete();
+                                break;
+                            }
+                        }
                     }
                 }
             }

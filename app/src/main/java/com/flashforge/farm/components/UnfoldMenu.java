@@ -39,6 +39,14 @@ public abstract class UnfoldMenu {
     private FrameLayout rootView;
     private float progress;
 
+    // Translations applied to the bed fragment while the menu is open, so the
+    // fade-out dismiss path can animate them back to rest (the spring-reverse
+    // path restores them via the update listener automatically).
+    private float appliedGlTx, appliedGlTy, appliedSnackTy;
+    private int baseSnackMarginLeft;
+    private int appliedSnackMarginLeft;
+    private boolean marginsCaptured;
+
     private float fromTranslationX;
     private float fromTranslationY;
     private float toTranslationX;
@@ -193,13 +201,23 @@ public abstract class UnfoldMenu {
                         if (!portrait) {
                             float tX = rootView.getWidth() - ViewUtils.dp(80 * 2);
                             fragment.getGlView().setTranslationX(tX / 2f * value);
+                            appliedGlTx = tX / 2f * value;
+                            appliedGlTy = 0;
                             ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) fragment.getSnackbarsLayout().getLayoutParams();
-                            marginParams.leftMargin = (int) (ViewUtils.dp(80 * 2) + tX * value);
+                            if (!marginsCaptured) {
+                                baseSnackMarginLeft = marginParams.leftMargin;
+                                marginsCaptured = true;
+                            }
+                            appliedSnackMarginLeft = (int) (ViewUtils.dp(80 * 2) + tX * value);
+                            marginParams.leftMargin = appliedSnackMarginLeft;
                             fragment.getSnackbarsLayout().requestLayout();
                             dimmView.setTranslationX(rootView.getTranslationX() - ViewUtils.lerp(rootView.getWidth() - mirror.getWidth(), 0, progress));
                         } else {
                             fragment.getGlView().setTranslationY(-invY / 2 * value);
+                            appliedGlTx = 0;
+                            appliedGlTy = -invY / 2 * value;
                             fragment.getSnackbarsLayout().setTranslationY(-invY * value);
+                            appliedSnackTy = -invY * value;
                             dimmView.setTranslationY(rootView.getTranslationY());
                         }
                         fragment.getGlView().invalidate();
@@ -239,17 +257,49 @@ public abstract class UnfoldMenu {
         if (alphaOnly) {
             ValueAnimator anim = ValueAnimator.ofFloat(0, 1).setDuration(150);
             anim.setInterpolator(ViewUtils.CUBIC_INTERPOLATOR);
+            // Capture the displaced state up front: the spring listener will
+            // not run again, so without this the GL view (and, in landscape,
+            // the snackbar margin) would stay shifted after dismiss.
+            final float startGlTx = appliedGlTx, startGlTy = appliedGlTy, startSnackTy = appliedSnackTy;
+            final int startMargin = appliedSnackMarginLeft;
+            final boolean restoreMargins = marginsCaptured && fragment != null;
+            final BedFragment dismissFragment = fragment;
             anim.addUpdateListener(animation -> {
                 float val = (float) animation.getAnimatedValue();
+                float rest = 1f - val;
                 rootView.setAlpha(1f - val);
                 dimmView.setAlpha(1f - val);
 
                 rootView.setTranslationY(val * ViewUtils.dp(64));
                 dimmView.setTranslationY(val * ViewUtils.dp(64));
+                if (dismissFragment != null) {
+                    dismissFragment.getGlView().setTranslationX(startGlTx * rest);
+                    dismissFragment.getGlView().setTranslationY(startGlTy * rest);
+                    dismissFragment.getSnackbarsLayout().setTranslationY(startSnackTy * rest);
+                    if (restoreMargins) {
+                        ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) dismissFragment.getSnackbarsLayout().getLayoutParams();
+                        marginParams.leftMargin = (int) (baseSnackMarginLeft + (startMargin - baseSnackMarginLeft) * rest);
+                        dismissFragment.getSnackbarsLayout().requestLayout();
+                    }
+                    dismissFragment.getGlView().invalidate();
+                }
             });
             anim.addListener(new AnimatorListenerAdapter() {
                 @Override
                 public void onAnimationEnd(Animator animation) {
+                    if (dismissFragment != null) {
+                        dismissFragment.getGlView().setTranslationX(0f);
+                        dismissFragment.getGlView().setTranslationY(0f);
+                        dismissFragment.getSnackbarsLayout().setTranslationY(0f);
+                        if (restoreMargins) {
+                            ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) dismissFragment.getSnackbarsLayout().getLayoutParams();
+                            marginParams.leftMargin = baseSnackMarginLeft;
+                            dismissFragment.getSnackbarsLayout().requestLayout();
+                        }
+                        dismissFragment.getGlView().invalidate();
+                    }
+                    appliedGlTx = appliedGlTy = appliedSnackTy = 0f;
+                    marginsCaptured = false;
                     containerLayout.removeView(dimmView);
                     containerLayout.removeView(rootView);
                 }

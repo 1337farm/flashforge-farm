@@ -97,15 +97,15 @@ public class CameraTest {
     @Test
     public void testStartupDistance_framesBedPlusMargin() {
         double tan30 = Math.tan(Math.toRadians(30.0));
-        // Square screen: height-bound, bed half (100) + 20 margin over tan30.
-        assertEquals(120.0 / tan30, Camera.startupDistance(200, 1.0), 1e-6);
+        // Square screen: height-bound, bed half (100) + 10 margin over tan30.
+        assertEquals(110.0 / tan30, Camera.startupDistance(200, 1.0), 1e-6);
         // Portrait phone: width-bound, needs ~2x the distance.
-        assertEquals(120.0 / (tan30 * 0.5), Camera.startupDistance(200, 0.5), 1e-6);
+        assertEquals(110.0 / (tan30 * 0.5), Camera.startupDistance(200, 0.5), 1e-6);
         // Wide screen: same as square (height-bound).
-        assertEquals(120.0 / tan30, Camera.startupDistance(200, 2.0), 1e-6);
+        assertEquals(110.0 / tan30, Camera.startupDistance(200, 2.0), 1e-6);
         // Degenerate input: safe fallback, never zero/negative.
         assertEquals(1.0, Camera.startupDistance(0, 1.0), 0.0);
-        assertEquals(120.0 / (tan30 * 0.5), Camera.startupDistance(200, 0), 1e-6);
+        assertEquals(110.0 / (tan30 * 0.5), Camera.startupDistance(200, 0), 1e-6);
     }
 
     @Test

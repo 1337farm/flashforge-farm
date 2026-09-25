@@ -99,6 +99,7 @@ target_include_directories(farm PRIVATE
         ${PRUSA_SRC}/bundled_deps/clipper/include  # 3.0 TBB-allocator clipper; MUST precede ENGINE_JNI or the vendored 2.x clipper/ shadows it (ClipperUtils.hpp PolyPath assign fails)
         ${ENGINE_JNI}                       # render/, expat/, cereal/, ...
         ${PRUSA_SRC}/src/slic3r-shared/include
+        ${PRUSA_SRC}/src/slic3r-shared/src  # PlaceOnFaceGizmoPlanes.hpp lives beside its .cpp
         ${PRUSA_SRC}/src/slic3r-domain/include
         ${PRUSA_SRC}/src/libslic3r/include  # ISSUE-210: 3.0 core headers (vendored libslic3r/ deleted)
         ${ENGINE_ROOT}/prusa30

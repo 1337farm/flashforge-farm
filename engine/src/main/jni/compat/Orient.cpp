@@ -1,6 +1,8 @@
 #include "Orient.hpp"
 #include "libslic3r/Geometry.hpp"
+#include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
 #include <numeric>
+#include <unordered_set>
 #include "Slic3r/Biz/Algorithms/ClipperUtils.hpp"
 #include <boost/geometry/index/rtree.hpp>
 #include <tbb/parallel_for.h>
@@ -203,7 +205,10 @@ namespace Slic3r {
                 float m_sample_interval = 0.5;
                 AABBMesh indexed_mesh(mesh->its, true);
                 BoundingBoxf3 bbox = mesh->bounding_box();
-                bbox.offset(BBOX_OFFSET);
+                {   // 3.0 BoundingBox dropped offset(); grow the box directly.
+                    bbox.min() -= Vec3d(BBOX_OFFSET, BBOX_OFFSET, BBOX_OFFSET);
+                    bbox.max() += Vec3d(BBOX_OFFSET, BBOX_OFFSET, BBOX_OFFSET);
+                }
 
                 std::vector<FaceProperty> properties(mesh->its.indices.size());
                 std::unordered_set<size_t> hit_face_indices;
@@ -256,7 +261,7 @@ namespace Slic3r {
                 {
                     int face_count = mesh->facets_count();
                     auto its = mesh->its;
-                    face_normals = its_face_normals(its);
+                    face_normals = Biz::Algorithms::TriangleMesh::its_face_normals(its);
                     areas = Eigen::VectorXf::Zero(face_count);
                     is_apperance = Eigen::VectorXf::Zero(face_count);
                     normals = Eigen::MatrixXf::Zero(face_count, 3);
@@ -277,13 +282,13 @@ namespace Slic3r {
 
                 // get convex hull statistics
                 {
-                    mesh_convex_hull = mesh->convex_hull_3d();
+                    mesh_convex_hull = Biz::Algorithms::TriangleMesh::convex_hull_3d(*mesh);
                     //mesh_convex_hull.write_binary("convex_hull_debug.stl");
 
                     int face_count = mesh_convex_hull.facets_count();
                     auto its = mesh_convex_hull.its;
                     face_count_hull = mesh_convex_hull.facets_count();
-                    face_normals_hull = its_face_normals(its);
+                    face_normals_hull = Biz::Algorithms::TriangleMesh::its_face_normals(its);
                     areas_hull = Eigen::VectorXf::Zero(face_count);
                     normals_hull = Eigen::MatrixXf::Zero(face_count_hull, 3);
                     normals_hull_quantize = Eigen::MatrixXf::Zero(face_count_hull, 3);
@@ -456,10 +461,10 @@ namespace Slic3r {
             CostItems get_features(Vec3f orientation, bool min_volume = true) {
                 CostItems costs;
                 costs.area_total = area_of_boundingbox(mesh->bounding_box());
-                costs.radius = mesh->bounding_box().radius();
+                costs.radius = 0.5 * mesh->bounding_box().size().norm();  // 3.0 dropped radius()
                 // volume
                 costs.volume =
-                        mesh->stats().volume > 0 ? mesh->stats().volume : its_volume(mesh->its);
+                        mesh->stats().volume > 0 ? mesh->stats().volume : Domain::its_volume(mesh->its);
 
                 float total_min_z = z_projected.minCoeff();
                 // filter bottom area
@@ -590,7 +595,7 @@ namespace Slic3r {
                     //auto progressfn_i = [&](unsigned cnt) {progressfn(cnt, "Orienting " + mesh_.name); };
                     AutoOrienter orienter(&mesh_, params, /*progressfn_i*/{}, stopfn);
                     mesh_.orientation = orienter.process();
-                    Geometry::rotation_from_two_vectors(mesh_.orientation, {0, 0, 1}, mesh_.axis,
+                    rotation_from_two_vectors(mesh_.orientation, {0, 0, 1}, mesh_.axis,
                                                         mesh_.angle, &mesh_.rotation_matrix);
                     BOOST_LOG_TRIVIAL(info) << std::fixed << std::setprecision(3) << "v,phi: "
                                             << mesh_.axis.transpose() << ", " << mesh_.angle;
@@ -605,11 +610,11 @@ namespace Slic3r {
                                           progressfn(i, mesh_.name);
                                           AutoOrienter orienter(&mesh_, params, {}, stopfn);
                                           mesh_.orientation = orienter.process();
-                                          Geometry::rotation_from_two_vectors(mesh_.orientation,
+                                          rotation_from_two_vectors(mesh_.orientation,
                                                                               {0, 0, 1}, mesh_.axis,
                                                                               mesh_.angle,
                                                                               &mesh_.rotation_matrix);
-                                          mesh_.euler_angles = Geometry::extract_euler_angles(
+                                          mesh_.euler_angles = extract_euler_angles(
                                                   mesh_.rotation_matrix);
                                           BOOST_LOG_TRIVIAL(debug) << "rotation_from_two_vectors: "
                                                                    << mesh_.orientation.transpose()

@@ -32,43 +32,67 @@ public class CameraTest {
     }
 
     @Test
-    public void testMove_translatesPositionAndOriginEqually() {
+    public void testDollyBy_movesAlongViewAxis() {
         Camera c = defaultCamera();
-        double px = c.position.x, py = c.position.y, pz = c.position.z;
-        double ox = c.origin.x, oy = c.origin.y, oz = c.origin.z;
-        c.move(10f, -5f);
-        assertEquals(c.position.x - px, c.origin.x - ox, DELTA);
-        assertEquals(c.position.y - py, c.origin.y - oy, DELTA);
-        assertEquals(c.position.z - pz, c.origin.z - oz, DELTA);
-        assertTrue(c.position.x != px || c.position.y != py);
+        double before = c.currentDistance();
+        c.setDefaultDistance(before);
+        c.dollyBy(2.0);
+        // Factor 2 halves the camera-to-target distance; the target never moves.
+        assertEquals(before / 2.0, c.currentDistance(), 1e-6);
+        assertEquals(0.0, c.origin.x, DELTA);
+        assertEquals(0.0, c.origin.y, DELTA);
+        assertEquals(0.0, c.origin.z, DELTA);
+        // Direction from target to camera is unchanged (pure dolly, no orbit).
+        assertEquals(0.0, c.position.x, 1e-6);
+        assertEquals(c.position.y / c.position.z, -200.0 / 200.0, 1e-9);
+        c.dollyBy(0.5);
+        assertEquals(before, c.currentDistance(), 1e-6);
     }
 
     @Test
-    public void testCalcScreenMovement_finite() {
-        Vec3d v = defaultCamera().calcScreenMovement(10f, -5f);
-        assertTrue(Double.isFinite(v.x));
-        assertTrue(Double.isFinite(v.y));
-        assertTrue(Double.isFinite(v.z));
-        assertTrue(v.x != 0 || v.y != 0 || v.z != 0);
+    public void testDollyBy_clampedToFramingRange() {
+        Camera c = defaultCamera();
+        double d = c.currentDistance();
+        c.setDefaultDistance(d);
+        c.dollyBy(100.0);
+        assertEquals(d / 10.0, c.currentDistance(), 1e-6);
+        c.dollyBy(0.0001);
+        assertEquals(d / 0.6f, c.currentDistance(), 1e-6);
+        // Non-positive / NaN factors are ignored, never corrupt the camera.
+        c.dollyBy(0.0);
+        assertEquals(d / 0.6f, c.currentDistance(), 1e-6);
+        c.dollyBy(Double.NaN);
+        assertEquals(d / 0.6f, c.currentDistance(), 1e-6);
     }
 
     @Test
-    public void testZoomBy_multiplicativeAndClamped() {
+    public void testZoomRatio_tracksDolly() {
         Camera c = defaultCamera();
-        c.zoomBy(2f);
+        // No reference distance yet: neutral ratio.
+        assertEquals(1.0, c.zoomRatio(), 0.0);
+        double d = c.currentDistance();
+        c.setDefaultDistance(d);
+        assertEquals(1.0, c.zoomRatio(), 1e-9);
+        c.dollyBy(4.0);
+        assertEquals(4.0, c.zoomRatio(), 1e-6);
+    }
+
+    @Test
+    public void testZoomOrthoBy_multiplicativeAndClamped() {
+        Camera c = defaultCamera();
+        c.zoomOrthoBy(2f);
         assertEquals(2f, c.getZoom(), 0f);
-        c.zoomBy(0.5f);
+        c.zoomOrthoBy(0.5f);
         assertEquals(1f, c.getZoom(), 0f);
-        c.zoomBy(100f);
+        c.zoomOrthoBy(100f);
         assertEquals(10f, c.getZoom(), 0f);
-        c.zoomBy(0.0001f);
+        c.zoomOrthoBy(0.0001f);
         assertEquals(0.6f, c.getZoom(), 0f);
         // Non-positive / NaN factors are ignored, never corrupt zoom.
-        c.setZoom(1f);
-        c.zoomBy(0f);
-        assertEquals(1f, c.getZoom(), 0f);
-        c.zoomBy(Float.NaN);
-        assertEquals(1f, c.getZoom(), 0f);
+        c.zoomOrthoBy(0f);
+        assertEquals(0.6f, c.getZoom(), 0f);
+        c.zoomOrthoBy(Float.NaN);
+        assertEquals(0.6f, c.getZoom(), 0f);
     }
 
     @Test
@@ -84,14 +108,15 @@ public class CameraTest {
     }
 
     @Test
-    public void testMoveWorld_matchesMoveAtZoomOne() {
-        Camera a = defaultCamera();
-        Camera b = defaultCamera();
-        a.move(10f, -5f);
-        b.moveWorld(10f, -5f);
-        assertEquals(a.position.x, b.position.x, DELTA);
-        assertEquals(a.position.y, b.position.y, DELTA);
-        assertEquals(a.position.z, b.position.z, DELTA);
+    public void testMoveWorld_translatesPositionAndOriginEqually() {
+        Camera c = defaultCamera();
+        double px = c.position.x, py = c.position.y, pz = c.position.z;
+        double ox = c.origin.x, oy = c.origin.y, oz = c.origin.z;
+        c.moveWorld(10f, -5f);
+        assertEquals(c.position.x - px, c.origin.x - ox, DELTA);
+        assertEquals(c.position.y - py, c.origin.y - oy, DELTA);
+        assertEquals(c.position.z - pz, c.origin.z - oz, DELTA);
+        assertTrue(c.position.x != px || c.position.y != py);
     }
 
     @Test

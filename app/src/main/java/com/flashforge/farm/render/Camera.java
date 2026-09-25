@@ -51,6 +51,11 @@ public class Camera {
         return viewMatrix;
     }
 
+    /**
+     * Orthographic box-scale factor. Perspective NEVER reads this: apparent
+     * size in perspective comes only from physical camera distance (dolly),
+     * never from focal length.
+     */
     public float getZoom() {
         return zoom;
     }
@@ -58,25 +63,62 @@ public class Camera {
     private final static float MIN_ZOOM = 0.6f;
     private final static float MAX_ZOOM = 10f;
 
-    public void zoom(float zoom) {
-        // Zoom OUT below the default view so the whole bed / large models fit on
-        // screen, but stay above 0.6x: at wider fields the perspective becomes
-        // fish-eyed and the raised bed grid skews when panned to one side.
-        this.zoom = MathUtils.clamp(this.zoom + zoom / 25f, MIN_ZOOM, MAX_ZOOM);
+    /**
+     * Scale the orthographic view box only. The pinch handler calls this in
+     * ortho mode; perspective pinch uses {@link #dollyBy} instead.
+     */
+    public void zoomOrthoBy(float factor) {
+        if (!(factor > 0f) || Float.isNaN(factor) || Float.isInfinite(factor)) return;
+        this.zoom = MathUtils.clamp(this.zoom * factor, MIN_ZOOM, MAX_ZOOM);
     }
 
-    public void setZoom(float zoom) {
-        this.zoom = MathUtils.clamp(zoom, MIN_ZOOM, MAX_ZOOM);
+    /** Reference camera-to-target distance captured at default framing. */
+    private double defaultDistance = 0;
+
+    public void setDefaultDistance(double distance) {
+        if (distance > 0 && Double.isFinite(distance)) this.defaultDistance = distance;
+    }
+
+    public double currentDistance() {
+        double dx = position.x - origin.x;
+        double dy = position.y - origin.y;
+        double dz = position.z - origin.z;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
     /**
-     * Multiplicative pinch zoom: factor > 1 zooms in, < 1 zooms out.
-     * Shares the [0.6, 10] clamp with {@link #zoom(float)} so perspective
-     * and orthographic projections always offer the same zoom range.
+     * Physical zoom: dolly the camera along the view axis. factor > 1 moves
+     * closer (zooms in), factor < 1 moves away. Travel is clamped to the same
+     * framing range the old focal zoom offered ([0.6, 10] as distance ratios),
+     * so zoom limits are unchanged — only the mechanism is physical now.
      */
-    public void zoomBy(float factor) {
-        if (!(factor > 0f) || Float.isNaN(factor) || Float.isInfinite(factor)) return;
-        this.zoom = MathUtils.clamp(this.zoom * factor, MIN_ZOOM, MAX_ZOOM);
+    public void dollyBy(double factor) {
+        if (!(factor > 0) || Double.isNaN(factor) || Double.isInfinite(factor)) return;
+        double dx = position.x - origin.x;
+        double dy = position.y - origin.y;
+        double dz = position.z - origin.z;
+        double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (!(dist > 1e-12) || !Double.isFinite(dist)) return;
+        double minDist = defaultDistance > 0 ? defaultDistance / MAX_ZOOM : dist / MAX_ZOOM;
+        double maxDist = defaultDistance > 0 ? defaultDistance / MIN_ZOOM : dist / MIN_ZOOM;
+        double target = dist / factor;
+        if (target < minDist) target = minDist;
+        if (target > maxDist) target = maxDist;
+        double s = target / dist;
+        position.x = origin.x + dx * s;
+        position.y = origin.y + dy * s;
+        position.z = origin.z + dz * s;
+        viewMatrixDirty = true;
+    }
+
+    /**
+     * Apparent-size ratio vs default framing (&gt;1 = closer/larger). Replaces
+     * the old focal zoom for constant-screen-size compensation (axes).
+     */
+    public double zoomRatio() {
+        double dist = currentDistance();
+        if (!(dist > 1e-12) || !(defaultDistance > 0)) return 1.0;
+        return defaultDistance / dist;
     }
 
     /** Translate camera and focus point together by a world-space delta. */
@@ -86,18 +128,7 @@ public class Camera {
         viewMatrixDirty = true;
     }
 
-    public Vec3d calcScreenMovement(float x, float y) {
-        x /= zoom;
-        y /= zoom;
-        computeScreenBasis();
-        return new Vec3d(
-                scratchRight.x * x + scratchScreenY.x * y,
-                scratchRight.y * x + scratchScreenY.y * y,
-                scratchRight.z * x + scratchScreenY.z * y
-        );
-    }
-
-    // Computes scratchRight and scratchScreenY from current camera direction — no allocation.
+        // Computes scratchRight and scratchScreenY from current camera direction — no allocation.
     private void computeScreenBasis() {
         scratchDir.x = origin.x - position.x;
         scratchDir.y = origin.y - position.y;
@@ -128,20 +159,6 @@ public class Camera {
      * callers scale by world-per-pixel themselves).
      */
     public void moveWorld(float x, float y) {
-        computeScreenBasis();
-
-        double mx = scratchRight.x * x + scratchScreenY.x * y;
-        double my = scratchRight.y * x + scratchScreenY.y * y;
-        double mz = scratchRight.z * x + scratchScreenY.z * y;
-
-        position.x += mx; position.y += my; position.z += mz;
-        origin.x += mx; origin.y += my; origin.z += mz;
-        viewMatrixDirty = true;
-    }
-
-    public void move(float x, float y) {
-        x /= zoom;
-        y /= zoom;
         computeScreenBasis();
 
         double mx = scratchRight.x * x + scratchScreenY.x * y;

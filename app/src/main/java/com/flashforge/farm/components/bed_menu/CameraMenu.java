@@ -163,7 +163,6 @@ public class CameraMenu extends ListBedMenu {
             middlePoint = fromPosition.center(toPosition);
         }
 
-        float zoom = camera.getZoom();
         Vec3d finalMiddlePoint = middlePoint;
         new SpringAnimation(new FloatValueHolder(0))
                 .setMinimumVisibleChange(1 / 1000f)
@@ -171,7 +170,8 @@ public class CameraMenu extends ListBedMenu {
                         .setStiffness(1000f)
                         .setDampingRatio(1f))
                 .addUpdateListener((animation, value, velocity) -> {
-                    camera.setZoom(ViewUtils.lerp(zoom, 1f, value));
+                    // Physical flight only: position/origin lerp moves the
+                    // camera; focal length never changes.
                     camera.position.set(
                             ViewUtils.lerpd(fromPosition.x, Math.abs(toPosition.x - toOrigin.x) <= 5 ? finalMiddlePoint.x : fromPosition.x + (toPosition.x - fromPosition.x) / 2, toPosition.x, value),
                             ViewUtils.lerpd(fromPosition.y, Math.abs(toPosition.y - toOrigin.y) <= 5 ? finalMiddlePoint.y : fromPosition.y + (toPosition.y - fromPosition.y) / 2, toPosition.y, value),

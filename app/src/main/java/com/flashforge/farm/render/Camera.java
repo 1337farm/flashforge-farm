@@ -159,7 +159,7 @@ public class Camera {
         double yaw = Math.atan2(-vx, -vy);
         double pitch = Math.toDegrees(Math.asin(Math.max(-1.0, Math.min(1.0, vz / radius))));
         double targetPitch = Math.max(-89.0, Math.min(89.0, pitch - ry));
-        double targetYaw = yaw + rx;
+        double targetYaw = yaw + Math.toRadians(rx);
         double horizontal = radius * Math.cos(Math.toRadians(targetPitch));
 
         position.x = origin.x - horizontal * Math.sin(targetYaw);

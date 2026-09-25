@@ -60,8 +60,8 @@ public class Camera {
         return zoom;
     }
 
-    private final static float MIN_ZOOM = 0.6f;
-    private final static float MAX_ZOOM = 10f;
+    private final static float MIN_ZOOM = 0.4f;
+    private final static float MAX_ZOOM = 15f;
 
     /**
      * Scale the orthographic view box only. The pinch handler calls this in
@@ -87,6 +87,23 @@ public class Camera {
         return (float) zoom;
     }
 
+    /**
+     * Startup camera distance that frames the whole bed volume plus a margin
+     * at the constant 60deg field of view. Width-bound on narrow (portrait)
+     * screens, height-bound otherwise; the 20deg downward tilt only
+     * foreshortens the bed vertically on screen, so the height fit is
+     * conservative.
+     */
+    public static double startupDistance(double maxDim, double aspect) {
+        if (!(maxDim > 0)) return 1.0;
+        if (!(aspect > 0)) aspect = 0.5;
+        double needHalf = maxDim / 2.0 + 20.0;
+        double tan30 = Math.tan(Math.toRadians(30.0));
+        double forWidth = needHalf / (tan30 * Math.min(aspect, 1.0));
+        double forHeight = needHalf / tan30;
+        return Math.max(forWidth, forHeight);
+    }
+
     /** Reference camera-to-target distance captured at default framing. */
     private double defaultDistance = 0;
 
@@ -103,9 +120,9 @@ public class Camera {
 
     /**
      * Physical zoom: dolly the camera along the view axis. factor > 1 moves
-     * closer (zooms in), factor < 1 moves away. Travel is clamped to the same
-     * framing range the old focal zoom offered ([0.6, 10] as distance ratios),
-     * so zoom limits are unchanged — only the mechanism is physical now.
+     * closer (zooms in), factor < 1 moves away. Travel is clamped to [0.4, 15]
+     * as distance ratios of the default framing distance, so the bed can be
+     * inspected up close and the whole farm still fits when backed out.
      */
     public void dollyBy(double factor) {
         if (!(factor > 0) || Double.isNaN(factor) || Double.isInfinite(factor)) return;

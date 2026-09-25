@@ -64,7 +64,18 @@ add_library(farm SHARED
         src/main/jni/farm/farm_crashdump.cpp
         src/main/jni/farm/farm_progress.cpp
         ${ENGINE_JNI}/render/GLModel.cpp
-        ${ENGINE_JNI}/render/GLShader.cpp)
+        ${ENGINE_JNI}/render/GLShader.cpp
+        # PrusaSlicer 3.0's own "place on face" plane builder. It lives in the
+        # GUI-side slic3r-shared lib that this headless app does not link, but
+        # the TU is self-contained (Domain + Biz::Algorithms only) and is
+        # compiled straight into libfarm so lay-on-face uses the genuine
+        # upstream algorithm (facet flood-fill into patches, area/angle
+        # rejection, shrink + corner rounding) instead of a local copy.
+        ${PRUSA_SRC}/src/slic3r-shared/src/Slic3r/App/Plater/PlaceOnFaceGizmoPlanes.cpp
+        # Genuine upstream auto-orienter: the vendored PrusaSlicer 2.x
+        # AutoOrienter (engine/src/main/jni/compat/Orient.cpp), ported to 3.0
+        # mesh/geometry types so real OrientParams scoring drives auto-orient.
+        ${ENGINE_ROOT}/src/main/jni/compat/Orient.cpp)
 
 add_library(farm_prusa30_jni STATIC
         ${ENGINE_ROOT}/prusa30/farm_driver.cpp)
@@ -87,6 +98,8 @@ list(FILTER ENGINE_INCLUDE_SUBDIRS EXCLUDE REGEX "/CGAL/?$")
 target_include_directories(farm PRIVATE
         ${PRUSA_SRC}/bundled_deps/clipper/include  # 3.0 TBB-allocator clipper; MUST precede ENGINE_JNI or the vendored 2.x clipper/ shadows it (ClipperUtils.hpp PolyPath assign fails)
         ${ENGINE_JNI}                       # render/, expat/, cereal/, ...
+        ${PRUSA_SRC}/src/slic3r-shared/include
+        ${PRUSA_SRC}/src/slic3r-domain/include
         ${PRUSA_SRC}/src/libslic3r/include  # ISSUE-210: 3.0 core headers (vendored libslic3r/ deleted)
         ${ENGINE_ROOT}/prusa30
         ${ENGINE_ROOT}/prusa30/jni_bridge

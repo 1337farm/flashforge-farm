@@ -1,11 +1,11 @@
 #include "Orient.hpp"
-#include "Geometry.hpp"
+#include "libslic3r/Geometry.hpp"
 #include <numeric>
-#include <ClipperUtils.hpp>
+#include "Slic3r/Biz/Algorithms/ClipperUtils.hpp"
 #include <boost/geometry/index/rtree.hpp>
 #include <tbb/parallel_for.h>
 #include "prusa_utils.hpp"
-#include "libslic3r/AABBMesh.hpp"
+#include "Slic3r/Biz/Algorithms/AABBMesh.hpp"
 
 #if defined(_MSC_VER) && defined(__clang__)
 #define BOOST_NO_CXX17_HDR_STRING_VIEW
@@ -65,8 +65,8 @@ namespace Slic3r {
         public:
             int face_count_hull;
             OrientMesh *orient_mesh = NULL;
-            TriangleMesh *mesh;
-            TriangleMesh mesh_convex_hull;
+            Domain::TriangleMesh *mesh;
+            Domain::TriangleMesh mesh_convex_hull;
             Eigen::MatrixXf normals, normals_quantize, normals_hull, normals_hull_quantize;
             Eigen::VectorXf areas, areas_hull;
             Eigen::VectorXf is_apperance; // whether a facet is outer apperance
@@ -100,7 +100,7 @@ namespace Slic3r {
                 preprocess();
             }
 
-            AutoOrienter(TriangleMesh *mesh_) {
+            AutoOrienter(Domain::TriangleMesh *mesh_) {
                 mesh = mesh_;
                 preprocess();
             }
@@ -634,35 +634,6 @@ namespace Slic3r {
 
             _orient(arrangables, params, pri, cfn);
 
-        }
-
-        void orient(ModelObject *obj) {
-            auto m = obj->mesh();
-            AutoOrienter orienter(&m);
-            Vec3d orientation = orienter.process();
-            orientation *= -1;
-            ModelVolumePtrs ptrs = obj->volumes;
-            for (int i = 0, c = ptrs.size(); i < c; i++) {
-                auto vol = ptrs[i];
-                const Geometry::Transformation& old_transform = vol->get_transformation();
-                const Vec3d tnormal = orientation;
-                const Transform3d rotation_matrix = Transform3d(Eigen::Quaterniond().setFromTwoVectors(tnormal, -Vec3d::UnitZ()));
-                vol->set_transformation(old_transform.get_offset_matrix() * rotation_matrix * old_transform.get_matrix_no_offset());
-            }
-            obj->invalidate_bounding_box();
-            obj->ensure_on_bed(false);
-        }
-
-        void orient(ModelInstance *instance) {
-            auto m = instance->get_object()->mesh();
-            AutoOrienter orienter(&m);
-            Vec3d orientation = orienter.process();
-            Vec3d axis;
-            double angle;
-            Matrix3d rotation_matrix;
-            Geometry::rotation_from_two_vectors(orientation, {0, 0, 1}, axis, angle, &rotation_matrix);
-
-            rotate_model_instance(instance, rotation_matrix);
         }
 
 

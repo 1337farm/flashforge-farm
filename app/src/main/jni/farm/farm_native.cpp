@@ -47,6 +47,12 @@
 #include "Slic3r/Biz/Algorithms/TriangleSelector.hpp"
 #include "Slic3r/Biz/Algorithms/AABBMesh.hpp"
 #include "Slic3r/Biz/Utils/CutUtils.hpp"
+// Genuine upstream place-on-face plane builder (PrusaSlicer 3.0, compiled into
+// libfarm by app/CMakeLists.txt from the fetched 3.0 source tree) and the
+// genuine upstream auto-orienter (vendored PrusaSlicer 2.x AutoOrienter, ported
+// to 3.0 mesh types).
+#include "Slic3r/App/Plater/PlaceOnFaceGizmoPlanes.hpp"
+#include "Orient.hpp"
 
 namespace Domain  = Slic3r::Domain;
 namespace BizAlgo = Slic3r::Biz::Algorithms;
@@ -657,130 +663,11 @@ extern "C" {
 
 } // extern "C" — the orient helpers below need C++ linkage; reopened after.
 
-// ---- Lay-flat / auto-orient: convex-hull faces in world space ----
-    // The object's merged mesh (BizAlgo::ModelObject::mesh) already carries
-    // volume + instance transforms, so hull facet normals are world-space and
-    // a world-space delta composes onto every volume like model_rotate does.
-    namespace {
-    constexpr double kPi = 3.141592653589793;
-
-    struct HullFace {
-        Domain::Vec3f normal = Domain::Vec3f(0, 0, 1);
-        std::vector<Domain::Vec3f> polygon; // CCW around normal
-        float area = 0.f;
-    };
-
-    // Monotone-chain 2D convex hull; returns CCW ring without duplicate end.
-    std::vector<std::pair<double, double>> hull_2d(std::vector<std::pair<double, double>> pts) {
-        std::sort(pts.begin(), pts.end());
-        pts.erase(std::unique(pts.begin(), pts.end()), pts.end());
-        size_t n = pts.size();
-        if (n <= 1) return pts;
-        auto cross = [](const std::pair<double, double>& o, const std::pair<double, double>& a,
-                        const std::pair<double, double>& b) {
-            return (a.first - o.first) * (b.second - o.second) - (a.second - o.second) * (b.first - o.first);
-        };
-        std::vector<std::pair<double, double>> lower, upper;
-        for (const auto& p : pts) {
-            while (lower.size() >= 2 && cross(lower[lower.size() - 2], lower.back(), p) <= 0)
-                lower.pop_back();
-            lower.push_back(p);
-        }
-        for (size_t i = n; i-- > 0;) {
-            const auto& p = pts[i];
-            while (upper.size() >= 2 && cross(upper[upper.size() - 2], upper.back(), p) <= 0)
-                upper.pop_back();
-            upper.push_back(p);
-        }
-        lower.pop_back();
-        upper.pop_back();
-        lower.insert(lower.end(), upper.begin(), upper.end());
-        return lower;
-    }
-
-    // Group hull triangles by normal (5deg), merge each group into one polygon.
-    std::vector<HullFace> hull_faces(const Domain::TriangleMesh& mesh) {
-        std::vector<HullFace> out;
-        if (mesh.its.vertices.empty() || mesh.its.indices.empty()) return out;
-        Domain::TriangleMesh hull;
-        try {
-            hull = BizAlgo::TriangleMesh::convex_hull_3d(mesh);
-        } catch (const std::exception& e) {
-            LOGE("convex_hull_3d failed: %s", e.what());
-            return out;
-        }
-        if (hull.its.vertices.empty() || hull.its.indices.empty()) return out;
-        struct Group {
-            Eigen::Vector3d n = Eigen::Vector3d(0, 0, 1);
-            std::vector<Domain::Vec3f> pts;
-            double area = 0;
-        };
-        std::vector<Group> groups;
-        const double cos_tol = std::cos(5.0 * kPi / 180.0);
-        for (const auto& tri : hull.its.indices) {
-            const Domain::Vec3f& a = hull.its.vertices[tri[0]];
-            const Domain::Vec3f& b = hull.its.vertices[tri[1]];
-            const Domain::Vec3f& c = hull.its.vertices[tri[2]];
-            Eigen::Vector3d ba(b.x() - a.x(), b.y() - a.y(), b.z() - a.z());
-            Eigen::Vector3d ca(c.x() - a.x(), c.y() - a.y(), c.z() - a.z());
-            Eigen::Vector3d cr = ba.cross(ca);
-            double twice = cr.norm();
-            if (!(twice > 1e-12)) continue;
-            Eigen::Vector3d n = cr / twice;
-            Group* g = nullptr;
-            for (auto& cand : groups) {
-                if (cand.n.dot(n) > cos_tol) { g = &cand; break; }
-            }
-            if (g == nullptr) {
-                groups.emplace_back();
-                g = &groups.back();
-                g->n = n;
-            }
-            g->n = (g->n * g->area + n * (twice * 0.5)).normalized();
-            g->area += twice * 0.5;
-            g->pts.push_back(a);
-            g->pts.push_back(b);
-            g->pts.push_back(c);
-        }
-        for (auto& g : groups) {
-            Eigen::Vector3d n = g.n.normalized();
-            if (!n.allFinite()) continue;
-            Eigen::Vector3d avg = Eigen::Vector3d::Zero();
-            for (const auto& p : g.pts) avg += Eigen::Vector3d(p.x(), p.y(), p.z());
-            avg /= (double) g.pts.size();
-            Eigen::Vector3d u = (std::abs(n.z()) < 0.9)
-                ? Eigen::Vector3d(0, 0, 1).cross(n).normalized()
-                : Eigen::Vector3d(0, 1, 0).cross(n).normalized();
-            Eigen::Vector3d v = n.cross(u);
-            std::vector<std::pair<double, double>> pts2d;
-            pts2d.reserve(g.pts.size());
-            for (const auto& p : g.pts) {
-                Eigen::Vector3d d(p.x() - avg.x(), p.y() - avg.y(), p.z() - avg.z());
-                pts2d.emplace_back(d.dot(u), d.dot(v));
-            }
-            std::vector<std::pair<double, double>> ring = hull_2d(std::move(pts2d));
-            if (ring.size() < 3) continue;
-            double area2 = 0;
-            for (size_t k = 0; k < ring.size(); ++k) {
-                const auto& p = ring[k];
-                const auto& q = ring[(k + 1) % ring.size()];
-                area2 += p.first * q.second - q.first * p.second;
-            }
-            if (!(std::abs(area2) > 1e-12)) continue;
-            HullFace face;
-            face.normal = Domain::Vec3f((float) n.x(), (float) n.y(), (float) n.z());
-            face.area = (float) (std::abs(area2) * 0.5);
-            face.polygon.reserve(ring.size());
-            // hull_2d is CCW in (u,v) with u x v == n, so lifting preserves
-            // CCW-around-normal winding for back-face culling.
-            for (const auto& p : ring) {
-                Eigen::Vector3d w = avg + u * p.first + v * p.second;
-                face.polygon.emplace_back((float) w.x(), (float) w.y(), (float) w.z());
-            }
-            out.push_back(std::move(face));
-        }
-        return out;
-    }
+// ---- Orient rotation helpers (C++ linkage; the JNI block reopens after) ----
+// The object's merged mesh (BizAlgo::ModelObject::mesh) already carries volume
+// + instance transforms, so a world-space delta composes onto every volume
+// exactly like model_rotate does.
+namespace {
 
     // Same XYZ-euler convention as model_rotate (R = Rz * Ry * Rx).
     Eigen::Quaterniond quat_from_euler_xyz(const Vec3d& e) {
@@ -803,26 +690,6 @@ extern "C" {
         obj->invalidate_bounding_box();
     }
 
-    // Overhang area (facets steeper than 45deg facing down) minus a flat-base
-    // bonus: lower is better for printing.
-    double orient_score(const ::indexed_triangle_set& its, const Eigen::Quaterniond& rot) {
-        double overhang = 0, bottom = 0;
-        for (const auto& tri : its.indices) {
-            const Domain::Vec3f& a = its.vertices[tri[0]];
-            const Domain::Vec3f& b = its.vertices[tri[1]];
-            const Domain::Vec3f& c = its.vertices[tri[2]];
-            Eigen::Vector3d ba(b.x() - a.x(), b.y() - a.y(), b.z() - a.z());
-            Eigen::Vector3d ca(c.x() - a.x(), c.y() - a.y(), c.z() - a.z());
-            Eigen::Vector3d n = rot * ba.cross(ca);
-            double twice = n.norm();
-            if (!(twice > 1e-12)) continue;
-            double nz = n.z() / twice;
-            double area = twice * 0.5;
-            if (nz < -0.7071) overhang += area * (-nz);
-            if (nz <= -0.95) bottom += area;
-        }
-        return overhang - 0.35 * bottom;
-    }
     } // namespace
 
     extern "C" {
@@ -899,40 +766,42 @@ extern "C" {
         std::vector<jlong> out;
         if (model != nullptr) {
             if (Domain::ModelObject* obj = check_object(model, i); obj != nullptr) {
-                const Domain::TriangleMesh mesh = BizAlgo::ModelObject::mesh(*obj);
-                std::vector<HullFace> faces = hull_faces(mesh);
-                double total = 0;
-                for (const auto& f : faces) total += f.area;
-                // Keep significant faces only (dust chamfers are unpickable),
-                // largest first, bounded for the picker UI.
-                std::sort(faces.begin(), faces.end(),
-                    [](const HullFace& a, const HullFace& b) { return a.area > b.area; });
-                const double keep = std::max(1.0, total * 0.005);
-                size_t count = 0;
-                for (const auto& f : faces) {
-                    if (!(f.area >= keep) || f.polygon.size() < 3 || count >= 40) continue;
+                // Genuine PrusaSlicer 3.0 plane builder (PlaceOnFaceGizmoPlanes.cpp,
+                // compiled into libfarm from the fetched 3.0 tree). It returns
+                // data in the FIRST INSTANCE's coordinate system, so lift it to
+                // world space here — the Java side raycasts against world coords.
+                std::vector<Slic3r::App::Plater::PlaneData> planes =
+                    Slic3r::App::Plater::calculate_planes(*obj);
+                const bool has_inst = !obj->instances.empty() && obj->instances.front() != nullptr;
+                const Domain::Transform3d inst = has_inst
+                    ? obj->instances.front()->get_matrix() : Domain::Transform3d::Identity();
+                const Domain::Vec3d nrm(inst.matrix()(0, 0), inst.matrix()(0, 1), inst.matrix()(0, 2));
+                const Domain::Vec3d nrm_y(inst.matrix()(1, 0), inst.matrix()(1, 1), inst.matrix()(1, 2));
+                const Domain::Vec3d nrm_z(inst.matrix()(2, 0), inst.matrix()(2, 1), inst.matrix()(2, 2));
+                for (const Slic3r::App::Plater::PlaneData& p : planes) {
+                    if (p.its.vertices.empty() || p.its.indices.empty()) continue;
+                    ::indexed_triangle_set world = p.its;
+                    if (has_inst)
+                        for (auto& v : world.vertices)
+                            v = (inst * v.cast<double>()).cast<float>();
+                    const Domain::Vec3f normal =
+                        (nrm * p.normal.x() + nrm_y * p.normal.y() + nrm_z * p.normal.z())
+                            .cast<float>().normalized();
                     GLModelRef* ref = new GLModelRef();
                     Slic3r::GUI::GLModel::Geometry g;
                     g.format = {Slic3r::GUI::GLModel::Geometry::EPrimitiveType::Triangles,
                                 Slic3r::GUI::GLModel::Geometry::EVertexLayout::P3N3};
-                    // Lift a hair off the surface so the highlight never z-fights.
-                    const Domain::Vec3f off = f.normal * 0.05f;
-                    g.reserve_vertices((unsigned int) f.polygon.size());
-                    g.reserve_indices((unsigned int) ((f.polygon.size() - 2) * 3));
-                    for (const auto& p : f.polygon) g.add_vertex(p + off, f.normal);
-                    for (size_t k = 1; k + 1 < f.polygon.size(); ++k)
-                        g.add_triangle(0, (unsigned int) k, (unsigned int) (k + 1));
+                    g.reserve_vertices((unsigned int) world.vertices.size());
+                    g.reserve_indices((unsigned int) world.indices.size() * 3);
+                    for (size_t v = 0; v < world.vertices.size(); ++v)
+                        g.add_vertex(world.vertices[v], normal);
+                    for (const ::stl_triangle_vertex_indices& tri : world.indices)
+                        g.add_triangle(tri[0], tri[1], tri[2]);
                     ref->model.init_from(std::move(g));
-                    ::indexed_triangle_set its;
-                    its.vertices.reserve(f.polygon.size());
-                    for (const auto& p : f.polygon) its.vertices.push_back(p + off);
-                    for (size_t k = 1; k + 1 < f.polygon.size(); ++k)
-                        its.indices.push_back({0, (int) k, (int) (k + 1)});
-                    ref->mesh.its = std::move(its);
-                    ref->plane_normal = f.normal;
+                    ref->mesh.its = std::move(world);
+                    ref->plane_normal = normal;
                     ref->has_plane_normal = true;
                     out.push_back((jlong) (intptr_t) ref);
-                    ++count;
                 }
                 LOGD("model_create_flatten_planes: %zu planes", out.size());
             }
@@ -949,30 +818,37 @@ extern "C" {
         if (obj == nullptr) return;
         const Domain::TriangleMesh mesh = BizAlgo::ModelObject::mesh(*obj);
         if (mesh.its.vertices.empty() || mesh.its.indices.empty()) return;
-        std::vector<HullFace> faces = hull_faces(mesh);
-        std::sort(faces.begin(), faces.end(),
-            [](const HullFace& a, const HullFace& b) { return a.area > b.area; });
-        // Candidates: keep the current orientation plus hull-face-down poses
-        // for the largest faces. Lowest overhang-minus-base score wins.
-        double best_score = orient_score(mesh.its, Eigen::Quaterniond::Identity());
-        Eigen::Quaterniond best = Eigen::Quaterniond::Identity();
-        size_t count = 0;
-        for (const auto& f : faces) {
-            if (count >= 24) break;
-            ++count;
-            Eigen::Vector3d n(f.normal.x(), f.normal.y(), f.normal.z());
-            if (!(n.norm() > 1e-9) || !n.allFinite()) continue;
-            n.normalize();
-            Eigen::Quaterniond rot =
-                Eigen::Quaterniond::FromTwoVectors(n, Eigen::Vector3d(0, 0, -1));
-            double s = orient_score(mesh.its, rot);
-            if (s < best_score) {
-                best_score = s;
-                best = rot;
-            }
+
+        // Genuine PrusaSlicer auto-orienter: the upstream AutoOrienter
+        // (engine/src/main/jni/compat/Orient.cpp, vendored PrusaSlicer 2.x
+        // source) scores candidate poses with the real OrientParams model
+        // (support-area minimization, overhang angle, low-angle-face and
+        // appearance-face preferences). It is mesh-only, so it runs on 3.0's
+        // Domain::TriangleMesh unchanged; only its 2.x Model wrappers were
+        // dropped at the port.
+        Slic3r::orientation::OrientMesh om;
+        om.mesh = mesh;
+        om.overhang_angle = 45.0;
+        Slic3r::orientation::OrientMeshs items{om};
+        try {
+            Slic3r::orientation::orient(items, {});
+        } catch (const std::exception& e) {
+            LOGE("model_auto_orient: upstream orienter failed: %s", e.what());
+            (void) env;
+            return;
         }
-        apply_world_delta(obj, best);
-        LOGD("model_auto_orient: applied best of %zu candidates (score=%.1f)", count + 1, best_score);
+        const Domain::Vec3d dir = items.front().orientation;
+        if (!(dir.norm() > 1e-9) || !dir.allFinite()) {
+            LOGE("model_auto_orient: orienter returned a degenerate direction");
+            (void) env;
+            return;
+        }
+        // Same application as upstream orient(ModelObject*): rotate that
+        // direction onto -Z, then re-seat the object on the bed.
+        apply_world_delta(obj,
+            Eigen::Quaterniond::FromTwoVectors(dir.normalized(), -Domain::Vec3d::UnitZ()));
+        LOGD("model_auto_orient: applied upstream orienter (%.3f, %.3f, %.3f)",
+            dir.x(), dir.y(), dir.z());
         (void) env;
     }
 

@@ -141,4 +141,28 @@ public class CameraTest {
         assertEquals(0.0, c.origin.y, 1e-6);
         assertEquals(0.0, c.origin.z, 1e-6);
     }
+
+    @Test
+    public void testRotateAround_yawTakesDegreesNotRadians() {
+        Camera c = new Camera();
+        c.position = new Vec3d(0, -100, 0);
+        c.origin = new Vec3d(0, 0, 0);
+        c.rotateAround(0, -20);
+        double pitchBefore = Math.toDegrees(Math.asin(c.position.z
+                / Math.sqrt(c.position.x * c.position.x + c.position.y * c.position.y + c.position.z * c.position.z)));
+
+        c.rotateAround(1, 0);
+        double yaw = Math.toDegrees(Math.atan2(-c.position.x, -c.position.y));
+        double pitchAfter = Math.toDegrees(Math.asin(c.position.z
+                / Math.sqrt(c.position.x * c.position.x + c.position.y * c.position.y + c.position.z * c.position.z)));
+        assertEquals(1.0, yaw, 1e-6);
+        assertEquals(pitchBefore, pitchAfter, 1e-6);
+
+        Camera c2 = new Camera();
+        c2.position = new Vec3d(0, -100, 0);
+        c2.origin = new Vec3d(0, 0, 0);
+        c2.rotateAround(90, 0);
+        assertEquals(90.0, Math.toDegrees(Math.atan2(-c2.position.x, -c2.position.y)), 1e-6);
+        assertTrue(Math.abs(c2.position.y) < 1e-3);
+    }
 }

@@ -11,12 +11,8 @@ public final class ShapeGallery {
     private ShapeGallery() {
     }
 
-    public static final int PREVIEW_MAX_TRIS = 8000;
-    // preview4_: the 8000-tri budget changes preview content vs the 1200-tri
-    // era (e.g. Benchy keeps full height and small features); stale files
-    // are regenerated, legacy swept below.
-    private static final String PREVIEW_CACHE_PREFIX = "preview4_";
-    private static final String[] LEGACY_PREVIEW_CACHE_PREFIXES = {"preview_", "preview2_", "preview3_"};
+    private static final String PREVIEW_CACHE_PREFIX = "preview5_";
+    private static final String[] LEGACY_PREVIEW_CACHE_PREFIXES = {"preview_", "preview2_", "preview3_", "preview4_"};
 
     public static final int KIND_CUBE = 1;
     public static final int KIND_CYLINDER = 2;
@@ -116,13 +112,12 @@ public final class ShapeGallery {
         }
 
         GalleryMesh mesh = item.kind == KIND_CUSTOM ? MeshLoader.load(item.file) : meshFor(item);
-        GalleryMesh decimated = MeshDecimator.decimate(mesh, PREVIEW_MAX_TRIS);
 
         // Display bake: model space is Z-up but the spinner is a Y-up
         // turntable, so rotate once here (-90° about X maps +Z to screen-up
         // and model front to the camera). Cached below, so zero per-frame
         // cost. Sweep best-effort.
-        GalleryMesh display = decimated.rotatedX(-Math.PI / 2);
+        GalleryMesh display = mesh.rotatedX(-Math.PI / 2);
         try {
             File[] stale = cacheDir.listFiles();
             if (stale != null) {

@@ -318,8 +318,10 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         double dz = camera.position.z - camera.origin.z;
         double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (!(dist > 0)) return 0;
-        double halfFovTan = Math.tan(Math.toRadians(30f));
-        return 2 * dist * halfFovTan / (camera.getZoom() * viewportHeight);
+        // Constant-FOV perspective: world-per-pixel follows the physical camera
+        // distance (dolly carries the zoom), not a focal scalar.
+        double halfFovTan = Math.tan(Math.toRadians(FOV / 2f));
+        return 2 * dist * halfFovTan / viewportHeight;
     }
 
     public void setCurrentPlateIndex(int currentPlateIndex) {
@@ -799,17 +801,11 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             float ratioVertical = aspectRatio < 1 ? 1f / aspectRatio : 1;
             DoubleMatrix.orthoM(projectionMatrix, 0, -scale * ratioHorizontal, scale * ratioHorizontal, -scale * ratioVertical, scale * ratioVertical, NEAR_PLANE, FAR_PLANE);
         } else {
-            // Map zoom to field-of-view via focal length (fovy = 2*atan(tan(FOV/2)/zoom)).
-            // The naive FOV*invZoom breaks when zoomed out: at min zoom it
-            // yields fovy>180, outside the valid (0,180) range, flipping the
-            // projection (tan goes negative). The atan form stays valid for the
-            // whole [0.6, 10] zoom range (88deg wide .. 6.8deg telephoto).
-            // No aspect correction on fovy: the aspect parameter already shapes
-            // the horizontal field; scaling fovy by 1/aspect made the view jump
-            // on rotation.
-            float halfFovTan = (float) Math.tan(Math.toRadians(FOV / 2f));
-            float fovy = (float) Math.toDegrees(2f * Math.atan(halfFovTan * (1f / camera.getZoom())));
-            DoubleMatrix.perspectiveM(projectionMatrix, 0, fovy, aspectRatio, NEAR_PLANE, FAR_PLANE);
+            // Perspective zoom is a physical dolly (see Camera.dollyBy): the
+            // field of view stays constant at FOV so straight lines stay
+            // straight and the grid keeps true perspective at any distance.
+            // Only the orthographic branch above uses the zoom scalar.
+            DoubleMatrix.perspectiveM(projectionMatrix, 0, FOV, aspectRatio, NEAR_PLANE, FAR_PLANE);
         }
     }
 
@@ -982,7 +978,7 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             configureBed();
         }
         if (bed.isValid()) {
-            bed.render(shadersManager, bottom, viewMatrix, projectionMatrix, 1f / camera.getZoom());
+            bed.render(shadersManager, bottom, viewMatrix, projectionMatrix, (float) (1.0 / camera.zoomRatio()));
             drawPlateLabel(viewMatrix);
             // Multi-plate grid: draw the other plates' beds at their offsets (edit mode only).
             if (viewer == null && !isViewerEnabled) {
@@ -990,7 +986,7 @@ public class GLRenderer implements GLSurfaceView.Renderer {
                     double[] off = inactivePlateOffsets.get(p);
                     System.arraycopy(viewMatrix, 0, plateViewMatrix, 0, 16);
                     DoubleMatrix.translateM(plateViewMatrix, 0, off[0], off[1], 0);
-                    bed.render(shadersManager, bottom, plateViewMatrix, projectionMatrix, 1f / camera.getZoom(), false);
+                    bed.render(shadersManager, bottom, plateViewMatrix, projectionMatrix, (float) (1.0 / camera.zoomRatio()), false);
                 }
             }
         }
@@ -2331,6 +2327,8 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             camera.position.y = center.y - distance;
             camera.position.z = 0;
             camera.rotateAround(0, -20);
+            // Reference dolly distance: zoom limits are distance ratios of this.
+            camera.setDefaultDistance(camera.currentDistance());
             cameraIsDirty = false;
         }
         if (isViewerEnabled) {

@@ -649,7 +649,13 @@ public class GLView extends GLSurfaceView implements IThemeView {
                             if (target == null) {
                                 target = renderer.screenToBedPlane(mx * r2, my * r2);
                             }
-                            renderer.getCamera().zoomBy(factor);
+                            if (Prefs.isOrthoProjectionEnabled()) {
+                                renderer.getCamera().zoomOrthoBy(factor);
+                            } else {
+                                // Physical zoom: dolly the camera toward/away from
+                                // the target at constant field of view.
+                                renderer.getCamera().dollyBy(factor);
+                            }
                             renderer.updateProjection();
                             if (target != null) {
                                 Vec3d cur = renderer.screenToBedPlane(mx * r2, my * r2);

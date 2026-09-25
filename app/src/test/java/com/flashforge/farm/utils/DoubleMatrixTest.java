@@ -883,24 +883,15 @@ public class DoubleMatrixTest {
     }
 
     @Test
-    public void testPerspectiveM_zoomRangeStaysValid() {
-        // GLRenderer maps zoom [0.25, 10] to fovy via 2*atan(tan(30deg)/zoom).
-        // Every fovy in that range must yield a finite matrix with positive
-        // focal scale (m[5] > 0); the old FOV*invZoom mapping broke this.
-        double halfTan = Math.tan(Math.toRadians(30.0));
-        double[] fovies = {
-            Math.toDegrees(2.0 * Math.atan(halfTan / 0.25)),
-            60.0,
-            Math.toDegrees(2.0 * Math.atan(halfTan / 10.0)),
-        };
-        for (double fovy : fovies) {
-            assertTrue(fovy > 0.0 && fovy < 180.0);
-            double[] m = new double[16];
-            DoubleMatrix.perspectiveM(m, 0, fovy, 2.0, 10.0, 1000.0);
-            for (double v : m) {
-                assertTrue(Double.isFinite(v));
-            }
-            assertTrue(m[5] > 0.0);
+    public void testPerspectiveM_constantFovStaysValid() {
+        // Perspective uses a constant 60deg field of view: zoom is a physical
+        // dolly (camera distance), never a focal-length change. The projection
+        // matrix must be finite with positive focal scale (m[5] > 0).
+        double[] m = new double[16];
+        DoubleMatrix.perspectiveM(m, 0, 60.0, 2.0, 10.0, 1000.0);
+        for (double v : m) {
+            assertTrue(Double.isFinite(v));
         }
+        assertTrue(m[5] > 0.0);
     }
 }

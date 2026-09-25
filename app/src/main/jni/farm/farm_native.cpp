@@ -655,7 +655,9 @@ extern "C" {
         obj->invalidate_bounding_box();
     }
 
-    // ---- Lay-flat / auto-orient: convex-hull faces in world space ----
+} // extern "C" — the orient helpers below need C++ linkage; reopened after.
+
+// ---- Lay-flat / auto-orient: convex-hull faces in world space ----
     // The object's merged mesh (BizAlgo::ModelObject::mesh) already carries
     // volume + instance transforms, so hull facet normals are world-space and
     // a world-space delta composes onto every volume like model_rotate does.
@@ -823,6 +825,7 @@ extern "C" {
     }
     } // namespace
 
+    extern "C" {
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1flatten_1rotate(JNIEnv* env, jclass, jlong ptr, jint i, jlong surface_ptr) {
         ModelRef* model = (ModelRef *) (intptr_t) ptr;
         GLModelRef* surf = (GLModelRef *) (intptr_t) surface_ptr;
@@ -924,7 +927,7 @@ extern "C" {
                     its.vertices.reserve(f.polygon.size());
                     for (const auto& p : f.polygon) its.vertices.push_back(p + off);
                     for (size_t k = 1; k + 1 < f.polygon.size(); ++k)
-                        its.indices.push_back({0, (unsigned int) k, (unsigned int) (k + 1)});
+                        its.indices.push_back({0, (int) k, (int) (k + 1)});
                     ref->mesh.its = std::move(its);
                     ref->plane_normal = f.normal;
                     ref->has_plane_normal = true;

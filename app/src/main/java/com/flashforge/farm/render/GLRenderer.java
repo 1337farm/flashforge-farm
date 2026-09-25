@@ -809,6 +809,21 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         }
     }
 
+    /**
+     * Keep the picture stable when switching to orthographic: scale the ortho
+     * box to the current perspective framing. The camera (position/origin)
+     * does not move — only the ortho zoom scalar changes.
+     */
+    public void matchOrthoZoomToPerspective() {
+        if (bed == null || !bed.isValid()) return;
+        Vec3d vmin = bed.getVolumeMin(), vmax = bed.getVolumeMax();
+        double baseHalfExtent = Math.max(vmax.x - vmin.x, vmax.y - vmin.y) / 2.0 + 10.0;
+        double aspect = viewportHeight > 0 ? (double) viewportWidth / viewportHeight : 1.0;
+        float target = Camera.orthoZoomForDistance(camera.currentDistance(), baseHalfExtent, aspect);
+        float current = camera.getZoom();
+        if (current > 0) camera.zoomOrthoBy(target / current);
+    }
+
     public int getSelectedObject() {
         return selectedObject;
     }

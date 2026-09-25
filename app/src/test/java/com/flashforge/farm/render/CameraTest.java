@@ -78,6 +78,23 @@ public class CameraTest {
     }
 
     @Test
+    public void testOrthoZoomForDistance_matchesPerspectiveFraming() {
+        double tan30 = Math.tan(Math.toRadians(30.0));
+        // Square aspect: ortho half-extent must equal dist*tan30.
+        assertEquals(100.0 / (100.0 * tan30), Camera.orthoZoomForDistance(100, 100, 1.0), 1e-6);
+        // Portrait aspect widens the vertical box, so zoom scales up equally.
+        assertEquals(2 * 100.0 / (100.0 * tan30), Camera.orthoZoomForDistance(100, 100, 0.5), 1e-6);
+        // Landscape aspect leaves the vertical box alone.
+        assertEquals(100.0 / (100.0 * tan30), Camera.orthoZoomForDistance(100, 100, 2.0), 1e-6);
+        // Clamped to the shared zoom range.
+        assertEquals(0.6f, Camera.orthoZoomForDistance(100000, 100, 1.0), 0f);
+        assertEquals(10f, Camera.orthoZoomForDistance(1, 100000, 1.0), 0f);
+        // Degenerate input: neutral, never corrupt.
+        assertEquals(1f, Camera.orthoZoomForDistance(0, 100, 1.0), 0f);
+        assertEquals(1f, Camera.orthoZoomForDistance(100, 0, 1.0), 0f);
+    }
+
+    @Test
     public void testZoomOrthoBy_multiplicativeAndClamped() {
         Camera c = defaultCamera();
         c.zoomOrthoBy(2f);

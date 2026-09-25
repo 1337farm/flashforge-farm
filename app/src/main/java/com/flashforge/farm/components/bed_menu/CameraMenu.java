@@ -140,9 +140,12 @@ public class CameraMenu extends ListBedMenu {
                 }),
                 new BedMenuItem(R.string.MenuCameraOrtho, R.drawable.image_format_32).setCheckable((buttonView, isChecked) -> {
                     Prefs.setOrthoProjectionEnabled(isChecked);
-                    // GL thread: updateProjection rewrites the matrix the draw
+                    // GL thread: match the ortho box to the live perspective
+                    // framing first so the toggle never moves the camera nor
+                    // jumps the picture, then rewrite the matrix the draw
                     // loop reads without locking.
                     fragment.getGlView().queueEvent(() -> {
+                        if (isChecked) fragment.getGlView().getRenderer().matchOrthoZoomToPerspective();
                         fragment.getGlView().getRenderer().updateProjection();
                         fragment.getGlView().requestRender();
                     });

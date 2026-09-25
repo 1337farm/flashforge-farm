@@ -97,7 +97,7 @@ public class Camera {
     public static double startupDistance(double maxDim, double aspect) {
         if (!(maxDim > 0)) return 1.0;
         if (!(aspect > 0)) aspect = 0.5;
-        double needHalf = maxDim / 2.0 + 5.0;
+        double needHalf = maxDim / 2.0 + 2.0;
         double tan30 = Math.tan(Math.toRadians(30.0));
         double forWidth = needHalf / (tan30 * Math.min(aspect, 1.0));
         double forHeight = needHalf / tan30;

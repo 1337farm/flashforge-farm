@@ -72,6 +72,21 @@ public class Camera {
         this.zoom = MathUtils.clamp(this.zoom * factor, MIN_ZOOM, MAX_ZOOM);
     }
 
+    /**
+     * Ortho box zoom that reproduces the current perspective framing: matches
+     * the ortho vertical half-extent to dist*tan(30deg) so toggling ortho
+     * keeps the picture stable without moving the camera.
+     */
+    public static float orthoZoomForDistance(double dist, double baseHalfExtent, double aspect) {
+        if (!(dist > 0) || !(baseHalfExtent > 0)) return 1f;
+        if (!(aspect > 0)) aspect = 1.0;
+        double ratioVertical = aspect < 1 ? 1.0 / aspect : 1.0;
+        double zoom = baseHalfExtent * ratioVertical / (dist * Math.tan(Math.toRadians(30.0)));
+        if (zoom < MIN_ZOOM) return MIN_ZOOM;
+        if (zoom > MAX_ZOOM) return MAX_ZOOM;
+        return (float) zoom;
+    }
+
     /** Reference camera-to-target distance captured at default framing. */
     private double defaultDistance = 0;
 

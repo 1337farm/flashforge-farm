@@ -125,4 +125,20 @@ public class CameraTest {
         double after = Math.sqrt(dx * dx + dy * dy + dz * dz);
         assertEquals(before, after, 1e-6);
     }
+
+    @Test
+    public void testRotateAround_frontPitchChangesCameraOnly() {
+        Camera c = new Camera();
+        c.position = new Vec3d(0, -100, 0);
+        c.origin = new Vec3d(0, 0, 0);
+        c.rotateAround(0, -20);
+        double radius = Math.sqrt(c.position.x * c.position.x
+                + c.position.y * c.position.y + c.position.z * c.position.z);
+        double pitch = Math.toDegrees(Math.asin(c.position.z / radius));
+        assertEquals(20.0, pitch, 1e-6);
+        assertEquals(0.0, c.position.x, 1e-6);
+        assertEquals(0.0, c.origin.x, 1e-6);
+        assertEquals(0.0, c.origin.y, 1e-6);
+        assertEquals(0.0, c.origin.z, 1e-6);
+    }
 }

@@ -90,14 +90,14 @@ public class Camera {
     /**
      * Startup camera distance that frames the whole bed volume plus a margin
      * at the constant 60deg field of view. Width-bound on narrow (portrait)
-     * screens, height-bound otherwise; the 20deg downward tilt only
+     * screens, height-bound otherwise; the 25deg downward tilt only
      * foreshortens the bed vertically on screen, so the height fit is
      * conservative.
      */
     public static double startupDistance(double maxDim, double aspect) {
         if (!(maxDim > 0)) return 1.0;
         if (!(aspect > 0)) aspect = 0.5;
-        double needHalf = maxDim / 2.0 + 20.0;
+        double needHalf = maxDim / 2.0 + 10.0;
         double tan30 = Math.tan(Math.toRadians(30.0));
         double forWidth = needHalf / (tan30 * Math.min(aspect, 1.0));
         double forHeight = needHalf / tan30;

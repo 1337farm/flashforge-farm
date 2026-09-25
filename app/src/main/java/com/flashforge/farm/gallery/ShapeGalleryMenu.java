@@ -35,6 +35,10 @@ import com.flashforge.farm.view.FadeRecyclerView;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public class ShapeGalleryMenu extends UnfoldMenu {
     private SimpleRecyclerAdapter adapter;
@@ -133,24 +137,46 @@ public class ShapeGalleryMenu extends UnfoldMenu {
         ArrayList<ShapeGallery.Item> items = new ArrayList<ShapeGallery.Item>();
         items.addAll(ShapeGallery.builtins());
         items.addAll(ShapeGallery.customs());
-        for (ShapeGallery.Item item : items) {
-            GalleryMesh preview = null;
-            try {
-                preview = ShapeGallery.previewFor(item);
-            } catch (Exception ignored) {
+
+        // Preview meshes can be big; build rows on a small pool so a slow
+        // custom STL doesn't hold up every other gallery entry.
+        int workers = Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors()));
+        ExecutorService pool = Executors.newFixedThreadPool(workers);
+        try {
+            List<Future<SimpleRecyclerItem>> futures = new ArrayList<Future<SimpleRecyclerItem>>(items.size());
+            for (ShapeGallery.Item item : items) {
+                futures.add(pool.submit(() -> buildRow(item)));
             }
-            final ShapeGallery.Item tapped = item;
-            GalleryRowItem row = new GalleryRowItem(item, preview);
-            row.setOnClickListener(v -> loadItem(tapped, true));
-            if (item.kind == ShapeGallery.KIND_CUSTOM) {
-                row.setOnLongClickListener(v -> {
-                    confirmDelete(tapped);
-                    return true;
-                });
+            for (Future<SimpleRecyclerItem> future : futures) {
+                try {
+                    rows.add(future.get());
+                } catch (ExecutionException e) {
+                    android.util.Log.e("ShapeGalleryMenu", "gallery row failed", e);
+                }
             }
-            rows.add(row);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            pool.shutdownNow();
         }
         return rows;
+    }
+
+    private SimpleRecyclerItem buildRow(final ShapeGallery.Item item) {
+        GalleryMesh preview = null;
+        try {
+            preview = ShapeGallery.previewFor(item);
+        } catch (Exception ignored) {
+        }
+        GalleryRowItem row = new GalleryRowItem(item, preview);
+        row.setOnClickListener(v -> loadItem(item, true));
+        if (item.kind == ShapeGallery.KIND_CUSTOM) {
+            row.setOnLongClickListener(v -> {
+                confirmDelete(item);
+                return true;
+            });
+        }
+        return row;
     }
 
     private void loadItem(ShapeGallery.Item item, boolean armCalib) {

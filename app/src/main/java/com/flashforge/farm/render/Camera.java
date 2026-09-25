@@ -13,7 +13,6 @@ public class Camera {
     public Vec3d origin = new Vec3d(0, 0, 0);
     public Vec3d up = new Vec3d(0, 0, 1);
 
-    private double[] tempMatrix = new double[16];
     private float zoom = 1f;
 
     // Pre-allocated scratch buffers — avoids Vec3d allocation on every gesture event
@@ -21,7 +20,6 @@ public class Camera {
     private final Vec3d scratchUpMod = new Vec3d();
     private final Vec3d scratchRight = new Vec3d();
     private final Vec3d scratchScreenY = new Vec3d();
-    private final double[] rotBuf = new double[4];
 
     public void invalidate() {
         viewMatrixDirty = true;
@@ -152,41 +150,21 @@ public class Camera {
     }
 
     public void rotateAround(double rx, double ry) {
-        rotBuf[0] = position.x - origin.x;
-        rotBuf[1] = position.y - origin.y;
-        rotBuf[2] = position.z - origin.z;
-        rotBuf[3] = 1.0;
+        double vx = position.x - origin.x;
+        double vy = position.y - origin.y;
+        double vz = position.z - origin.z;
+        double radius = Math.sqrt(vx * vx + vy * vy + vz * vz);
+        if (radius <= 1e-12 || !Double.isFinite(radius)) return;
 
-        DoubleMatrix.setIdentityM(tempMatrix, 0);
+        double yaw = Math.atan2(-vx, -vy);
+        double pitch = Math.toDegrees(Math.asin(Math.max(-1.0, Math.min(1.0, vz / radius))));
+        double targetPitch = Math.max(-89.0, Math.min(89.0, pitch - ry));
+        double targetYaw = yaw + rx;
+        double horizontal = radius * Math.cos(Math.toRadians(targetPitch));
 
-        scratchDir.x = origin.x - position.x;
-        scratchDir.y = origin.y - position.y;
-        scratchDir.z = origin.z - position.z;
-        scratchDir.normalize();
-
-        double yaw = Math.atan2(scratchDir.x, scratchDir.y);
-        double pitch = Math.toDegrees(Math.asin(-scratchDir.z));
-
-        double mry = -ry;
-        // Keep the orbit clear of exactly straight-down/up: at ±90° the view
-        // direction goes parallel to the up vector, setLookAtM degenerates,
-        // and the frame flips. Clamp instead of zeroing so the view slides
-        // along the limit instead of sticking.
-        double targetPitch = pitch + mry;
-        if (targetPitch > 89) {
-            mry = 89 - pitch;
-        } else if (targetPitch < -89) {
-            mry = -89 - pitch;
-        }
-
-        DoubleMatrix.rotateM(tempMatrix, 0, -mry * Math.cos(yaw), 1, 0, 0);
-        DoubleMatrix.rotateM(tempMatrix, 0, mry * Math.sin(yaw), 0, 1, 0);
-        DoubleMatrix.rotateM(tempMatrix, 0, rx, 0, 0, 1);
-
-        DoubleMatrix.multiplyMV(rotBuf, 0, tempMatrix, 0, rotBuf, 0);
-        position.x = rotBuf[0] / rotBuf[3] + origin.x;
-        position.y = rotBuf[1] / rotBuf[3] + origin.y;
-        position.z = rotBuf[2] / rotBuf[3] + origin.z;
+        position.x = origin.x - horizontal * Math.sin(targetYaw);
+        position.y = origin.y - horizontal * Math.cos(targetYaw);
+        position.z = origin.z + radius * Math.sin(Math.toRadians(targetPitch));
         viewMatrixDirty = true;
     }
 }

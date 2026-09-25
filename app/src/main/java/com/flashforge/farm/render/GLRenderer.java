@@ -2327,10 +2327,10 @@ public class GLRenderer implements GLSurfaceView.Renderer {
 
             double distance = Math.max(max.x - min.x, max.y - min.y);
             if (distance <= 0) distance = 1;
-            double tilt = Math.toRadians(20);
             camera.position.x = center.x;
-            camera.position.y = center.y - distance * Math.cos(tilt);
-            camera.position.z = min.z + distance * Math.sin(tilt);
+            camera.position.y = center.y - distance;
+            camera.position.z = 0;
+            camera.rotateAround(0, -20);
             cameraIsDirty = false;
         }
         if (isViewerEnabled) {

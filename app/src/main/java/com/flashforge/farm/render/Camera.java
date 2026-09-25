@@ -55,24 +55,28 @@ public class Camera {
         return zoom;
     }
 
+    private final static float MIN_ZOOM = 0.6f;
+    private final static float MAX_ZOOM = 10f;
+
     public void zoom(float zoom) {
-        // Allow zooming OUT ~4x below the default view (0.25x) so the whole bed
-        // / large models fit on screen; zoom IN is capped at 10x.
-        this.zoom = MathUtils.clamp(this.zoom + zoom / 25f, 0.25f, 10f);
+        // Zoom OUT below the default view so the whole bed / large models fit on
+        // screen, but stay above 0.6x: at wider fields the perspective becomes
+        // fish-eyed and the raised bed grid skews when panned to one side.
+        this.zoom = MathUtils.clamp(this.zoom + zoom / 25f, MIN_ZOOM, MAX_ZOOM);
     }
 
     public void setZoom(float zoom) {
-        this.zoom = MathUtils.clamp(zoom, 0.25f, 10f);
+        this.zoom = MathUtils.clamp(zoom, MIN_ZOOM, MAX_ZOOM);
     }
 
     /**
      * Multiplicative pinch zoom: factor > 1 zooms in, < 1 zooms out.
-     * Shares the [0.25, 10] clamp with {@link #zoom(float)} so perspective
+     * Shares the [0.6, 10] clamp with {@link #zoom(float)} so perspective
      * and orthographic projections always offer the same zoom range.
      */
     public void zoomBy(float factor) {
         if (!(factor > 0f) || Float.isNaN(factor) || Float.isInfinite(factor)) return;
-        this.zoom = MathUtils.clamp(this.zoom * factor, 0.25f, 10f);
+        this.zoom = MathUtils.clamp(this.zoom * factor, MIN_ZOOM, MAX_ZOOM);
     }
 
     /** Translate camera and focus point together by a world-space delta. */

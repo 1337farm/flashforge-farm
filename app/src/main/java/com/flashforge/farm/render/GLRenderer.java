@@ -800,10 +800,10 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             DoubleMatrix.orthoM(projectionMatrix, 0, -scale * ratioHorizontal, scale * ratioHorizontal, -scale * ratioVertical, scale * ratioVertical, NEAR_PLANE, FAR_PLANE);
         } else {
             // Map zoom to field-of-view via focal length (fovy = 2*atan(tan(FOV/2)/zoom)).
-            // The naive FOV*invZoom breaks when zoomed out: at min zoom 0.25 it
-            // yields fovy=240deg, outside the valid (0,180) range, flipping the
+            // The naive FOV*invZoom breaks when zoomed out: at min zoom it
+            // yields fovy>180, outside the valid (0,180) range, flipping the
             // projection (tan goes negative). The atan form stays valid for the
-            // whole [0.25, 10] zoom range (134deg wide .. 6.8deg telephoto).
+            // whole [0.6, 10] zoom range (88deg wide .. 6.8deg telephoto).
             // No aspect correction on fovy: the aspect parameter already shapes
             // the horizontal field; scaling fovy by 1/aspect made the view jump
             // on rotation.

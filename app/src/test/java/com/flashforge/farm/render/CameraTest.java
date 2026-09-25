@@ -62,7 +62,7 @@ public class CameraTest {
         c.zoomBy(100f);
         assertEquals(10f, c.getZoom(), 0f);
         c.zoomBy(0.0001f);
-        assertEquals(0.25f, c.getZoom(), 0f);
+        assertEquals(0.6f, c.getZoom(), 0f);
         // Non-positive / NaN factors are ignored, never corrupt zoom.
         c.setZoom(1f);
         c.zoomBy(0f);

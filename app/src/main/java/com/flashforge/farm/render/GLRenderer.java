@@ -686,9 +686,12 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         shader.setUniformMatrix4fv("projection_matrix", projectionMatrix);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        boolean cullEnabled = glIsEnabled(GL_CULL_FACE);
+        glDisable(GL_CULL_FACE);
         glBindTexture(GL_TEXTURE_2D, plateLabelTexId);
         plateLabelModel.render();
         glBindTexture(GL_TEXTURE_2D, 0);
+        if (cullEnabled) glEnable(GL_CULL_FACE);
         glDisable(GL_BLEND);
         shader.stopUsing();
     }

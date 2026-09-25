@@ -51,7 +51,8 @@ import com.flashforge.farm.view.GLView;
 public class GLRenderer implements GLSurfaceView.Renderer {
     private final static float FOV = 60f;
     private final static float NEAR_PLANE = 10f;
-    private final static float FAR_PLANE = 1000f;
+    // Far enough that backing the dolly all the way out never clips the bed.
+    private final static float FAR_PLANE = 5000f;
     private final static int MAX_FILL_BED_OBJECTS = 256;
 
     private Camera camera = new Camera();
@@ -2336,7 +2337,10 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             camera.origin.set(center);
             camera.origin.z = 0;
 
-            double distance = Math.max(max.x - min.x, max.y - min.y);
+            double distance = Camera.startupDistance(
+                    Math.max(max.x - min.x, max.y - min.y),
+                    viewportWidth > 0 && viewportHeight > 0
+                            ? (double) viewportWidth / viewportHeight : 0.5);
             if (distance <= 0) distance = 1;
             camera.position.x = center.x;
             camera.position.y = center.y - distance;

@@ -55,14 +55,14 @@ public class CameraTest {
         double d = c.currentDistance();
         c.setDefaultDistance(d);
         c.dollyBy(100.0);
-        assertEquals(d / 10.0, c.currentDistance(), 1e-6);
+        assertEquals(d / 15.0, c.currentDistance(), 1e-6);
         c.dollyBy(0.0001);
-        assertEquals(d / 0.6f, c.currentDistance(), 1e-6);
+        assertEquals(d / 0.4f, c.currentDistance(), 1e-6);
         // Non-positive / NaN factors are ignored, never corrupt the camera.
         c.dollyBy(0.0);
-        assertEquals(d / 0.6f, c.currentDistance(), 1e-6);
+        assertEquals(d / 0.4f, c.currentDistance(), 1e-6);
         c.dollyBy(Double.NaN);
-        assertEquals(d / 0.6f, c.currentDistance(), 1e-6);
+        assertEquals(d / 0.4f, c.currentDistance(), 1e-6);
     }
 
     @Test
@@ -87,11 +87,25 @@ public class CameraTest {
         // Landscape aspect leaves the vertical box alone.
         assertEquals(100.0 / (100.0 * tan30), Camera.orthoZoomForDistance(100, 100, 2.0), 1e-6);
         // Clamped to the shared zoom range.
-        assertEquals(0.6f, Camera.orthoZoomForDistance(100000, 100, 1.0), 0f);
-        assertEquals(10f, Camera.orthoZoomForDistance(1, 100000, 1.0), 0f);
+        assertEquals(0.4f, Camera.orthoZoomForDistance(100000, 100, 1.0), 0f);
+        assertEquals(15f, Camera.orthoZoomForDistance(1, 100000, 1.0), 0f);
         // Degenerate input: neutral, never corrupt.
         assertEquals(1f, Camera.orthoZoomForDistance(0, 100, 1.0), 0f);
         assertEquals(1f, Camera.orthoZoomForDistance(100, 0, 1.0), 0f);
+    }
+
+    @Test
+    public void testStartupDistance_framesBedPlusMargin() {
+        double tan30 = Math.tan(Math.toRadians(30.0));
+        // Square screen: height-bound, bed half (100) + 20 margin over tan30.
+        assertEquals(120.0 / tan30, Camera.startupDistance(200, 1.0), 1e-6);
+        // Portrait phone: width-bound, needs ~2x the distance.
+        assertEquals(120.0 / (tan30 * 0.5), Camera.startupDistance(200, 0.5), 1e-6);
+        // Wide screen: same as square (height-bound).
+        assertEquals(120.0 / tan30, Camera.startupDistance(200, 2.0), 1e-6);
+        // Degenerate input: safe fallback, never zero/negative.
+        assertEquals(1.0, Camera.startupDistance(0, 1.0), 0.0);
+        assertEquals(120.0 / (tan30 * 0.5), Camera.startupDistance(200, 0), 1e-6);
     }
 
     @Test
@@ -102,14 +116,14 @@ public class CameraTest {
         c.zoomOrthoBy(0.5f);
         assertEquals(1f, c.getZoom(), 0f);
         c.zoomOrthoBy(100f);
-        assertEquals(10f, c.getZoom(), 0f);
+        assertEquals(15f, c.getZoom(), 0f);
         c.zoomOrthoBy(0.0001f);
-        assertEquals(0.6f, c.getZoom(), 0f);
+        assertEquals(0.4f, c.getZoom(), 0f);
         // Non-positive / NaN factors are ignored, never corrupt zoom.
         c.zoomOrthoBy(0f);
-        assertEquals(0.6f, c.getZoom(), 0f);
+        assertEquals(0.4f, c.getZoom(), 0f);
         c.zoomOrthoBy(Float.NaN);
-        assertEquals(0.6f, c.getZoom(), 0f);
+        assertEquals(0.4f, c.getZoom(), 0f);
     }
 
     @Test

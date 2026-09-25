@@ -86,6 +86,7 @@ public class TransformMenu extends ListBedMenu {
             int i = fragment.getGlView().getRenderer().getSelectedObject();
             if (i == -1) return;
             fragment.getGlView().getRenderer().getModel().autoOrient(i);
+            fragment.getGlView().getRenderer().getModel().ensureOnBed(i);
             fragment.getGlView().getRenderer().invalidateGlModel(i);
             fragment.getGlView().requestRender();
             Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuOrientationAutoOrientDone));

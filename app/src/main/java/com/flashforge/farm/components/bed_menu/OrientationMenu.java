@@ -117,6 +117,7 @@ public class OrientationMenu extends ListBedMenu {
 
                     int i = fragment.getGlView().getRenderer().getSelectedObject();
                     fragment.getGlView().getRenderer().getModel().autoOrient(i);
+                    fragment.getGlView().getRenderer().getModel().ensureOnBed(i);
                     fragment.getGlView().getRenderer().invalidateGlModel(i);
                     fragment.getGlView().requestRender();
 

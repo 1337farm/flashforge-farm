@@ -23,6 +23,7 @@
 #include <numbers>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -109,6 +110,9 @@ struct GLModelRef {
     Domain::TriangleMesh mesh;
     std::unique_ptr<Slic3r::AABBMesh> emesh;
     std::vector<Domain::Vec3f> normals;
+    // Lay-flat plane overlay (model_create_flatten_planes): outward face normal.
+    Domain::Vec3f plane_normal = Domain::Vec3f(0, 0, 1);
+    bool has_plane_normal = false;
 };
 // Bed visuals: scaled contour + print height parsed from the app's legacy INI
 // (bed_shape/max_print_height), and the three GL models Bed3D renders
@@ -651,11 +655,189 @@ extern "C" {
         obj->invalidate_bounding_box();
     }
 
+    // ---- Lay-flat / auto-orient: convex-hull faces in world space ----
+    // The object's merged mesh (BizAlgo::ModelObject::mesh) already carries
+    // volume + instance transforms, so hull facet normals are world-space and
+    // a world-space delta composes onto every volume like model_rotate does.
+    namespace {
+    constexpr double kPi = 3.141592653589793;
+
+    struct HullFace {
+        Domain::Vec3f normal = Domain::Vec3f(0, 0, 1);
+        std::vector<Domain::Vec3f> polygon; // CCW around normal
+        float area = 0.f;
+    };
+
+    // Monotone-chain 2D convex hull; returns CCW ring without duplicate end.
+    std::vector<std::pair<double, double>> hull_2d(std::vector<std::pair<double, double>> pts) {
+        std::sort(pts.begin(), pts.end());
+        pts.erase(std::unique(pts.begin(), pts.end()), pts.end());
+        size_t n = pts.size();
+        if (n <= 1) return pts;
+        auto cross = [](const std::pair<double, double>& o, const std::pair<double, double>& a,
+                        const std::pair<double, double>& b) {
+            return (a.first - o.first) * (b.second - o.second) - (a.second - o.second) * (b.first - o.first);
+        };
+        std::vector<std::pair<double, double>> lower, upper;
+        for (const auto& p : pts) {
+            while (lower.size() >= 2 && cross(lower[lower.size() - 2], lower.back(), p) <= 0)
+                lower.pop_back();
+            lower.push_back(p);
+        }
+        for (size_t i = n; i-- > 0;) {
+            const auto& p = pts[i];
+            while (upper.size() >= 2 && cross(upper[upper.size() - 2], upper.back(), p) <= 0)
+                upper.pop_back();
+            upper.push_back(p);
+        }
+        lower.pop_back();
+        upper.pop_back();
+        lower.insert(lower.end(), upper.begin(), upper.end());
+        return lower;
+    }
+
+    // Group hull triangles by normal (5deg), merge each group into one polygon.
+    std::vector<HullFace> hull_faces(const Domain::TriangleMesh& mesh) {
+        std::vector<HullFace> out;
+        if (mesh.its.vertices.empty() || mesh.its.indices.empty()) return out;
+        Domain::TriangleMesh hull;
+        try {
+            hull = BizAlgo::TriangleMesh::convex_hull_3d(mesh);
+        } catch (const std::exception& e) {
+            LOGE("convex_hull_3d failed: %s", e.what());
+            return out;
+        }
+        if (hull.its.vertices.empty() || hull.its.indices.empty()) return out;
+        struct Group {
+            Eigen::Vector3d n = Eigen::Vector3d(0, 0, 1);
+            std::vector<Domain::Vec3f> pts;
+            double area = 0;
+        };
+        std::vector<Group> groups;
+        const double cos_tol = std::cos(5.0 * kPi / 180.0);
+        for (const auto& tri : hull.its.indices) {
+            const Domain::Vec3f& a = hull.its.vertices[tri[0]];
+            const Domain::Vec3f& b = hull.its.vertices[tri[1]];
+            const Domain::Vec3f& c = hull.its.vertices[tri[2]];
+            Eigen::Vector3d ba(b.x() - a.x(), b.y() - a.y(), b.z() - a.z());
+            Eigen::Vector3d ca(c.x() - a.x(), c.y() - a.y(), c.z() - a.z());
+            Eigen::Vector3d cr = ba.cross(ca);
+            double twice = cr.norm();
+            if (!(twice > 1e-12)) continue;
+            Eigen::Vector3d n = cr / twice;
+            Group* g = nullptr;
+            for (auto& cand : groups) {
+                if (cand.n.dot(n) > cos_tol) { g = &cand; break; }
+            }
+            if (g == nullptr) {
+                groups.emplace_back();
+                g = &groups.back();
+                g->n = n;
+            }
+            g->n = (g->n * g->area + n * (twice * 0.5)).normalized();
+            g->area += twice * 0.5;
+            g->pts.push_back(a);
+            g->pts.push_back(b);
+            g->pts.push_back(c);
+        }
+        for (auto& g : groups) {
+            Eigen::Vector3d n = g.n.normalized();
+            if (!n.allFinite()) continue;
+            Eigen::Vector3d avg = Eigen::Vector3d::Zero();
+            for (const auto& p : g.pts) avg += Eigen::Vector3d(p.x(), p.y(), p.z());
+            avg /= (double) g.pts.size();
+            Eigen::Vector3d u = (std::abs(n.z()) < 0.9)
+                ? Eigen::Vector3d(0, 0, 1).cross(n).normalized()
+                : Eigen::Vector3d(0, 1, 0).cross(n).normalized();
+            Eigen::Vector3d v = n.cross(u);
+            std::vector<std::pair<double, double>> pts2d;
+            pts2d.reserve(g.pts.size());
+            for (const auto& p : g.pts) {
+                Eigen::Vector3d d(p.x() - avg.x(), p.y() - avg.y(), p.z() - avg.z());
+                pts2d.emplace_back(d.dot(u), d.dot(v));
+            }
+            std::vector<std::pair<double, double>> ring = hull_2d(std::move(pts2d));
+            if (ring.size() < 3) continue;
+            double area2 = 0;
+            for (size_t k = 0; k < ring.size(); ++k) {
+                const auto& p = ring[k];
+                const auto& q = ring[(k + 1) % ring.size()];
+                area2 += p.first * q.second - q.first * p.second;
+            }
+            if (!(std::abs(area2) > 1e-12)) continue;
+            HullFace face;
+            face.normal = Domain::Vec3f((float) n.x(), (float) n.y(), (float) n.z());
+            face.area = (float) (std::abs(area2) * 0.5);
+            face.polygon.reserve(ring.size());
+            // hull_2d is CCW in (u,v) with u x v == n, so lifting preserves
+            // CCW-around-normal winding for back-face culling.
+            for (const auto& p : ring) {
+                Eigen::Vector3d w = avg + u * p.first + v * p.second;
+                face.polygon.emplace_back((float) w.x(), (float) w.y(), (float) w.z());
+            }
+            out.push_back(std::move(face));
+        }
+        return out;
+    }
+
+    // Same XYZ-euler convention as model_rotate (R = Rz * Ry * Rx).
+    Eigen::Quaterniond quat_from_euler_xyz(const Vec3d& e) {
+        return Eigen::AngleAxisd(e[2], Eigen::Vector3d::UnitZ()) *
+               Eigen::AngleAxisd(e[1], Eigen::Vector3d::UnitY()) *
+               Eigen::AngleAxisd(e[0], Eigen::Vector3d::UnitX());
+    }
+
+    Vec3d euler_xyz_from_quat(const Eigen::Quaterniond& q) {
+        Eigen::Vector3d e = q.toRotationMatrix().eulerAngles(2, 1, 0);
+        return Vec3d(e[2], e[1], e[0]);
+    }
+
+    void apply_world_delta(Domain::ModelObject* obj, const Eigen::Quaterniond& delta) {
+        for (Domain::ModelVolume* vol : obj->volumes) {
+            if (vol == nullptr) continue;
+            Eigen::Quaterniond q = delta * quat_from_euler_xyz(vol->get_rotation());
+            vol->set_rotation(euler_xyz_from_quat(q));
+        }
+        obj->invalidate_bounding_box();
+    }
+
+    // Overhang area (facets steeper than 45deg facing down) minus a flat-base
+    // bonus: lower is better for printing.
+    double orient_score(const ::indexed_triangle_set& its, const Eigen::Quaterniond& rot) {
+        double overhang = 0, bottom = 0;
+        for (const auto& tri : its.indices) {
+            const Domain::Vec3f& a = its.vertices[tri[0]];
+            const Domain::Vec3f& b = its.vertices[tri[1]];
+            const Domain::Vec3f& c = its.vertices[tri[2]];
+            Eigen::Vector3d ba(b.x() - a.x(), b.y() - a.y(), b.z() - a.z());
+            Eigen::Vector3d ca(c.x() - a.x(), c.y() - a.y(), c.z() - a.z());
+            Eigen::Vector3d n = rot * ba.cross(ca);
+            double twice = n.norm();
+            if (!(twice > 1e-12)) continue;
+            double nz = n.z() / twice;
+            double area = twice * 0.5;
+            if (nz < -0.7071) overhang += area * (-nz);
+            if (nz <= -0.95) bottom += area;
+        }
+        return overhang - 0.35 * bottom;
+    }
+    } // namespace
+
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1flatten_1rotate(JNIEnv* env, jclass, jlong ptr, jint i, jlong surface_ptr) {
-        // TODO(#212): flatten planes (model_create_flatten_planes) are stubbed with the
-        // GL pipeline, so there is no surface to align to yet.
-        (void) env; (void) ptr; (void) i; (void) surface_ptr;
-        LOGD("model_flatten_rotate: stub, flatten planes pending");
+        ModelRef* model = (ModelRef *) (intptr_t) ptr;
+        GLModelRef* surf = (GLModelRef *) (intptr_t) surface_ptr;
+        if (model == nullptr || surf == nullptr || !surf->has_plane_normal) return;
+        Domain::ModelObject* obj = check_object(model, i);
+        if (obj == nullptr) return;
+        // Lay the picked face onto the bed: rotate its outward normal to -Z.
+        Eigen::Vector3d n(surf->plane_normal.x(), surf->plane_normal.y(), surf->plane_normal.z());
+        if (!(n.norm() > 1e-9) || !n.allFinite()) return;
+        n.normalize();
+        Eigen::Quaterniond delta =
+            Eigen::Quaterniond::FromTwoVectors(n, Eigen::Vector3d(0, 0, -1));
+        apply_world_delta(obj, delta);
+        LOGD("model_flatten_rotate: laid face down (nx=%.3f ny=%.3f nz=%.3f)", n.x(), n.y(), n.z());
+        (void) env;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1translate_1global(JNIEnv* env, jclass, jlong ptr, jdouble x, jdouble y, jdouble z) {
@@ -710,18 +892,85 @@ extern "C" {
     }
 
     JNIEXPORT jlongArray JNICALL Java_com_flashforge_farm_slic3r_Native_model_1create_1flatten_1planes(JNIEnv* env, jclass, jlong ptr, jint i) {
-        // TODO(#212): plane extraction needs the convex-hull facet walk ported to
-        // Domain::TriangleMesh plus GL planes for picking; both pending. Return an
-        // EMPTY array (never null): Model.java dereferences ptr.length immediately.
-        (void) ptr; (void) i;
-        LOGD("model_create_flatten_planes: stub, pending");
-        return env->NewLongArray(0);
+        ModelRef* model = (ModelRef *) (intptr_t) ptr;
+        std::vector<jlong> out;
+        if (model != nullptr) {
+            if (Domain::ModelObject* obj = check_object(model, i); obj != nullptr) {
+                const Domain::TriangleMesh mesh = BizAlgo::ModelObject::mesh(*obj);
+                std::vector<HullFace> faces = hull_faces(mesh);
+                double total = 0;
+                for (const auto& f : faces) total += f.area;
+                // Keep significant faces only (dust chamfers are unpickable),
+                // largest first, bounded for the picker UI.
+                std::sort(faces.begin(), faces.end(),
+                    [](const HullFace& a, const HullFace& b) { return a.area > b.area; });
+                const double keep = std::max(1.0, total * 0.005);
+                size_t count = 0;
+                for (const auto& f : faces) {
+                    if (!(f.area >= keep) || f.polygon.size() < 3 || count >= 40) continue;
+                    GLModelRef* ref = new GLModelRef();
+                    Slic3r::GUI::GLModel::Geometry g;
+                    g.format = {Slic3r::GUI::GLModel::Geometry::EPrimitiveType::Triangles,
+                                Slic3r::GUI::GLModel::Geometry::EVertexLayout::P3N3};
+                    // Lift a hair off the surface so the highlight never z-fights.
+                    const Domain::Vec3f off = f.normal * 0.05f;
+                    g.reserve_vertices((unsigned int) f.polygon.size());
+                    g.reserve_indices((unsigned int) ((f.polygon.size() - 2) * 3));
+                    for (const auto& p : f.polygon) g.add_vertex(p + off, f.normal);
+                    for (size_t k = 1; k + 1 < f.polygon.size(); ++k)
+                        g.add_triangle(0, (unsigned int) k, (unsigned int) (k + 1));
+                    ref->model.init_from(std::move(g));
+                    ::indexed_triangle_set its;
+                    its.vertices.reserve(f.polygon.size());
+                    for (const auto& p : f.polygon) its.vertices.push_back(p + off);
+                    for (size_t k = 1; k + 1 < f.polygon.size(); ++k)
+                        its.indices.push_back({0, (unsigned int) k, (unsigned int) (k + 1)});
+                    ref->mesh.its = std::move(its);
+                    ref->plane_normal = f.normal;
+                    ref->has_plane_normal = true;
+                    out.push_back((jlong) (intptr_t) ref);
+                    ++count;
+                }
+                LOGD("model_create_flatten_planes: %zu planes", out.size());
+            }
+        }
+        jlongArray arr = env->NewLongArray((jsize) out.size());
+        if (!out.empty()) env->SetLongArrayRegion(arr, 0, (jsize) out.size(), out.data());
+        return arr;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1auto_1orient(JNIEnv* env, jclass, jlong ptr, jint i) {
-        // TODO(#212): compat/Orient.hpp needs the deleted 2.x Model header.
-        (void) env; (void) ptr; (void) i;
-        LOGD("model_auto_orient: stub, orient pending");
+        ModelRef* model = (ModelRef *) (intptr_t) ptr;
+        if (model == nullptr) return;
+        Domain::ModelObject* obj = check_object(model, i);
+        if (obj == nullptr) return;
+        const Domain::TriangleMesh mesh = BizAlgo::ModelObject::mesh(*obj);
+        if (mesh.its.vertices.empty() || mesh.its.indices.empty()) return;
+        std::vector<HullFace> faces = hull_faces(mesh);
+        std::sort(faces.begin(), faces.end(),
+            [](const HullFace& a, const HullFace& b) { return a.area > b.area; });
+        // Candidates: keep the current orientation plus hull-face-down poses
+        // for the largest faces. Lowest overhang-minus-base score wins.
+        double best_score = orient_score(mesh.its, Eigen::Quaterniond::Identity());
+        Eigen::Quaterniond best = Eigen::Quaterniond::Identity();
+        size_t count = 0;
+        for (const auto& f : faces) {
+            if (count >= 24) break;
+            ++count;
+            Eigen::Vector3d n(f.normal.x(), f.normal.y(), f.normal.z());
+            if (!(n.norm() > 1e-9) || !n.allFinite()) continue;
+            n.normalize();
+            Eigen::Quaterniond rot =
+                Eigen::Quaterniond::FromTwoVectors(n, Eigen::Vector3d(0, 0, -1));
+            double s = orient_score(mesh.its, rot);
+            if (s < best_score) {
+                best_score = s;
+                best = rot;
+            }
+        }
+        apply_world_delta(obj, best);
+        LOGD("model_auto_orient: applied best of %zu candidates (score=%.1f)", count + 1, best_score);
+        (void) env;
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_model_1is_1big_1object(JNIEnv* env, jclass, jlong ptr, jint i) {

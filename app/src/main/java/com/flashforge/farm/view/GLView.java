@@ -679,7 +679,7 @@ public class GLView extends GLSurfaceView implements IThemeView {
                             dragPanTo(x, y);
                         } else {
                             float gain = rotateDegreesPerInch();
-                            renderer.getCamera().rotateAround(distanceX / pixelsPerInch * gain, distanceY / pixelsPerInch * gain);
+                            renderer.getCamera().rotateAround(-distanceX / pixelsPerInch * gain, distanceY / pixelsPerInch * gain);
                             requestRender();
                         }
                     }
@@ -726,7 +726,7 @@ public class GLView extends GLSurfaceView implements IThemeView {
                                 // Trackball orbit in physical units: same angular
                                 // travel per inch on every display density.
                                 float gain = rotateDegreesPerInch();
-                                renderer.getCamera().rotateAround(distanceX / pixelsPerInch * gain, distanceY / pixelsPerInch * gain);
+                                renderer.getCamera().rotateAround(-distanceX / pixelsPerInch * gain, distanceY / pixelsPerInch * gain);
                             } else {
                                 dragPanTo(e.getX(), e.getY());
                             }

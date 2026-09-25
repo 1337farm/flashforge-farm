@@ -2345,7 +2345,7 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             camera.position.x = center.x;
             camera.position.y = center.y - distance;
             camera.position.z = 0;
-            camera.rotateAround(0, -25);
+            camera.rotateAround(0, -30);
             // Reference dolly distance: zoom limits are distance ratios of this.
             camera.setDefaultDistance(camera.currentDistance());
             cameraIsDirty = false;

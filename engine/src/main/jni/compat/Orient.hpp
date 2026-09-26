@@ -1,11 +1,29 @@
 #ifndef ORIENT_HPP
 #define ORIENT_HPP
 
-#include "libslic3r/Model.hpp"
+// 3.0 port of the vendored PrusaSlicer 2.x auto-orienter (engine/src/main/jni/
+// compat/Orient.cpp, upstream AutoOrienter). Only the two 2.x Model wrappers
+// were removed; the orienter itself is mesh-only and runs on 3.0 types.
+#include "Slic3r/Domain/TriangleMesh.hpp"
+#include "Slic3r/Domain/Transformation.hpp"
+// Slic3r::{Vec3d,Vec3f,Matrix3d,Transform3d,Point,BoundingBoxf3} aliases.
+// NOTE: libslic3r/Geometry.hpp is intentionally NOT included here — it leaks
+// a global SCALED_EPSILON macro that clashes with the engine's own macro in any
+// TU that also includes render/bed_utils.hpp. Orient.cpp includes it instead.
+#include "libslic3r/Point.hpp"
+
+#include <Eigen/Geometry>
+#include <functional>
+#include <string>
+#include <vector>
 
 namespace Slic3r {
 
 namespace orientation {
+
+// The orienter only ever needs the plain mesh; the 2.x Model-based entry
+// points (orient(ModelObject*), orient(ModelInstance*)) were dropped with the
+// 2.x headers, so callers apply the returned direction themselves.
 
 
 /// A logical bed representing an object not being orientd. Either the orient
@@ -23,7 +41,7 @@ static const constexpr int UNORIENTD = -1;
 /// (also the initial state before orient), 0..N means the index of the bed.
 /// Zero is the physical bed, larger than zero means a virtual bed.
 struct OrientMesh {
-    TriangleMesh mesh;              /// The real mesh data
+    Domain::TriangleMesh mesh;      /// The real mesh data
     double overhang_angle = 30;
     double angle{ 0 };
     Vec3d axis{ 0,0,1 };
@@ -149,10 +167,6 @@ using OrientMeshs = std::vector<OrientMesh>;
  */
 void orient(OrientMeshs &items, const OrientMeshs &excludes, const OrientParams &params = {});
 
-// this function should be deleted, since rotating objects are so complicated that its inherited transformation may be a trouble
-void orient(ModelObject* obj);
-
-void orient(ModelInstance* instance);
 
 }} // namespace Slic3r::orientment
 

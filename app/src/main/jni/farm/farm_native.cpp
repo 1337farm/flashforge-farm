@@ -610,16 +610,16 @@ extern "C" {
         // duplicate the upstream split always appends and report no-op.
         if (new_objects.size() <= 1) {
             for (Domain::ModelObject* extra : new_objects)
-                model->delete_object(extra->id());
+                model->model.delete_object(extra->id());
             return 0;
         }
 
         // Replace the original (which the split leaves in place) with the
         // pieces. delete_object reuses the original's slot; look the index up
         // by pointer so appended-object index drift cannot bite.
-        const auto it = std::find(model->objects.begin(), model->objects.end(), obj);
-        if (it != model->objects.end())
-            model->delete_object((size_t) std::distance(model->objects.begin(), it));
+        const auto it = std::find(model->model.objects.begin(), model->model.objects.end(), obj);
+        if (it != model->model.objects.end())
+            model->model.delete_object((size_t) std::distance(model->model.objects.begin(), it));
         return (jint) new_objects.size();
     }
 

@@ -4,9 +4,11 @@ import com.flashforge.farm.Bus;
 
 import android.content.Context;
 import android.graphics.drawable.Drawable;
+import android.os.SystemClock;
 import android.text.InputType;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -115,6 +117,7 @@ public class OrientationMenu extends ListBedMenu {
             if (orientRuns <= 0) return;
             if (!autoOrientItem.isBusy) {
                 autoOrientItem.isBusy = true;
+                Log.d("FarmOrientSpinner", "busy=true t=" + SystemClock.uptimeMillis());
                 adapter.notifyItemChanged(adapter.getItems().indexOf(autoOrientItem));
             }
         };
@@ -130,6 +133,7 @@ public class OrientationMenu extends ListBedMenu {
                 orientRuns = Math.max(0, orientRuns - 1);
                 if (orientRuns == 0 && autoOrientItem.isBusy) {
                     autoOrientItem.isBusy = false;
+                    Log.d("FarmOrientSpinner", "busy=false t=" + SystemClock.uptimeMillis());
                     adapter.notifyItemChanged(adapter.getItems().indexOf(autoOrientItem));
                 }
                 fragment.getGlView().queueEvent(() -> {

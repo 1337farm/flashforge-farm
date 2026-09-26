@@ -244,16 +244,7 @@ public class BedFragment extends Fragment {
                             });
                             break;
                         case 4: // Auto-orient
-                            glView.queueEvent(() -> {
-                                glView.getRenderer().getModel().autoOrient(objectIndex);
-                                glView.getRenderer().getModel().ensureOnBed(objectIndex);
-                                glView.getRenderer().invalidateGlModel(objectIndex);
-                                glView.requestRender();
-                                ViewUtils.postOnMainThread(() -> {
-                                    updateModel();
-                                    Toast.makeText(ctx, R.string.ModelContextAutoOriented, Toast.LENGTH_SHORT).show();
-                                });
-                            });
+                            autoOrientObject(objectIndex, ctx);
                             break;
                         case 5: // Reset Rotation
                             glView.queueEvent(() -> {
@@ -336,6 +327,56 @@ public class BedFragment extends Fragment {
         });
         paintModeView = new com.flashforge.farm.view.PaintModeView(ctx, glView, this::exitPaintMode, mode);
         overlayLayout.addView(paintModeView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    /**
+     * Auto-orient a single object (long-press context menu) on the background
+     * auto-orient thread with a determinate progress dialog.
+     */
+    private void autoOrientObject(final int objectIndex, Context ctx) {
+        Model model = glView.getRenderer().getModel();
+        if (model == null || ctx == null || objectIndex == -1) return;
+        final int[] indices = {objectIndex};
+        final android.app.ProgressDialog dialog = new android.app.ProgressDialog(ctx);
+        dialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
+        dialog.setMax(100);
+        dialog.setProgressNumberFormat("%1d%%");
+        dialog.setTitle(ctx.getString(R.string.MenuOrientationAutoOrientRunning));
+        dialog.setCancelable(false);
+        dialog.show();
+
+        model.autoOrientAsync(indices, new Model.OnAutoOrient() {
+            private final int[] currentPart = {0};
+
+            @Override
+            public void onAutoOrientProgress(int tag, String name) {
+                int percent;
+                if (tag < 20) {
+                    currentPart[0] = tag;
+                    percent = tag * 100;
+                } else {
+                    percent = currentPart[0] * 100 + tag;
+                }
+                if (percent > 100) percent = 100;
+                dialog.setProgress(percent);
+                if (name != null && !name.isEmpty()) {
+                    dialog.setMessage(name);
+                }
+            }
+
+            @Override
+            public void onAutoOrientFinished() {
+                if (dialog.isShowing()) dialog.dismiss();
+                glView.queueEvent(() -> {
+                    glView.getRenderer().invalidateGlModel(objectIndex);
+                    glView.requestRender();
+                    ViewUtils.postOnMainThread(() -> {
+                        updateModel();
+                        Toast.makeText(ctx, R.string.ModelContextAutoOriented, Toast.LENGTH_SHORT).show();
+                    });
+                });
+            }
+        });
     }
 
     private void exitPaintMode() {

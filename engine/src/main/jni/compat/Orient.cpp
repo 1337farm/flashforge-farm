@@ -599,8 +599,10 @@ namespace Slic3r {
                 for (size_t i = 0; i != meshs_.size(); ++i) {
                     auto &mesh_ = meshs_[i];
                     progressfn(i, mesh_.name);
-                    //auto progressfn_i = [&](unsigned cnt) {progressfn(cnt, "Orienting " + mesh_.name); };
-                    AutoOrienter orienter(&mesh_, params, /*progressfn_i*/{}, stopfn);
+                    // Re-enable upstream's (commented-out) per-stage progress so
+                    // orient() reports 20/30/60/80 as the orienter runs.
+                    auto progressfn_i = [&](unsigned cnt) { progressfn(cnt, "Orienting " + mesh_.name); };
+                    AutoOrienter orienter(&mesh_, params, progressfn_i, stopfn);
                     mesh_.orientation = orienter.process();
                     rotation_from_two_vectors(mesh_.orientation, {0, 0, 1}, mesh_.axis,
                                                         mesh_.angle, &mesh_.rotation_matrix);
@@ -615,7 +617,8 @@ namespace Slic3r {
                                       for (size_t i = range.begin(); i != range.end(); ++i) {
                                           auto &mesh_ = meshs_[i];
                                           progressfn(i, mesh_.name);
-                                          AutoOrienter orienter(&mesh_, params, {}, stopfn);
+                                          auto progressfn_i = [&](unsigned cnt) { progressfn(cnt, "Orienting " + mesh_.name); };
+                                          AutoOrienter orienter(&mesh_, params, progressfn_i, stopfn);
                                           mesh_.orientation = orienter.process();
                                           rotation_from_two_vectors(mesh_.orientation,
                                                                               {0, 0, 1}, mesh_.axis,

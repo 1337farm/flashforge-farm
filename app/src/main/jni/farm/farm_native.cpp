@@ -850,6 +850,37 @@ namespace {
         farm_auto_orient(obj, 60.0);
     }
 
+    JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1auto_1orient_1progress(JNIEnv* env, jclass, jlong ptr, jintArray indices, jobject listener) {
+        ModelRef* model = (ModelRef *) (intptr_t) ptr;
+        if (model == nullptr || indices == nullptr || listener == nullptr) return;
+        jsize count = env->GetArrayLength(indices);
+        if (count == 0) return;
+        std::vector<jint> idx((size_t) count);
+        env->GetIntArrayRegion(indices, 0, count, idx.data());
+        std::vector<Domain::ModelObject*> objects;
+        for (jint k : idx) {
+            Domain::ModelObject* obj = check_object(model, k);
+            if (obj != nullptr) objects.push_back(obj);
+        }
+        if (objects.empty()) return;
+
+        jclass cls = env->GetObjectClass(listener);
+        jmethodID onProgress = env->GetMethodID(cls, "onAutoOrientProgress", "(ILjava/lang/String;)V");
+        if (onProgress == nullptr || env->ExceptionCheck()) {
+            env->ExceptionClear();
+            return;
+        }
+        // orient() runs synchronously on this (worker) thread; env is valid for
+        // the whole call, so the progress lambda can up-call Java directly.
+        farm_auto_orient_batch((void* const*) objects.data(), objects.size(), 60.0,
+                               [env, listener, onProgress](unsigned tag, const std::string& name) {
+                                   jstring jname = env->NewStringUTF(name.c_str());
+                                   env->CallVoidMethod(listener, onProgress, (jint) tag, jname);
+                                   env->DeleteLocalRef(jname);
+                                   if (env->ExceptionCheck()) env->ExceptionClear();
+                               });
+    }
+
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_model_1is_1big_1object(JNIEnv* env, jclass, jlong ptr, jint i) {
         (void) env;
         ModelRef* model = (ModelRef*) (intptr_t) ptr;

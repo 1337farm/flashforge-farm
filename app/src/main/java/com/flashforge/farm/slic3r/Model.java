@@ -4,16 +4,35 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import com.flashforge.farm.FarmApp;
 import com.flashforge.farm.utils.Vec3d;
+import com.flashforge.farm.utils.ViewUtils;
 
 public class Model {
+    // Auto-orient is compute-heavy (support-area minimization over all facet
+    // combinations), so it runs on a dedicated serial worker instead of the UI
+    // or GL thread; UI-thread callers just update their dialog from callbacks.
+    private static final ExecutorService ORIENT_EXECUTOR = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "auto-orient");
+        return t;
+    });
     public final String key = UUID.randomUUID().toString();
     long pointer;
 
     private double[] boundingExact;
     private double[] boundingApprox;
+
+    /** Listener for the asynchronous auto-orient API. */
+    public interface OnAutoOrient {
+        /** tag = part index when a part starts, or a 20/30/60/80% stage inside a part. */
+        void onAutoOrientProgress(int tag, String name);
+
+        /** Fired (on the main thread) when native orienting has finished. */
+        void onAutoOrientFinished();
+    }
 
     public Model() {
         this(Native.model_create());
@@ -230,6 +249,31 @@ public class Model {
 
     public void autoOrient(int i) {
         Native.model_auto_orient(pointer, i);
+    }
+
+    /**
+     * Auto-orient the given objects on a background thread with real progress
+     * callbacks. Native mutations land on the GL-thread only via the caller's
+     * own queueEvent refresh in {@link OnAutoOrient#onAutoOrientFinished}.
+     */
+    public void autoOrientAsync(final int[] indices, final OnAutoOrient listener) {
+        if (indices == null || indices.length == 0) {
+            if (listener != null) ViewUtils.postOnMainThread(listener::onAutoOrientFinished);
+            return;
+        }
+        ORIENT_EXECUTOR.execute(() -> {
+            try {
+                Native.model_auto_orient_progress(pointer, indices, (tag, name) -> {
+                    if (listener != null) {
+                        ViewUtils.postOnMainThread(() -> listener.onAutoOrientProgress(tag, name));
+                    }
+                });
+            } finally {
+                if (listener != null) {
+                    ViewUtils.postOnMainThread(listener::onAutoOrientFinished);
+                }
+            }
+        });
     }
 
     public boolean isBigObject(int i) {

@@ -845,8 +845,9 @@ namespace {
         if (obj == nullptr) return;
         // Genuine upstream AutoOrienter (compat/Orient.cpp), isolated in
         // farm_orient.cpp so its libslic3r.h include cannot collide with the
-        // engine headers used here. 45deg = faces steeper than 45 need support.
-        farm_auto_orient(obj, 45.0);
+        // engine headers used here. 60deg reproduces the default OrientParams
+        // (ASCENT = cos(120deg) = -0.5) used by upstream orient(ModelObject*).
+        farm_auto_orient(obj, 60.0);
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_model_1is_1big_1object(JNIEnv* env, jclass, jlong ptr, jint i) {

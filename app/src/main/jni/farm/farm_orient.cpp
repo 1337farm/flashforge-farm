@@ -35,21 +35,22 @@ extern "C" void farm_auto_orient(void* model_object_ptr, double overhang_angle)
         const Slic3r::Domain::Vec3d dir = items.front().orientation;
         if (!(dir.norm() > 1e-9) || !dir.allFinite()) return;
 
-        // Same application as upstream orient(ModelObject*): turn that
-        // direction onto -Z and re-seat the object on the bed.
-        const Eigen::Quaterniond rot =
-            Eigen::Quaterniond::FromTwoVectors(dir.normalized(), -Slic3r::Domain::Vec3d::UnitZ());
+        // Exactly the upstream orient(ModelObject*) application: negate the
+        // found up-direction (so setFromTwoVectors(tnormal, -Z) actually maps
+        // the part's up-direction onto +Z), rotate every volume in world
+        // space while keeping its offset, then re-seat the object on the bed.
+        const Slic3r::Domain::Vec3d tnormal = -dir;
+        const Slic3r::Domain::Transform3d rotation_matrix =
+            Slic3r::Domain::Transform3d(Eigen::Quaterniond().setFromTwoVectors(
+                tnormal, -Slic3r::Domain::Vec3d::UnitZ()));
         for (Slic3r::Domain::ModelVolume* vol : obj->volumes) {
             if (vol == nullptr) continue;
-            const Slic3r::Domain::Vec3d cur = vol->get_rotation();
-            const Eigen::Quaterniond q_cur =
-                Eigen::AngleAxisd(cur[2], Eigen::Vector3d::UnitZ()) *
-                Eigen::AngleAxisd(cur[1], Eigen::Vector3d::UnitY()) *
-                Eigen::AngleAxisd(cur[0], Eigen::Vector3d::UnitX());
-            const Eigen::Vector3d e = (rot * q_cur).toRotationMatrix().eulerAngles(2, 1, 0);
-            vol->set_rotation(Slic3r::Domain::Vec3d(e[2], e[1], e[0]));
+            const Slic3r::Domain::Transformation& old_transform = vol->get_transformation();
+            vol->set_transformation(old_transform.get_offset_matrix() * rotation_matrix *
+                                    old_transform.get_matrix_no_offset());
         }
         obj->invalidate_bounding_box();
+        Slic3r::Biz::Algorithms::ModelObject::ensure_on_bed(*obj, false);
     } catch (const std::exception&) {
         // Auto-orient is best-effort: a mesh the orienter cannot score is
         // simply left as-is rather than failing the UI action.

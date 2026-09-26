@@ -282,6 +282,14 @@ public class Native {
     static native void model_remove_connector(long ptr, int objIdx, int connIdx);
     static native void model_clear_connectors(long ptr, int objIdx);
     static native void model_auto_orient(long ptr, int i);
+
+    /** Progress callback for {@link #model_auto_orient_progress}. */
+    interface OnAutoOrientProgressListener {
+        // tag = part index when a part starts, or a 20/30/60/80% stage inside a part.
+        void onAutoOrientProgress(int tag, String name);
+    }
+
+    static native void model_auto_orient_progress(long ptr, int[] indices, OnAutoOrientProgressListener listener);
     static native boolean model_is_big_object(long ptr, int i);
     static native int model_get_extruder(long ptr, int i);
     static native void model_set_extruder(long ptr, int i, int extruder);

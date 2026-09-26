@@ -1156,17 +1156,22 @@ public class MainActivity extends AppCompatActivity {
 
                             Bus.OBJECTS_LIST_CHANGED.postValue(new ObjectsListChangedEvent());
                             boolean bigObject = false;
+                            java.util.List<Integer> oriented = new ArrayList<>();
                             for (int i = firstNewObject; i < firstNewObject + addedObjects; i++) {
                                 if (autoorient && !project3mf) {
                                     model.autoOrient(i);
-                                    fragment.getGlView().getRenderer().invalidateGlModel(i);
+                                    oriented.add(i);
                                 }
                                 if (model.isBigObject(i)) {
                                     bigObject = true;
                                 }
                             }
-                            if (autoorient && !project3mf) {
-                                fragment.getGlView().requestRender();
+                            if (!oriented.isEmpty()) {
+                                java.util.List<Integer> refresh = oriented;
+                                fragment.getGlView().queueEvent(() -> {
+                                    for (int idx : refresh) fragment.getGlView().getRenderer().invalidateGlModel(idx);
+                                    fragment.getGlView().requestRender();
+                                });
                             }
                             Bus.DISMISS_SNACKBAR.postValue(new NeedDismissSnackbarEvent(tag));
                             if (project3mf) {

@@ -874,6 +874,11 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         return selectedObjects.size();
     }
 
+    /** Snapshot of the full multi-selection (indexes), empty if nothing is selected. */
+    public java.util.List<Integer> getSelectedObjectsSnapshot() {
+        return new java.util.ArrayList<>(selectedObjects);
+    }
+
     /** Select every object on the bed. The first object becomes the primary (gizmo) selection. */
     public boolean selectAllObjects() {
         if (model == null || model.getObjectsCount() == 0) return false;

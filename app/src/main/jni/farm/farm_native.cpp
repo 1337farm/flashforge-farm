@@ -52,6 +52,7 @@
 // genuine upstream auto-orienter (vendored PrusaSlicer 2.x AutoOrienter, ported
 // to 3.0 mesh types).
 #include "Slic3r/App/Plater/PlaceOnFaceGizmoPlanes.hpp"
+#include "Slic3r/Biz/Arrange/Arrange.hpp"
 #include "farm_orient.hpp"
 
 namespace Domain  = Slic3r::Domain;
@@ -1693,12 +1694,47 @@ namespace {
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1arrange(JNIEnv* env, jclass, jlong ptr, jlong model) {
-        // TODO(#212): target is Biz::Arrange::arrange_model_in_place(model, contour,
-        // Settings) once the arrange surface is verified; false = "did not fit",
-        // matching the old failure signal; never claim a layout we did not compute.
-        (void) env; (void) ptr; (void) model;
-        LOGD("bed_arrange: stub, arrange port pending");
-        return false;
+        FarmBedRef* bed = (FarmBedRef*) (intptr_t) ptr;
+        ModelRef* mr = (ModelRef*) (intptr_t) model;
+        if (bed == nullptr || mr == nullptr || !bed->configured || bed->contour_mm.size() < 3)
+            return false;
+
+        // The packer works in scaled bed units (Domain::Point = Vec2crd); the
+        // app configures the contour in millimetres, same as bed_build_visuals.
+        Domain::Points bed_contour_scaled;
+        bed_contour_scaled.reserve(bed->contour_mm.size());
+        for (const Domain::Vec2d& v : bed->contour_mm)
+            bed_contour_scaled.push_back(BizAlgo::Scaling::scaled(v));
+
+        // Re-pack every instance on the plate (Arrange button semantics).
+        std::vector<const Domain::ModelInstance*> instances;
+        for (const Domain::ModelObject* object : mr->model.objects)
+            for (const Domain::ModelInstance* inst : object->instances)
+                instances.push_back(inst);
+        if (instances.empty()) return true;
+
+        Slic3r::Biz::Arrange::Settings settings;   // AutoArrange defaults: fill bed, keep orientation.
+        const auto transforms = Slic3r::Biz::Arrange::arrange_instances(instances, bed_contour_scaled, settings);
+
+        // Apply exactly the transforms the packer returned; whatever did not
+        // fit stays where it was. Same application as upstream arrange_model_in_place.
+        for (Domain::ModelObject* object : mr->model.objects) {
+            for (Domain::ModelInstance* inst : object->instances) {
+                const auto it = std::find_if(transforms.cbegin(), transforms.cend(), [inst](const auto& t) {
+                    return t.instance_ref.object_id == inst->get_object()->id().id
+                        && t.instance_ref.instance_id == inst->id().id;
+                });
+                if (it == transforms.cend()) continue;
+                Domain::Transform3d m = inst->get_transformation().get_matrix();
+                m.translation().x() = it->absolute_offset.x();
+                m.translation().y() = it->absolute_offset.y();
+                Domain::Transform3d rot = Domain::Transform3d::Identity();
+                rot.rotate(Eigen::AngleAxisd(it->rotation_delta, Eigen::Vector3d::UnitZ()));
+                inst->set_transformation(Domain::Transformation{m * rot});
+                object->invalidate_bounding_box();
+            }
+        }
+        return transforms.size() == instances.size();
     }
 
     JNIEXPORT jdoubleArray JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1get_1bounding_1volume(JNIEnv* env, jclass, jlong ptr) {

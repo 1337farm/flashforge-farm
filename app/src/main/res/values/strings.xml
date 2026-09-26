@@ -90,7 +90,6 @@
     <string name="MenuOrientationArrangeFinished">Models arranged.</string>
     <string name="MenuOrientationFlatten">On face</string>
     <string name="MenuOrientationAutoOrient">Auto\nOrient.</string>
-    <string name="MenuOrientationAutoOrientRunning">Auto-orienting…</string>
     <string name="MenuOrientationAutoOrientDone">Aligned automatically.</string>
     <string name="MenuOrientationPosition">Position</string>
     <string name="MenuOrientationPositionX">X</string>

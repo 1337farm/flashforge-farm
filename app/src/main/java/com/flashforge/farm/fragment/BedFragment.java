@@ -331,42 +331,20 @@ public class BedFragment extends Fragment {
 
     /**
      * Auto-orient a single object (long-press context menu) on the background
-     * auto-orient thread with a determinate progress dialog.
+     * auto-orient thread; GL refresh runs via queueEvent once converged.
      */
     private void autoOrientObject(final int objectIndex, Context ctx) {
         Model model = glView.getRenderer().getModel();
         if (model == null || ctx == null || objectIndex == -1) return;
         final int[] indices = {objectIndex};
-        final android.app.ProgressDialog dialog = new android.app.ProgressDialog(ctx);
-        dialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
-        dialog.setMax(100);
-        dialog.setProgressNumberFormat("%1d%%");
-        dialog.setTitle(ctx.getString(R.string.MenuOrientationAutoOrientRunning));
-        dialog.setCancelable(false);
-        dialog.show();
 
         model.autoOrientAsync(indices, new Model.OnAutoOrient() {
-            private final int[] currentPart = {0};
-
             @Override
             public void onAutoOrientProgress(int tag, String name) {
-                int percent;
-                if (tag < 20) {
-                    currentPart[0] = tag;
-                    percent = tag * 100;
-                } else {
-                    percent = currentPart[0] * 100 + tag;
-                }
-                if (percent > 100) percent = 100;
-                dialog.setProgress(percent);
-                if (name != null && !name.isEmpty()) {
-                    dialog.setMessage(name);
-                }
             }
 
             @Override
             public void onAutoOrientFinished() {
-                if (dialog.isShowing()) dialog.dismiss();
                 glView.queueEvent(() -> {
                     glView.getRenderer().invalidateGlModel(objectIndex);
                     glView.requestRender();

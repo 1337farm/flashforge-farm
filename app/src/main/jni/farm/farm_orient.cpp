@@ -23,87 +23,89 @@
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-// Consume an upstream-orienter result exactly the way upstream intends:
-// orientation() fills in rotation_matrix / euler_angles on the OrientMesh (both
-// the serial and parallel branches compute rotation_from_two_vectors(dir, +Z)),
-// and the transformation matrix is applied in the same per-volume composition
-// that upstream's orient(ModelObject*) used: keep each volume's offset in world
-// space, rotate its linear part, then re-seat the object on the bed.
-static void apply_orientation(Slic3r::Domain::ModelObject* obj,
-                              const Slic3r::orientation::OrientMesh& oriented)
+// Apply an upstream-orienter result as the object's CANONICAL pose. The
+// orienter's candidate directions are face/hull normals of the CURRENT mesh,
+// and its best orientation is scored against that same posed mesh, so feeding
+// it a user-rotated object both changes the candidate set and (when the chosen
+// rotation is composed on top of the existing one) produces a different final
+// stance — a model lying on a corner instead of its proper face. To make the
+// result a pure function of the geometry, orient_object first strips every
+// volume's rotation; the mesh supplied to the orienter is then the object's
+// own shape, and here we REPLACE the volume rotation with the chosen one while
+// keeping the placement (offset) and scale intact.
+static void apply_canonical_orientation(Slic3r::Domain::ModelObject* obj,
+                                        const Slic3r::orientation::OrientMesh& oriented)
 {
     if (obj == nullptr || !oriented.rotation_matrix.allFinite()) return;
     const Slic3r::Domain::Transform3d rotation_matrix =
         Slic3r::Domain::Transform3d(oriented.rotation_matrix);
     for (Slic3r::Domain::ModelVolume* vol : obj->volumes) {
         if (vol == nullptr) continue;
-        const Slic3r::Domain::Transformation& old_transform = vol->get_transformation();
-        vol->set_transformation(old_transform.get_offset_matrix() * rotation_matrix *
-                                old_transform.get_matrix_no_offset());
+        const Slic3r::Domain::Transformation& t = vol->get_transformation();
+        vol->set_transformation(t.get_offset_matrix() * t.get_scaling_factor_matrix() *
+                                rotation_matrix);
     }
     obj->invalidate_bounding_box();
     Slic3r::Biz::Algorithms::ModelObject::ensure_on_bed(*obj, false);
 }
 
-// Orient one object with the genuine upstream minimizer, iterating to a
-// fixpoint: the orienter's candidate directions come from the CURRENT mesh's
-// face/hull normals, so on some geometry a single pass settles on a local
-// optimum that re-running on the rotated pose improves (hit the button twice,
-// the second run lands on the proper face). Re-run the identical upstream
-// orienter on the just-rotated mesh until the chosen rotation is ~0 or the
-// iteration cap is hit. Every pass is genuine upstream; nothing farm-side.
-// Progress reports only the first pass (part index < 20 on part start, then
-// the 20/30/60/80 per-stage markers) so the loop stays invisible to the UI.
+// Orient one object with the genuine upstream minimizer against its OWN
+// geometry. The orienter's candidate directions come from the CURRENT mesh's
+// face/hull normals, so any pose-dependent run (single or iterated) can settle
+// on a different face; strip the volumes' rotation first so the candidates and
+// scores describe the shape itself, then apply the chosen rotation as the new
+// canonical pose. Progress reports the 20/30/60/80 per-stage markers (part
+// index < 20 on part start) so the background run stays visible to the UI.
 static void orient_object(Slic3r::Domain::ModelObject* obj, double overhang_angle,
                           const FarmOrientProgressFn& progress, unsigned part_index)
 {
     if (obj == nullptr) return;
-    constexpr int MAX_ITERATIONS = 5;
-    for (int it = 0; it < MAX_ITERATIONS; ++it) {
-        try {
-            const Slic3r::Domain::TriangleMesh mesh =
-                Slic3r::Biz::Algorithms::ModelObject::mesh(*obj);
-            if (mesh.its.vertices.empty() || mesh.its.indices.empty()) {
-                if (it == 0)
-                    LOGE("farm_orient: no mesh (instances=%zu volumes=%zu)",
-                         obj->instances.size(), obj->volumes.size());
-                return;
-            }
 
-            Slic3r::orientation::OrientMesh om;
-            om.mesh = mesh;
-            om.overhang_angle = overhang_angle;
-            om.name = obj->name;
-            om.setter = [obj](const Slic3r::orientation::OrientMesh& o) { apply_orientation(obj, o); };
-            Slic3r::orientation::OrientMeshs items{om};
+    for (Slic3r::Domain::ModelVolume* vol : obj->volumes) {
+        if (vol == nullptr) continue;
+        const Slic3r::Domain::Transformation& t = vol->get_transformation();
+        vol->set_transformation(t.get_offset_matrix() * t.get_scaling_factor_matrix());
+    }
 
-            // The public orient() entry calls progressfn(i, name) unconditionally
-            // per item; with the default empty std::function that throws
-            // std::bad_function_call and the whole orient silently no-ops (the
-            // removed 2.x wrappers never hit this because they built AutoOrienter
-            // directly). Hand in a callable hook, throttled to the first pass.
-            Slic3r::orientation::OrientParams params;
-            params.progressind = [progress, part_index, it](unsigned tag, const std::string& name) {
-                if (progress && it == 0) progress(tag < 20 ? part_index : tag, name);
-            };
-            Slic3r::orientation::orient(items, {}, params);
-
-            const Slic3r::orientation::OrientMesh& res = items.front();
-            if (!res.orientation.allFinite() || res.orientation.norm() < 1e-6 ||
-                !res.rotation_matrix.allFinite()) {
-                LOGD("farm_orient: degenerate solution on iteration %d, leaving as-is", it + 1);
-                return;
-            }
-            const double rot_deg = std::abs(res.angle) * 180.0 / std::acos(-1.0);
-            res.apply();
-            LOGD("farm_orient: iter %d dir=(%+.4f, %+.4f, %+.4f) rot=%.2fdeg facets=%zu",
-                 it + 1, res.orientation.x(), res.orientation.y(), res.orientation.z(),
-                 rot_deg, mesh.its.indices.size());
-            if (rot_deg < 0.5) break;  // converged: re-seated on the minimizer's face
-        } catch (const std::exception& e) {
-            LOGE("farm_orient: iteration %d failed: %s", it + 1, e.what());
+    try {
+        const Slic3r::Domain::TriangleMesh mesh =
+            Slic3r::Biz::Algorithms::ModelObject::mesh(*obj);
+        if (mesh.its.vertices.empty() || mesh.its.indices.empty()) {
+            LOGE("farm_orient: no mesh (instances=%zu volumes=%zu)",
+                 obj->instances.size(), obj->volumes.size());
             return;
         }
+
+        Slic3r::orientation::OrientMesh om;
+        om.mesh = mesh;
+        om.overhang_angle = overhang_angle;
+        om.name = obj->name;
+        om.setter = [obj](const Slic3r::orientation::OrientMesh& o) { apply_canonical_orientation(obj, o); };
+        Slic3r::orientation::OrientMeshs items{om};
+
+        // The public orient() entry calls progressfn(i, name) unconditionally
+        // per item; with the default empty std::function that throws
+        // std::bad_function_call and the whole orient silently no-ops. Hand in
+        // a callable hook instead.
+        Slic3r::orientation::OrientParams params;
+        params.progressind = [progress, part_index](unsigned tag, const std::string& name) {
+            if (progress) progress(tag < 20 ? part_index : tag, name);
+        };
+        Slic3r::orientation::orient(items, {}, params);
+
+        const Slic3r::orientation::OrientMesh& res = items.front();
+        if (!res.orientation.allFinite() || res.orientation.norm() < 1e-6 ||
+            !res.rotation_matrix.allFinite()) {
+            LOGD("farm_orient: degenerate solution, leaving orientation unchanged");
+            return;
+        }
+        const double rot_deg = std::abs(res.angle) * 180.0 / std::acos(-1.0);
+        res.apply();
+        LOGD("farm_orient: dir=(%+.4f, %+.4f, %+.4f) rot=%.2fdeg facets=%zu",
+             res.orientation.x(), res.orientation.y(), res.orientation.z(),
+             rot_deg, mesh.its.indices.size());
+    } catch (const std::exception& e) {
+        LOGE("farm_orient: orient failed: %s", e.what());
     }
 }
 

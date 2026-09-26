@@ -49,6 +49,9 @@ import com.flashforge.farm.view.PositionScrollView;
 import com.flashforge.farm.view.TextColorImageSpan;
 
 public class OrientationMenu extends ListBedMenu {
+    private static final long AUTO_ORIENT_BUSY_THRESHOLD_MS = 200L;
+    private BedMenuItem autoOrientItem;
+    private int orientRuns;
     private final Bus.Listener<FlattenModeResetEvent> onFlattenModeReset = e -> {
         ((BedMenuItem) adapter.getItems().get(3)).isChecked = false;
         adapter.notifyItemChanged(3);
@@ -107,6 +110,16 @@ public class OrientationMenu extends ListBedMenu {
         final int[] indices = new int[selection.size()];
         for (int k = 0; k < indices.length; k++) indices[k] = selection.get(k);
 
+        orientRuns++;
+        Runnable showBusy = () -> {
+            if (orientRuns <= 0) return;
+            if (!autoOrientItem.isBusy) {
+                autoOrientItem.isBusy = true;
+                adapter.notifyItemChanged(adapter.getItems().indexOf(autoOrientItem));
+            }
+        };
+        ViewUtils.postOnMainThread(showBusy, AUTO_ORIENT_BUSY_THRESHOLD_MS);
+
         model.autoOrientAsync(indices, new Model.OnAutoOrient() {
             @Override
             public void onAutoOrientProgress(int tag, String name) {
@@ -114,10 +127,14 @@ public class OrientationMenu extends ListBedMenu {
 
             @Override
             public void onAutoOrientFinished() {
-                int[] refresh = indices;
+                orientRuns = Math.max(0, orientRuns - 1);
+                if (orientRuns == 0 && autoOrientItem.isBusy) {
+                    autoOrientItem.isBusy = false;
+                    adapter.notifyItemChanged(adapter.getItems().indexOf(autoOrientItem));
+                }
                 fragment.getGlView().queueEvent(() -> {
                     GLRenderer r = fragment.getGlView().getRenderer();
-                    for (int idx : refresh) r.invalidateGlModel(idx);
+                    for (int idx : indices) r.invalidateGlModel(idx);
                     fragment.getGlView().requestRender();
                 });
                 Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuOrientationAutoOrientDone, Snackbar.LENGTH_SHORT));
@@ -138,14 +155,14 @@ public class OrientationMenu extends ListBedMenu {
                     Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuOrientationArrangeFinished));
                 }).setEnabled(fragment.getGlView().getRenderer().getModel() != null),
                 new SpaceItem(portrait ? ViewUtils.dp(8) : 0, portrait ? 0 : ViewUtils.dp(8)),
-                new BedMenuItem(R.string.MenuOrientationAutoOrient, R.drawable.menu_orientation_auto_28).setEnabled(hasSelection()).onClick(view -> {
+                (autoOrientItem = new BedMenuItem(R.string.MenuOrientationAutoOrient, R.drawable.menu_orientation_auto_28).setEnabled(hasSelection()).onClick(view -> {
                     if (fragment.getGlView().getRenderer().resetFlattenMode()) {
                         fragment.getGlView().requestRender();
                         ((BedMenuItem) adapter.getItems().get(3)).isChecked = false;
                         adapter.notifyItemChanged(3);
                     }
                     autoOrient(fragment.getGlView().getRenderer().getSelectedObjectsSnapshot());
-                }),
+                })),
                 new BedMenuItem(R.string.MenuOrientationFlatten, R.drawable.menu_orientation_flatten_28).setEnabled(hasSelection()).setCheckable((buttonView, isChecked) -> {
                     fragment.getGlView().getRenderer().setInFlattenMode(isChecked);
                     fragment.getGlView().requestRender();

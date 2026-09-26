@@ -43,12 +43,21 @@ namespace Slic3r {
             *rotation = Eigen::AngleAxisd(angle, axis).toRotationMatrix();
     }
 
-    // Euler angles of the rotation taking `v_from` onto `v_to` (ZYX order,
-    // the orienter's own convention).
-    inline Vec3d extract_euler_angles(const Vec3d &v_from, const Vec3d &v_to,
-                                      Vec3d &axis, double &angle) {
-        rotation_from_two_vectors(v_from, v_to, axis, angle, nullptr);
-        return Vec3d(0, 0, angle);
+    // Euler angles (ZYX order) of a rotation matrix, Z up.
+    inline Vec3d extract_euler_angles(const Matrix3d &rotation) {
+        Eigen::Matrix3d r = rotation.transpose();
+        double sy = std::sqrt(r(0, 0) * r(0, 0) + r(1, 0) * r(1, 0));
+        double x, y, z;
+        if (sy > 1e-6) {   // gimbal lock-safe general case
+            x = std::atan2(r(2, 1), r(2, 2));
+            y = std::atan2(-r(2, 0), sy);
+            z = std::atan2(r(1, 0), r(0, 0));
+        } else {           // y = +-90deg: fold x into z
+            x = std::atan2(-r(1, 2), r(1, 1));
+            y = std::atan2(-r(2, 0), sy);
+            z = 0.0;
+        }
+        return Vec3d(x, y, z);
     }
 
     double area_of_boundingbox(BoundingBoxf3 bb) {

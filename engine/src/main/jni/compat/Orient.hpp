@@ -5,9 +5,11 @@
 // compat/Orient.cpp, upstream AutoOrienter). Only the two 2.x Model wrappers
 // were removed; the orienter itself is mesh-only and runs on 3.0 types.
 #include "Slic3r/Domain/TriangleMesh.hpp"
-#include "libslic3r/Geometry.hpp"
 #include "Slic3r/Domain/Transformation.hpp"
 // Slic3r::{Vec3d,Vec3f,Matrix3d,Transform3d,Point,BoundingBoxf3} aliases.
+// NOTE: libslic3r/Geometry.hpp is intentionally NOT included here — it leaks
+// a global SCALED_EPSILON macro that clashes with the engine's own macro in any
+// TU that also includes render/bed_utils.hpp. Orient.cpp includes it instead.
 #include "libslic3r/Point.hpp"
 
 #include <Eigen/Geometry>

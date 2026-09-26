@@ -9,12 +9,16 @@
 
 // tag/percent progress: orient() emits the part index (0-based) when a part
 // starts and 20/30/60/80 as the orienter progresses through that part.
+// Progress is reported for the first fixpoint pass only (the orienter re-runs
+// on the rotated mesh to a stable pose, so later passes are internal).
 using FarmOrientProgressFn = std::function<void(unsigned tag, const std::string& name)>;
 
 extern "C" void farm_auto_orient(void* model_object_ptr, double overhang_angle);
 
 // Orient several ModelObjects in one engine pass, reporting progress through
 // `progress` (in the range 0..count-1 on part start, then 20..80 per part).
+// Each object is run to a fixpoint: the same upstream orienter is re-run on
+// the rotated mesh until the chosen rotation is ~0, mimicking "tap it again".
 extern "C" void farm_auto_orient_batch(void* const* model_objects, size_t count,
                                        double overhang_angle,
                                        FarmOrientProgressFn progress);

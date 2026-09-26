@@ -97,48 +97,23 @@ public class OrientationMenu extends ListBedMenu {
     }
 
     /**
-     * Auto-orient the selected objects on the background auto-orient thread.
-     * A determinate progress dialog tracks the engine's per-part and per-stage
-     * progress; GL invalidation runs via queueEvent once the worker finishes.
+     * Auto-orient the selected objects on the background auto-orient thread;
+     * GL refresh runs via queueEvent once the worker has converged.
      */
     private void autoOrient(java.util.List<Integer> selection) {
         GLRenderer renderer = fragment.getGlView().getRenderer();
         Model model = renderer.getModel();
         if (model == null || selection == null || selection.isEmpty()) return;
-        int[] indices = new int[selection.size()];
+        final int[] indices = new int[selection.size()];
         for (int k = 0; k < indices.length; k++) indices[k] = selection.get(k);
-        if (fragment.getContext() == null) return;
-        android.app.ProgressDialog dialog = new android.app.ProgressDialog(fragment.getContext());
-        dialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
-        dialog.setMax(100);
-        dialog.setProgressNumberFormat("%1d%%");
-        dialog.setTitle(fragment.getContext().getString(R.string.MenuOrientationAutoOrientRunning));
-        dialog.setCancelable(false);
-        dialog.show();
 
         model.autoOrientAsync(indices, new Model.OnAutoOrient() {
-            private final int[] currentPart = {0};
-
             @Override
             public void onAutoOrientProgress(int tag, String name) {
-                int total = indices.length;
-                int percent;
-                if (tag < 20) {
-                    currentPart[0] = tag;
-                    percent = tag * 100 / total;
-                } else {
-                    percent = (currentPart[0] * 100 + tag) / total;
-                }
-                if (percent > 100) percent = 100;
-                dialog.setProgress(percent);
-                if (name != null && !name.isEmpty()) {
-                    dialog.setMessage(name);
-                }
             }
 
             @Override
             public void onAutoOrientFinished() {
-                if (dialog.isShowing()) dialog.dismiss();
                 int[] refresh = indices;
                 fragment.getGlView().queueEvent(() -> {
                     GLRenderer r = fragment.getGlView().getRenderer();

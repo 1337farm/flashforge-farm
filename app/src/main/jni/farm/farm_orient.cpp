@@ -45,8 +45,6 @@ static void apply_orientation(Slic3r::Domain::ModelObject* obj,
     Slic3r::Biz::Algorithms::ModelObject::ensure_on_bed(*obj, false);
 }
 
-static constexpr double PI = 3.141592653589793238463;
-
 // Orient one object with the genuine upstream minimizer, iterating to a
 // fixpoint: the orienter's candidate directions come from the CURRENT mesh's
 // face/hull normals, so on some geometry a single pass settles on a local
@@ -96,7 +94,7 @@ static void orient_object(Slic3r::Domain::ModelObject* obj, double overhang_angl
                 LOGD("farm_orient: degenerate solution on iteration %d, leaving as-is", it + 1);
                 return;
             }
-            const double rot_deg = std::abs(res.angle) * 180.0 / PI;
+            const double rot_deg = std::abs(res.angle) * 180.0 / std::acos(-1.0);
             res.apply();
             LOGD("farm_orient: iter %d dir=(%+.4f, %+.4f, %+.4f) rot=%.2fdeg facets=%zu",
                  it + 1, res.orientation.x(), res.orientation.y(), res.orientation.z(),

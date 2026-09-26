@@ -13,9 +13,16 @@
 #define BOOST_NO_CXX17_HDR_STRING_VIEW
 #endif
 
-#include <boost/log/trivial.hpp>
 #include <boost/multiprecision/integer.hpp>
 #include <boost/rational.hpp>
+
+// Upstream logs orientation runs through boost::log. The farm does not link
+// libboost_log (farm_driver.cpp avoided it), so swallow those calls instead
+// of dragging a whole logging library into libfarm.so.
+struct OrientNullLog {
+    template<class T> OrientNullLog& operator<<(const T&) { return *this; }
+};
+#define BOOST_LOG_TRIVIAL(sev) OrientNullLog()
 
 #undef MAX3
 #define MAX3(a, b, c) std::max(std::max(a,b),c)

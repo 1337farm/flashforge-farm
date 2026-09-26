@@ -8,12 +8,18 @@
 
 #include "farm_orient.hpp"
 
+#include <android/log.h>
+
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
 
 #include "Orient.hpp"
 
 #include <exception>
+
+#define LOG_TAG "FarmOrient"
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 extern "C" void farm_auto_orient(void* model_object_ptr, double overhang_angle)
 {
@@ -22,7 +28,11 @@ extern "C" void farm_auto_orient(void* model_object_ptr, double overhang_angle)
     try {
         const Slic3r::Domain::TriangleMesh mesh =
             Slic3r::Biz::Algorithms::ModelObject::mesh(*obj);
-        if (mesh.its.vertices.empty() || mesh.its.indices.empty()) return;
+        if (mesh.its.vertices.empty() || mesh.its.indices.empty()) {
+            LOGE("farm_auto_orient: no mesh (instances=%zu volumes=%zu)",
+                 obj->instances.size(), obj->volumes.size());
+            return;
+        }
 
         // Upstream AutoOrienter + OrientParams: real support-area minimization,
         // overhang angle, low-angle-face and appearance-face preferences.
@@ -30,10 +40,23 @@ extern "C" void farm_auto_orient(void* model_object_ptr, double overhang_angle)
         om.mesh = mesh;
         om.overhang_angle = overhang_angle;
         Slic3r::orientation::OrientMeshs items{om};
-        Slic3r::orientation::orient(items, {});
+
+        // The public orient() entry calls progressfn(i, name) unconditionally
+        // per item; with the default empty std::function that throws
+        // std::bad_function_call and the whole orient silently no-ops (the
+        // removed 2.x wrappers never hit this because they built AutoOrienter
+        // directly). Hand in a callable progress hook.
+        Slic3r::orientation::OrientParams params;
+        params.progressind = [](unsigned, const std::string&) {};
+        Slic3r::orientation::orient(items, {}, params);
 
         const Slic3r::Domain::Vec3d dir = items.front().orientation;
-        if (!(dir.norm() > 1e-9) || !dir.allFinite()) return;
+        LOGD("farm_auto_orient: facets=%zu dir=(%+.4f, %+.4f, %+.4f)",
+             mesh.its.indices.size(), dir.x(), dir.y(), dir.z());
+        if (!(dir.norm() > 1e-9) || !dir.allFinite()) {
+            LOGE("farm_auto_orient: degenerate orientation, leaving part unchanged");
+            return;
+        }
 
         // Exactly the upstream orient(ModelObject*) application: negate the
         // found up-direction (so setFromTwoVectors(tnormal, -Z) actually maps
@@ -51,8 +74,8 @@ extern "C" void farm_auto_orient(void* model_object_ptr, double overhang_angle)
         }
         obj->invalidate_bounding_box();
         Slic3r::Biz::Algorithms::ModelObject::ensure_on_bed(*obj, false);
-    } catch (const std::exception&) {
-        // Auto-orient is best-effort: a mesh the orienter cannot score is
-        // simply left as-is rather than failing the UI action.
+        LOGD("farm_auto_orient: applied rotation onto +Z and re-seated on bed");
+    } catch (const std::exception& e) {
+        LOGE("farm_auto_orient failed: %s", e.what());
     }
 }

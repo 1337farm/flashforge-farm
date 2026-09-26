@@ -591,11 +591,36 @@ extern "C" {
     }
 
     JNIEXPORT jint JNICALL Java_com_flashforge_farm_slic3r_Native_model_1split(JNIEnv* env, jclass, jlong ptr, jint i) {
-        // TODO(#212): ModelObject::split has no 3.0 counterpart (mesh split lives in
-        // Biz::Algorithms::MeshSplitImpl, not yet wired to ModelObject topology).
-        (void) env; (void) ptr; (void) i;
-        LOGD("model_split: stub, no 3.0 counterpart");
-        return 0;
+        (void) env;
+        ModelRef* model = (ModelRef *) (intptr_t) ptr;
+        Domain::ModelObject* obj = check_object(model, i);
+        if (obj == nullptr || obj->volumes.empty()) return 0;
+
+        // Genuine upstream split (Biz::Algorithms::ModelObject::split): every
+        // model-part volume becomes its own object, meshes broken into their
+        // connected components first. Appends the new objects to the model.
+        std::vector<Domain::ModelObject*> new_objects;
+        try {
+            BizAlgo::ModelObject::split(obj, &new_objects);
+        } catch (const std::exception&) {
+            return 0;   // leave the model untouched on a bad mesh
+        }
+
+        // A single connected part means there is nothing to split: drop the
+        // duplicate the upstream split always appends and report no-op.
+        if (new_objects.size() <= 1) {
+            for (Domain::ModelObject* extra : new_objects)
+                model->delete_object(extra->id());
+            return 0;
+        }
+
+        // Replace the original (which the split leaves in place) with the
+        // pieces. delete_object reuses the original's slot; look the index up
+        // by pointer so appended-object index drift cannot bite.
+        const auto it = std::find(model->objects.begin(), model->objects.end(), obj);
+        if (it != model->objects.end())
+            model->delete_object((size_t) std::distance(model->objects.begin(), it));
+        return (jint) new_objects.size();
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1translate(JNIEnv* env, jclass, jlong ptr, jint i, jdouble x, jdouble y, jdouble z) {

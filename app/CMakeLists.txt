@@ -63,6 +63,7 @@ add_library(farm SHARED
         src/main/jni/farm/farm_native.cpp
         src/main/jni/farm/farm_crashdump.cpp
         src/main/jni/farm/farm_progress.cpp
+        src/main/jni/farm/farm_orient.cpp
         ${ENGINE_JNI}/render/GLModel.cpp
         ${ENGINE_JNI}/render/GLShader.cpp
         # PrusaSlicer 3.0's own "place on face" plane builder. It lives in the

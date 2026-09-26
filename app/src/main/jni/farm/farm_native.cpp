@@ -52,7 +52,7 @@
 // genuine upstream auto-orienter (vendored PrusaSlicer 2.x AutoOrienter, ported
 // to 3.0 mesh types).
 #include "Slic3r/App/Plater/PlaceOnFaceGizmoPlanes.hpp"
-#include "Orient.hpp"
+#include "farm_orient.hpp"
 
 namespace Domain  = Slic3r::Domain;
 namespace BizAlgo = Slic3r::Biz::Algorithms;
@@ -812,44 +812,15 @@ namespace {
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1auto_1orient(JNIEnv* env, jclass, jlong ptr, jint i) {
+        (void) env;
         ModelRef* model = (ModelRef *) (intptr_t) ptr;
         if (model == nullptr) return;
         Domain::ModelObject* obj = check_object(model, i);
         if (obj == nullptr) return;
-        const Domain::TriangleMesh mesh = BizAlgo::ModelObject::mesh(*obj);
-        if (mesh.its.vertices.empty() || mesh.its.indices.empty()) return;
-
-        // Genuine PrusaSlicer auto-orienter: the upstream AutoOrienter
-        // (engine/src/main/jni/compat/Orient.cpp, vendored PrusaSlicer 2.x
-        // source) scores candidate poses with the real OrientParams model
-        // (support-area minimization, overhang angle, low-angle-face and
-        // appearance-face preferences). It is mesh-only, so it runs on 3.0's
-        // Domain::TriangleMesh unchanged; only its 2.x Model wrappers were
-        // dropped at the port.
-        Slic3r::orientation::OrientMesh om;
-        om.mesh = mesh;
-        om.overhang_angle = 45.0;
-        Slic3r::orientation::OrientMeshs items{om};
-        try {
-            Slic3r::orientation::orient(items, {});
-        } catch (const std::exception& e) {
-            LOGE("model_auto_orient: upstream orienter failed: %s", e.what());
-            (void) env;
-            return;
-        }
-        const Domain::Vec3d dir = items.front().orientation;
-        if (!(dir.norm() > 1e-9) || !dir.allFinite()) {
-            LOGE("model_auto_orient: orienter returned a degenerate direction");
-            (void) env;
-            return;
-        }
-        // Same application as upstream orient(ModelObject*): rotate that
-        // direction onto -Z, then re-seat the object on the bed.
-        apply_world_delta(obj,
-            Eigen::Quaterniond::FromTwoVectors(dir.normalized(), -Domain::Vec3d::UnitZ()));
-        LOGD("model_auto_orient: applied upstream orienter (%.3f, %.3f, %.3f)",
-            dir.x(), dir.y(), dir.z());
-        (void) env;
+        // Genuine upstream AutoOrienter (compat/Orient.cpp), isolated in
+        // farm_orient.cpp so its libslic3r.h include cannot collide with the
+        // engine headers used here. 45deg = faces steeper than 45 need support.
+        farm_auto_orient(obj, 45.0);
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_model_1is_1big_1object(JNIEnv* env, jclass, jlong ptr, jint i) {

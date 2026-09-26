@@ -207,7 +207,7 @@ namespace Slic3r {
                 BoundingBoxf3 bbox = mesh->bounding_box();
                 // 3.0 BoundingBox dropped offset(); rebuild it grown instead.
                 {   const Vec3d off(BBOX_OFFSET, BBOX_OFFSET, BBOX_OFFSET);
-                    bbox = BoundingBoxf3(bbox.min() - off, bbox.max() + off);
+                    bbox = BoundingBoxf3(bbox.min - off, bbox.max + off);
                 }
 
                 std::vector<FaceProperty> properties(mesh->its.indices.size());
@@ -461,7 +461,7 @@ namespace Slic3r {
             CostItems get_features(Vec3f orientation, bool min_volume = true) {
                 CostItems costs;
                 costs.area_total = area_of_boundingbox(mesh->bounding_box());
-                costs.radius = 0.5 * (mesh->bounding_box().max() - mesh->bounding_box().min()).norm();  // 3.0 dropped radius()
+                costs.radius = 0.5 * (mesh->bounding_box().max - mesh->bounding_box().min).norm();  // 3.0 dropped radius()
                 // volume
                 costs.volume =
                         mesh->stats().volume > 0 ? mesh->stats().volume : Domain::its_volume(mesh->its);

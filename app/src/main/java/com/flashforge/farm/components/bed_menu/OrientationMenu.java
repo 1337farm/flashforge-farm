@@ -51,7 +51,6 @@ import com.flashforge.farm.view.PositionScrollView;
 import com.flashforge.farm.view.TextColorImageSpan;
 
 public class OrientationMenu extends ListBedMenu {
-    private static final long AUTO_ORIENT_BUSY_THRESHOLD_MS = 200L;
     private BedMenuItem autoOrientItem;
     private int orientRuns;
     private final Bus.Listener<FlattenModeResetEvent> onFlattenModeReset = e -> {
@@ -113,15 +112,11 @@ public class OrientationMenu extends ListBedMenu {
         for (int k = 0; k < indices.length; k++) indices[k] = selection.get(k);
 
         orientRuns++;
-        Runnable showBusy = () -> {
-            if (orientRuns <= 0) return;
-            if (!autoOrientItem.isBusy) {
-                autoOrientItem.isBusy = true;
-                Log.d("FarmOrientSpinner", "busy=true t=" + SystemClock.uptimeMillis());
-                adapter.notifyItemChanged(adapter.getItems().indexOf(autoOrientItem));
-            }
-        };
-        ViewUtils.postOnMainThread(showBusy, AUTO_ORIENT_BUSY_THRESHOLD_MS);
+        if (!autoOrientItem.isBusy) {
+            autoOrientItem.isBusy = true;
+            Log.d("FarmOrientSpinner", "busy=true t=" + SystemClock.uptimeMillis());
+            adapter.notifyItemChanged(adapter.getItems().indexOf(autoOrientItem));
+        }
 
         model.autoOrientAsync(indices, new Model.OnAutoOrient() {
             @Override

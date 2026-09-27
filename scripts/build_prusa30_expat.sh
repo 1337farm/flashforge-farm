@@ -83,12 +83,21 @@ mkdir -p "$STAGE_ROOT/lib/cmake/expat"
 CFG="$(find "$STAGE_ROOT" -name 'expat-config.cmake' | head -1)"
 [ -n "$CFG" ] || { echo "[expat] ERROR: expat-config.cmake missing" >&2; exit 1; }
 cp "$CFG" "$STAGE_ROOT/lib/cmake/expat/" 2>/dev/null || true
-# The -config file references its sibling *-targets files by relative name,
-# so copy those alongside.
 CFGDIR="$(dirname "$CFG")"
-for f in "$CFGDIR"/expat-*-targets*.cmake "$CFGDIR"/expat-config-version.cmake; do
+# The -config file references its siblings (classic *-targets*, or the modern
+# two-file layout whose expat-config.cmake is a thin wrapper including
+# expat.cmake) by relative name; copy every expat*.cmake file alongside so a
+# config can never reference a missing file. Also copy the version file.
+for f in "$CFGDIR"/expat-*.cmake; do
     [ -f "$f" ] && cp "$f" "$STAGE_ROOT/lib/cmake/expat/" 2>/dev/null || true
 done
+# Self-check: every include() the staged config references must resolve.
+STAGED_CFG="$STAGE_ROOT/lib/cmake/expat/expat-config.cmake"
+[ -f "$STAGED_CFG" ] || STAGED_CFG="$CFG"
+while IFS= read -r rel; do
+    [ -f "$(dirname "$STAGED_CFG")/$rel" ] \
+        || { echo "[expat] ERROR: expat-config.cmake includes missing $rel" >&2; exit 1; }
+done < <(grep -oE 'include\("[^"]+\.cmake"\)' "$STAGED_CFG" | sed 's/.*"\([^"]*\)"/\1/')
 test -f "$STAGE_ROOT/include/expat.h" || { echo "[expat] ERROR: expat.h missing" >&2; exit 1; }
 find "$STAGE_ROOT" -name 'libexpat.a' | grep -q . || { echo "[expat] ERROR: no libexpat.a staged" >&2; exit 1; }
 echo "[expat] done -> $STAGE_ROOT ($(find "$STAGE_ROOT" -name 'libexpat.a' | head -1))"

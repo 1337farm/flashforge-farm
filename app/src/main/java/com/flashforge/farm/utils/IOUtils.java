@@ -30,21 +30,33 @@ public class IOUtils {
     public static ExecutorService IO_POOL = Executors.newCachedThreadPool();
 
     public static String getDisplayName(Uri uri) {
+        if (uri == null) return null;
         ContentResolver resolver = FarmApp.INSTANCE.getContentResolver();
 
         String[] projection = {MediaStore.MediaColumns.DISPLAY_NAME};
-        Cursor metaCursor = resolver.query(uri, projection, null, null, null);
-        String fileName = null;
-        if (metaCursor != null) {
-            try {
-                if (metaCursor.moveToFirst()) {
-                    fileName = metaCursor.getString(0);
+        Cursor metaCursor = null;
+        try {
+            metaCursor = resolver.query(uri, projection, null, null, null);
+            if (metaCursor != null && metaCursor.moveToFirst()) {
+                String name = metaCursor.getString(0);
+                if (!TextUtils.isEmpty(name)) return name;
+            }
+        } catch (Exception ignored) {
+            // Some providers refuse column queries; the URI fallback below is
+            // still a usable import name.
+        } finally {
+            if (metaCursor != null) {
+                try {
+                    metaCursor.close();
+                } catch (Exception ignored) {
                 }
-            } finally {
-                metaCursor.close();
             }
         }
-        return fileName;
+        // Provider-agnostic fallback: the raw last path segment (e.g. the
+        // document's file name) or the URI text itself, so an import never
+        // degrades to "unsupported" just because DISPLAY_NAME was unavailable.
+        String last = uri.getLastPathSegment();
+        return (last != null && last.contains(".")) ? last : uri.toString();
     }
     public static String readString(InputStream in) throws IOException {
         return readString(in, false);

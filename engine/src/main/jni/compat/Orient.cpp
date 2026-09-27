@@ -203,6 +203,15 @@ namespace Slic3r {
                           << best_orientation.transpose() << ", costs:"
                           << results_vector[0].second.field_values() << std::endl;
 
+                // Expose both the winner's unprintability and the score of the
+                // stance the caller is currently standing in, so an app-level
+                // no-op policy can avoid thrashing a pose that is already fine.
+                if (orient_mesh != nullptr) {
+                    orient_mesh->unprintability = results_vector[0].second.unprintability;
+                    orient_mesh->current_unprintability = score(
+                            orient_mesh->requested_up.cast<float>());
+                }
+
                 return best_orientation.cast<double>();
             }
 
@@ -410,6 +419,17 @@ namespace Slic3r {
                     else
                         it++;
                 }
+            }
+
+            /// Unprintability of a specific projection axis (the direction
+            /// that will be rolled onto +Z / away from the bed). Reuses the
+            /// already-computed facet data, so it is a cheap per-candidate
+            /// pass; lets callers compare the current stance against the
+            /// minimizer's best without a second preprocess().
+            float score(Vec3f axis) {
+                project_vertices(axis);
+                CostItems costs = get_features(axis, params.min_volume);
+                return target_function(costs, params.min_volume);
             }
 
             void project_vertices(Vec3f orientation) {

@@ -334,9 +334,9 @@ jobs:
             # the modern expat.cmake wrapper) must have that file staged, or
             # upstream's find_package dies in CMake configure.
             if [ -n "$CFG" ] && [ "$OK" = "1" ]; then
-              while IFS= read -r rel; do
-                [ -f "$(dirname "$CFG")/$rel" ] || OK=0
-              done < <(grep -oE 'include\("[^"]+\.cmake"\)' "$CFG" | sed 's/.*"\([^"]*\)"/\1/')
+              while IFS= read -r base; do
+                [ -f "$(dirname "$CFG")/$base" ] || OK=0
+              done < <(grep -oE 'include\("[^"]+"\)' "$CFG" | sed -E 's/^include\("//; s/"\)$//; s#.*/##')
             fi
             [ "$OK" = "1" ] && NEED=0
           fi
@@ -374,10 +374,10 @@ jobs:
           find engine/prusa30/jniImports/expat -name 'expat-config.cmake' | grep -q . \
             || { echo "ERROR: expat-config.cmake missing"; exit 1; }
           CFG="$(find engine/prusa30/jniImports/expat -name 'expat-config.cmake' | head -1)"
-          while IFS= read -r rel; do
-            [ -f "$(dirname "$CFG")/$rel" ] \
-              || { echo "ERROR: expat-config.cmake references missing $rel"; exit 1; }
-          done < <(grep -oE 'include\("[^"]+\.cmake"\)' "$CFG" | sed 's/.*"\([^"]*\)"/\1/')
+          while IFS= read -r base; do
+            [ -f "$(dirname "$CFG")/$base" ] \
+              || { echo "ERROR: expat-config.cmake references missing $base"; exit 1; }
+          done < <(grep -oE 'include\("[^"]+"\)' "$CFG" | sed -E 's/^include\("//; s/"\)$//; s#.*/##')
           echo "expat R_2_8_2 staged and verified"
 
       - name: Save staged expat R_2_8_2

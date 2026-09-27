@@ -91,13 +91,14 @@ CFGDIR="$(dirname "$CFG")"
 for f in "$CFGDIR"/expat-*.cmake; do
     [ -f "$f" ] && cp "$f" "$STAGE_ROOT/lib/cmake/expat/" 2>/dev/null || true
 done
-# Self-check: every include() the staged config references must resolve.
+# Self-check: every include() the staged config references must resolve as a
+# same-dir sibling (references use ${CMAKE_CURRENT_LIST_DIR}/ or a bare name).
 STAGED_CFG="$STAGE_ROOT/lib/cmake/expat/expat-config.cmake"
 [ -f "$STAGED_CFG" ] || STAGED_CFG="$CFG"
-while IFS= read -r rel; do
-    [ -f "$(dirname "$STAGED_CFG")/$rel" ] \
-        || { echo "[expat] ERROR: expat-config.cmake includes missing $rel" >&2; exit 1; }
-done < <(grep -oE 'include\("[^"]+\.cmake"\)' "$STAGED_CFG" | sed 's/.*"\([^"]*\)"/\1/')
+while IFS= read -r base; do
+    [ -f "$(dirname "$STAGED_CFG")/$base" ] \
+        || { echo "[expat] ERROR: expat-config.cmake includes missing $base" >&2; exit 1; }
+done < <(grep -oE 'include\("[^"]+"\)' "$STAGED_CFG" | sed -E 's/^include\("//; s/"\)$//; s#.*/##')
 test -f "$STAGE_ROOT/include/expat.h" || { echo "[expat] ERROR: expat.h missing" >&2; exit 1; }
 find "$STAGE_ROOT" -name 'libexpat.a' | grep -q . || { echo "[expat] ERROR: no libexpat.a staged" >&2; exit 1; }
 echo "[expat] done -> $STAGE_ROOT ($(find "$STAGE_ROOT" -name 'libexpat.a' | head -1))"

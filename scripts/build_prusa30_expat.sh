@@ -88,7 +88,7 @@ CFGDIR="$(dirname "$CFG")"
 # two-file layout whose expat-config.cmake is a thin wrapper including
 # expat.cmake) by relative name; copy every expat*.cmake file alongside so a
 # config can never reference a missing file. Also copy the version file.
-for f in "$CFGDIR"/expat-*.cmake; do
+for f in "$CFGDIR"/expat*.cmake; do
     [ -f "$f" ] && cp "$f" "$STAGE_ROOT/lib/cmake/expat/" 2>/dev/null || true
 done
 # Self-check: every include() the staged config references must resolve as a

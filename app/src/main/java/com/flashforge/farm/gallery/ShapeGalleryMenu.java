@@ -166,7 +166,14 @@ public class ShapeGalleryMenu extends UnfoldMenu {
         GalleryMesh preview = null;
         try {
             preview = ShapeGallery.previewFor(item);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            android.util.Log.e("ShapeGalleryMenu", "preview failed for " + item.title, e);
+        }
+        if (preview == null && item.kind == ShapeGallery.KIND_CUSTOM) {
+            // Never leave a custom row's tile blank: show a neutral placeholder
+            // so the entry is still visible/tappable. The load path reports the
+            // real mesh error if the user picks it.
+            preview = ShapeGallery.placeholderCube();
         }
         GalleryRowItem row = new GalleryRowItem(item, preview);
         row.setOnClickListener(v -> loadItem(item, true));

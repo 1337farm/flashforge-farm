@@ -178,22 +178,33 @@ namespace Slic3r {
                 if (progressind)
                     progressind(80);
 
-                //To avoid flipping, we need to verify if there are orientations with same unprintability.
+                // To avoid flipping, prefer -- among the orientations tied for
+                // the best unprintability -- the one aligned with the stance the
+                // caller is currently standing in. Upstream only protected the
+                // assessed frame's own up ({0,0,1}); generalizing to requested_up
+                // means a caller who manually arranged a face (for example one
+                // side of a two-sided medallion) gets that face back instead of
+                // an arbitrary unordered_map/sort coin flip. With the default
+                // requested_up this is exactly upstream's +Z anti-flip.
                 Vec3f n1 = {0, 0, 1};
+                Vec3f requested = n1;
+                if (orient_mesh != nullptr &&
+                    orient_mesh->requested_up.norm() > 1e-9) {
+                    requested = orient_mesh->requested_up.cast<float>();
+                    requested.normalize();
+                }
                 auto best_orientation = results_vector[0].first;
-
-                for (int i = 1; i < results_vector.size() - 1; i++) {
+                float best_align = best_orientation.dot(requested);
+                for (size_t i = 1; i < results_vector.size(); i++) {
+                    // Ties are contiguous: the vector is cost-ascending.
                     if (abs(results_vector[i].second.unprintability -
-                            results_vector[0].second.unprintability) < EPSILON &&
-                        abs(results_vector[0].first.dot(n1) - 1) > EPSILON) {
-                        if (abs(results_vector[i].first.dot(n1) - 1) < EPSILON * EPSILON) {
-                            best_orientation = n1;
-                            break;
-                        }
-                    } else {
+                            results_vector[0].second.unprintability) >= EPSILON)
                         break;
+                    const float align = results_vector[i].first.dot(requested);
+                    if (align > best_align) {
+                        best_align = align;
+                        best_orientation = results_vector[i].first;
                     }
-
                 }
 
                 BOOST_LOG_TRIVIAL(info) << std::fixed << std::setprecision(6) << "best:"

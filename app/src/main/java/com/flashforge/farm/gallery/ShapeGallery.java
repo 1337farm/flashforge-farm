@@ -157,4 +157,18 @@ public final class ShapeGallery {
     public static GalleryMesh placeholderCube() {
         return Primitives.cube(20);
     }
+
+    /** Pre-generate (and cache) the item for a freshly imported custom file so
+     *  the shape-gallery row has its thumbnail ready immediately. Safe to call
+     *  off the main thread; failures are non-fatal (the row still shows a
+     *  placeholder tile and the error is caught on the next open). */
+    public static void warmCustomPreview(File file) {
+        try {
+            previewFor(new Item("custom:" + file.getName(), file.getName(),
+                    "Custom model", KIND_CUSTOM, null, file));
+        } catch (Exception e) {
+            android.util.Log.e("ShapeGallery", "custom preview warm-up failed for "
+                    + file.getName(), e);
+        }
+    }
 }

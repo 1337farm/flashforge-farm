@@ -412,12 +412,20 @@ public class MainActivity extends AppCompatActivity {
                     try {
                         String name = IOUtils.getDisplayName(importUri);
                         in = getContentResolver().openInputStream(importUri);
-                        com.flashforge.farm.gallery.GalleryStore.importStream(in, name);
+                        File imported =
+                                com.flashforge.farm.gallery.GalleryStore.importStream(in, name);
+                        // Warm the row preview now, so the freshly added tile
+                        // has its thumbnail without waiting for the gallery to
+                        // open (and the cause of a broken mesh is logged here
+                        // on the read path, not silently swallowed later).
+                        com.flashforge.farm.gallery.ShapeGallery.warmCustomPreview(imported);
                         ViewUtils.postOnMainThread(() -> {
                             Bus.GALLERY_CHANGED.postValue(new com.flashforge.farm.events.GalleryChangedEvent());
                             Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuFileShapeGalleryAdded));
                         });
                     } catch (Exception e) {
+                        android.util.Log.e("GalleryImport",
+                                "add-to-gallery failed uri=" + importUri, e);
                         ViewUtils.postOnMainThread(() ->
                             new FarmAlertDialogBuilder(this)
                                     .setTitle(R.string.MenuFileShapeGalleryAdd)

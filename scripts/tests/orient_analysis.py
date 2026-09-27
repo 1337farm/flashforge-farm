@@ -239,6 +239,27 @@ def analyze(tris, eps, overhang, rx=0.0, ry=0.0, rz=0.0, label=""):
         for (score, area, ca, sp, ht, fd, n, key) in cand[:3]:
             print(f"    bottom normal n=({n[0]:+.3f},{n[1]:+.3f},{n[2]:+.3f})  contact={ca:7.1f} support={sp:7.1f} "
                   f"height={ht:5.2f} footprint={fd:5.2f}  score={score:.4f}")
+        # Current-stance score (no rotation = the model as loaded): the app's
+        # new no-op policy compares the minimizer's best against THIS stance
+        # and leaves the model untouched unless it is clearly worse.
+        csup = ccon = 0.0
+        for (nn, aa, _) in stats:
+            if nn[2] < -0.9999:
+                ccon += aa
+            elif nn[2] < -low:
+                csup += aa
+        zmin2 = min(p[2] for tri in tris for p in tri)
+        zmax2 = max(p[2] for tri in tris for p in tri)
+        ex2 = max(p[0] for tri in tris for p in tri)
+        ey2 = max(p[1] for tri in tris for p in tri)
+        cht = zmax2 - zmin2
+        cfd = math.sqrt(ex2*ex2 + ey2*ey2)
+        cur_score = (csup / total) + 0.30 * (cht / max(cfd, 1e-6))
+        best = cand[0][0]
+        verdict = ("APPLY (clearly better)" if cur_score > best and (cur_score - best) > 0.15*cur_score
+                   else "NOOP (keep current stance)")
+        print(f"    current-stance score={cur_score:.4f}  best={best:.4f}  "
+              f"contact={ccon:7.1f} support={csup:7.1f}  -> {verdict}")
     return ranked, norm_avg, stats, total
 
 

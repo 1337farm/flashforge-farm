@@ -56,10 +56,48 @@ static void apply_canonical_orientation(Slic3r::Domain::ModelObject* obj,
 // scores describe the shape itself, then apply the chosen rotation as the new
 // canonical pose. Progress reports the 20/30/60/80 per-stage markers (part
 // index < 20 on part start) so the background run stays visible to the UI.
+//
+// App-side no-op policy: the minimizer's best stance is applied only when it
+// is clearly better than the stance the user is CURRENTLY standing in (the
+// rotation they actually arranged). Otherwise the model is returned untouched
+// -- we never thrash an already-fine pose (a ball or a symmetric badge is left
+// exactly as the user posed it). Any failure restores the original stance too.
 static void orient_object(Slic3r::Domain::ModelObject* obj, double overhang_angle,
                           const FarmOrientProgressFn& progress, unsigned part_index)
 {
     if (obj == nullptr) return;
+
+    // Snapshot the user's arrangement so a no-op or a failure restores it
+    // exactly instead of leaving the volumes stripped.
+    std::vector<Slic3r::Domain::Transformation> original;
+    original.reserve(obj->volumes.size());
+    for (Slic3r::Domain::ModelVolume* vol : obj->volumes) {
+        if (vol != nullptr) original.push_back(vol->get_transformation());
+    }
+    const auto restore = [obj, &original]() {
+        size_t k = 0;
+        for (Slic3r::Domain::ModelVolume* vol : obj->volumes) {
+            if (vol == nullptr) continue;
+            if (k < original.size()) vol->set_transformation(original[k]);
+            ++k;
+        }
+        obj->invalidate_bounding_box();
+    };
+
+    // The mesh-space direction the current (user-arranged) stance has pointing
+    // at the bed. For an untouched model this is the shape's file pose; for a
+    // manually rotated one it is that rotation's world-up mapped back into the
+    // shape's local coordinates, so "don't touch it" means "don't touch THIS
+    // stance", not "don't touch the file pose".
+    Slic3r::Domain::Vec3d requested_up(0, 0, 1);
+    if (!obj->volumes.empty() && obj->volumes.front() != nullptr) {
+        const Slic3r::Domain::Vec3d r = obj->volumes.front()->get_rotation();
+        const Eigen::Quaterniond q_cur =
+            Eigen::AngleAxisd(r[2], Eigen::Vector3d::UnitZ()) *
+            Eigen::AngleAxisd(r[1], Eigen::Vector3d::UnitY()) *
+            Eigen::AngleAxisd(r[0], Eigen::Vector3d::UnitX());
+        requested_up = q_cur.conjugate() * Slic3r::Domain::Vec3d(0, 0, 1);
+    }
 
     for (Slic3r::Domain::ModelVolume* vol : obj->volumes) {
         if (vol == nullptr) continue;
@@ -71,6 +109,7 @@ static void orient_object(Slic3r::Domain::ModelObject* obj, double overhang_angl
         const Slic3r::Domain::TriangleMesh mesh =
             Slic3r::Biz::Algorithms::ModelObject::mesh(*obj);
         if (mesh.its.vertices.empty() || mesh.its.indices.empty()) {
+            restore();
             LOGE("farm_orient: no mesh (instances=%zu volumes=%zu)",
                  obj->instances.size(), obj->volumes.size());
             return;
@@ -80,6 +119,7 @@ static void orient_object(Slic3r::Domain::ModelObject* obj, double overhang_angl
         om.mesh = mesh;
         om.overhang_angle = overhang_angle;
         om.name = obj->name;
+        om.requested_up = requested_up;
         om.setter = [obj](const Slic3r::orientation::OrientMesh& o) { apply_canonical_orientation(obj, o); };
         Slic3r::orientation::OrientMeshs items{om};
 
@@ -96,15 +136,31 @@ static void orient_object(Slic3r::Domain::ModelObject* obj, double overhang_angl
         const Slic3r::orientation::OrientMesh& res = items.front();
         if (!res.orientation.allFinite() || res.orientation.norm() < 1e-6 ||
             !res.rotation_matrix.allFinite()) {
+            restore();
             LOGD("farm_orient: degenerate solution, leaving orientation unchanged");
             return;
         }
+
+        // Only replace the user's stance when the minimizer is clearly better
+        // (at least 15% lower unprintability). Otherwise put their pose back
+        // and do nothing -- a symmetric model or a ball must not be re-spun.
+        const float cur = std::fmax(res.current_unprintability, 0.0f);
+        const float best = std::fmax(res.unprintability, 0.0f);
+        const bool clearly_better = cur > best && (cur - best) > 0.15f * cur;
+        if (!clearly_better) {
+            restore();
+            LOGD("farm_orient: current stance near-optimal (cur=%.4f best=%.4f) - untouched",
+                 cur, best);
+            return;
+        }
+
         const double rot_deg = std::abs(res.angle) * 180.0 / std::acos(-1.0);
         res.apply();
-        LOGD("farm_orient: dir=(%+.4f, %+.4f, %+.4f) rot=%.2fdeg facets=%zu",
+        LOGD("farm_orient: dir=(%+.4f, %+.4f, %+.4f) rot=%.2fdeg facets=%zu (cur=%.4f best=%.4f)",
              res.orientation.x(), res.orientation.y(), res.orientation.z(),
-             rot_deg, mesh.its.indices.size());
+             rot_deg, mesh.its.indices.size(), cur, best);
     } catch (const std::exception& e) {
+        restore();
         LOGE("farm_orient: orient failed: %s", e.what());
     }
 }

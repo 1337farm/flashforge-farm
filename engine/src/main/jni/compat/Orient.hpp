@@ -50,6 +50,17 @@ struct OrientMesh {
     Vec3d euler_angles;
     std::string name;
 
+    /// Projection axis the caller's CURRENT stance has pointing at the bed
+    /// (the mesh-space direction that currently maps to world-up). The
+    /// winner's unprintability and this stance's unprintability are both
+    /// scored during the run so the app can decide whether reorienting is
+    /// genuinely worthwhile. Defaults to the shape's file pose (identity).
+    Vec3d requested_up{ 0,0,1 };
+    /// Unprintability of the minimizer's best stance (after orient()).
+    float unprintability = 0;
+    /// Unprintability of the requested_up stance (after orient()).
+    float current_unprintability = 0;
+
     /// Optional setter function which can store arbitrary data in its closure
     std::function<void(const OrientMesh&)> setter = nullptr;
 

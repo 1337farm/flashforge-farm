@@ -35,7 +35,11 @@ namespace Slic3r {
             axis.normalize();
             angle = M_PI;
         } else {
-            axis = to.cross(from);
+            // Axis must be from x to (right-hand rule) so that AngleAxisd(angle, axis)
+            // carries `from` ONTO `to`. to.cross(from) has the wrong sign and maps the
+            // winner to the mirrored direction (e.g. +Y -> -Z instead of +Z), which
+            // applied upside-down to the oriented mesh.
+            axis = from.cross(to);
             axis.normalize();
             angle = std::acos(dot);
         }

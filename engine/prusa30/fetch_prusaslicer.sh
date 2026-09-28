@@ -8,12 +8,12 @@
 # in one place. `./engine/...` holds only scripts/patches, not upstream code.
 #
 # Env overrides:
-#   PRUSA_REF      ref/commit to fetch (default: version_3.0.0-alpha11 pin)
+#   PRUSA_REF      ref/commit to fetch (default: version_3.0.0-alpha12 pin)
 #   PRUSA_DIR      destination dir (default: engine/build/prusaslicer-src)
 #   PRUSA_SHALLOW  1 => --depth 1 fetch (default 1)
 set -euo pipefail
 
-PRUSA_REF="${PRUSA_REF:-6f510128d7c2e543b62919b74bea7e876f564205}"
+PRUSA_REF="${PRUSA_REF:-30ef59195e0f3ee6f270b185bb5f9fb5f349f81f}"
 # Absolute SCRIPT_DIR/PATCHES_DIR: patches are applied inside `git -C "$PRUSA_DIR"`
 # (a different cwd), so a relative path would fail to resolve there.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

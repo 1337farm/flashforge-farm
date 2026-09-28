@@ -1,11 +1,21 @@
 # 0005: expose staged serialization/enum header dirs globally.
 # find_package(nlohmann_json) / find_package(magic_enum) only run in slic3r-shared
 # (GUI-off headless), yet libslic3r TUs include <nlohmann/json.hpp> and
-# <magic_enum/magic_enum.hpp> (GCode/Thumbnails.cpp); no system copies on NDK.
+# <magic_enum/magic_enum.hpp> (GCode/Thumbnails.cpp, CustomParametersHandling.cpp);
+# no system copies on NDK.
+#
+# Anchored after the NLopt block added by 0004, so it applies in sequence on a
+# clean upstream checkout. The original anchor
+# (include_directories(SYSTEM "${NLopt_INCLUDE_DIR}")) was introduced BY 0004, so
+# this patch could never apply to an unpatched tree -- it silently only worked
+# against a hand-patched vendored tree, which is how the 2026-09-22 "patch
+# never reached the APK" class of failure happened.
+# Declarations sit before add_subdirectory(src) so the directory scope covers
+# every downstream target.
 diff --git a/CMakeLists.txt b/CMakeLists.txt
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -290,6 +290,14 @@
+@@ -290,6 +290,14 @@ include(GlobalDependencies)
  # (desktop builds get it from /usr/include via the distro).
  include_directories(SYSTEM "${NLopt_INCLUDE_DIR}")
  

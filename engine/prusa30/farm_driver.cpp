@@ -101,7 +101,13 @@ public:
         (void) id;
         status_ = status;
     }
-    void on_exception(std::exception_ptr exception, SlicingId id) override {
+    // PrusaSlicer 3.0.0-alpha12 removed ProgressListener::on_exception from
+    // libslic3r/InitPrint.hpp (it existed at alpha11:20). Slicing failures
+    // still reach us: slice() throws Slic3r::Biz::Slicing::Exception
+    // synchronously and that catch below enriches the message, which is the
+    // path device crash logs actually depend on. Kept as a plain member (no
+    // `override`, so the shim keeps compiling if a future tag restores it).
+    void on_exception(std::exception_ptr exception, SlicingId id) {
         (void) id;
         exception_ = exception;
     }

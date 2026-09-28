@@ -424,6 +424,11 @@ extern "C" {
         (void) env;
         ModelRef* model = (ModelRef *) (intptr_t) ptr;
         if (model == nullptr || i < 0 || i >= (jint) model->model.objects.size()) return;
+        // A background auto-orient worker may hold ModelObject* into this
+        // model. Cancel it, then wait for it to actually leave, so nothing is
+        // dereferencing the object we are about to free.
+        farm_orient_cancel(model);
+        farm_orient_drain(model);
         model->model.delete_object((size_t) i);
     }
 
@@ -595,6 +600,9 @@ extern "C" {
         ModelRef* model = (ModelRef *) (intptr_t) ptr;
         Domain::ModelObject* obj = check_object(model, i);
         if (obj == nullptr || obj->volumes.empty()) return 0;
+        // split removes volumes/objects the orient worker may be holding.
+        farm_orient_cancel(model);
+        farm_orient_drain(model);
 
         // Genuine upstream split (Biz::Algorithms::ModelObject::split): every
         // model-part volume becomes its own object, meshes broken into their
@@ -628,6 +636,7 @@ extern "C" {
         ModelRef* model = (ModelRef *) (intptr_t) ptr;
         Domain::ModelObject* obj = check_object(model, i);
         if (obj == nullptr) return;
+        farm_orient_cancel(model);
         BizAlgo::ModelObject::translate(*obj, x, y, z);
     }
 
@@ -644,6 +653,7 @@ extern "C" {
         ModelRef* model = (ModelRef *) (intptr_t) ptr;
         Domain::ModelObject* obj = check_object(model, i);
         if (obj == nullptr) return;
+        farm_orient_cancel(model);
         Vec3d factor(x, y, z);
         for (Domain::ModelVolume* vol : obj->volumes) {
             if (vol != nullptr)
@@ -665,6 +675,10 @@ extern "C" {
         ModelRef* model = (ModelRef *) (intptr_t) ptr;
         Domain::ModelObject* obj = check_object(model, i);
         if (obj == nullptr) return;
+        // A running auto-orient rewrites these same transforms; cancel it so it
+        // cannot overwrite the user's rotation (and we do not restore, so the
+        // user's new angle stands).
+        farm_orient_cancel(model);
         Vec3d vec(x, y, z);
         for (Domain::ModelVolume* vol : obj->volumes) {
             if (vol == nullptr) continue;
@@ -847,7 +861,7 @@ namespace {
         // farm_orient.cpp so its libslic3r.h include cannot collide with the
         // engine headers used here. 60deg reproduces the default OrientParams
         // (ASCENT = cos(120deg) = -0.5) used by upstream orient(ModelObject*).
-        farm_auto_orient(obj, 60.0);
+        farm_auto_orient(obj, model, 60.0);
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1auto_1orient_1progress(JNIEnv* env, jclass, jlong ptr, jintArray indices, jobject listener) {
@@ -872,7 +886,7 @@ namespace {
         }
         // orient() runs synchronously on this (worker) thread; env is valid for
         // the whole call, so the progress lambda can up-call Java directly.
-        farm_auto_orient_batch((void* const*) objects.data(), objects.size(), 60.0,
+        farm_auto_orient_batch((void* const*) objects.data(), objects.size(), model, 60.0,
                                [env, listener, onProgress](unsigned tag, const std::string& name) {
                                    jstring jname = env->NewStringUTF(name.c_str());
                                    env->CallVoidMethod(listener, onProgress, (jint) tag, jname);
@@ -1018,6 +1032,11 @@ namespace {
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1release(JNIEnv* env, jclass, jlong ptr) {
         (void) env;
         ModelRef* model = (ModelRef*) (intptr_t) ptr;
+        // Same hazard as delete_object: an orient worker may still be holding
+        // pointers into this model. Drain before the delete, otherwise the
+        // worker touches freed memory and the process crashes.
+        farm_orient_cancel(model);
+        farm_orient_drain(model);
         delete model;
     }
 

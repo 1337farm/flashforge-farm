@@ -16,12 +16,83 @@
 #include "Orient.hpp"
 
 #include <cmath>
+#include <condition_variable>
 #include <exception>
+#include <mutex>
+#include <unordered_map>
 #include <vector>
 
 #define LOG_TAG "FarmOrient"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+
+// ---------------------------------------------------------------------------
+// Concurrency registry.
+//
+// The orient worker runs on a background thread and holds raw ModelObject*
+// across a long blocking orient() call. Model mutations arrive on the UI
+// thread with no synchronization at all, so:
+//
+//   * a rotate/mirror/translate that lands mid-run races the worker's own
+//     transform write, and the loser's result silently wins;
+//   * deleteObject()/model_release() while a worker holds a pointer is a
+//     use-after-free.
+//
+// Fix: a small per-model record with a cancel generation and an active-worker
+// count. Mutations bump the generation (worker aborts at its next checkpoint
+// and keeps the user's result); frees drain the count to zero first.
+namespace {
+
+struct OrientSlot {
+    unsigned long long generation = 1; // bumped by farm_orient_cancel
+    int active = 0;                    // workers currently inside orient
+};
+
+std::mutex g_orient_mutex;
+std::condition_variable g_orient_cv;
+std::unordered_map<void*, OrientSlot> g_orient_slots;
+
+} // namespace
+
+extern "C" unsigned long long farm_orient_enter(void* model_ptr) {
+    std::lock_guard<std::mutex> lock(g_orient_mutex);
+    OrientSlot& slot = g_orient_slots[model_ptr];
+    ++slot.active;
+    return slot.generation;
+}
+
+extern "C" void farm_orient_leave(void* model_ptr) {
+    std::lock_guard<std::mutex> lock(g_orient_mutex);
+    auto it = g_orient_slots.find(model_ptr);
+    if (it == g_orient_slots.end()) return;
+    if (--it->second.active <= 0) g_orient_slots.erase(it);
+    g_orient_cv.notify_all();
+}
+
+extern "C" bool farm_orient_is_cancelled(void* model_ptr, unsigned long long token) {
+    std::lock_guard<std::mutex> lock(g_orient_mutex);
+    auto it = g_orient_slots.find(model_ptr);
+    // A vanished slot means the model was torn down underneath us; treat that
+    // as cancellation so the worker bails instead of writing to freed memory.
+    if (it == g_orient_slots.end()) return true;
+    return it->second.generation != token;
+}
+
+extern "C" void farm_orient_cancel(void* model_ptr) {
+    if (model_ptr == nullptr) return;
+    std::lock_guard<std::mutex> lock(g_orient_mutex);
+    OrientSlot& slot = g_orient_slots[model_ptr];
+    ++slot.generation;
+}
+
+extern "C" void farm_orient_drain(void* model_ptr) {
+    if (model_ptr == nullptr) return;
+    std::unique_lock<std::mutex> lock(g_orient_mutex);
+    g_orient_cv.wait(lock, [model_ptr] {
+        auto it = g_orient_slots.find(model_ptr);
+        return it == g_orient_slots.end() || it->second.active == 0;
+    });
+}
 
 // Apply an upstream-orienter result as the object's CANONICAL pose. The
 // orienter's candidate directions are face/hull normals of the CURRENT mesh,
@@ -62,8 +133,16 @@ static void apply_canonical_orientation(Slic3r::Domain::ModelObject* obj,
 // rotation they actually arranged). Otherwise the model is returned untouched
 // -- we never thrash an already-fine pose (a ball or a symmetric badge is left
 // exactly as the user posed it). Any failure restores the original stance too.
+//
+// Cancellation: `model_ptr` + `token` identify this run in the concurrency
+// registry above. If a user mutation lands while orient() is running, the
+// checkpoints below bail out. On cancellation we deliberately do NOT call
+// restore(): the mutation that triggered the cancel has already written the
+// user's own transform, and restoring the pre-orient snapshot would silently
+// undo it (re-introducing the very overwrite this guards against).
 static void orient_object(Slic3r::Domain::ModelObject* obj, double overhang_angle,
-                          const FarmOrientProgressFn& progress, unsigned part_index)
+                          const FarmOrientProgressFn& progress, unsigned part_index,
+                          void* model_ptr, unsigned long long token)
 {
     if (obj == nullptr) return;
 
@@ -99,10 +178,24 @@ static void orient_object(Slic3r::Domain::ModelObject* obj, double overhang_angl
         requested_up = q_cur.conjugate() * Slic3r::Domain::Vec3d(0, 0, 1);
     }
 
+    // A user mutation (or a teardown) landing mid-run invalidates this pass.
+    const auto cancelled = [model_ptr, token]() {
+        return farm_orient_is_cancelled(model_ptr, token);
+    };
+
     for (Slic3r::Domain::ModelVolume* vol : obj->volumes) {
         if (vol == nullptr) continue;
         const Slic3r::Domain::Transformation& t = vol->get_transformation();
         vol->set_transformation(t.get_offset_matrix() * t.get_scaling_factor_matrix());
+    }
+
+    // The strip above removed the user's rotation; if we bail before orient()
+    // has produced a result we must put it back, because no user mutation has
+    // happened yet to supersede it.
+    if (cancelled()) {
+        restore();
+        LOGD("farm_orient: cancelled before minimizer (concurrent mutation)");
+        return;
     }
 
     try {
@@ -131,7 +224,19 @@ static void orient_object(Slic3r::Domain::ModelObject* obj, double overhang_angl
         params.progressind = [progress, part_index](unsigned tag, const std::string& name) {
             if (progress) progress(tag < 20 ? part_index : tag, name);
         };
+        // Let the minimizer bail out at its own stage boundaries once a
+        // concurrent mutation has invalidated this pass. Without this the
+        // worker keeps scoring candidates it will never be allowed to apply.
+        params.stopcondition = [cancelled]() { return cancelled(); };
         Slic3r::orientation::orient(items, {}, params);
+
+        // orient() may have aborted via stopcondition, leaving a partial
+        // solution. A cancelled run keeps whatever the user just did instead of
+        // restoring the snapshot (which would undo their mutation).
+        if (cancelled()) {
+            LOGD("farm_orient: cancelled after minimizer (concurrent mutation)");
+            return;
+        }
 
         const Slic3r::orientation::OrientMesh& res = items.front();
         if (!res.orientation.allFinite() || res.orientation.norm() < 1e-6 ||
@@ -165,15 +270,20 @@ static void orient_object(Slic3r::Domain::ModelObject* obj, double overhang_angl
     }
 }
 
-extern "C" void farm_auto_orient(void* model_object_ptr, double overhang_angle)
+// `model_ptr` is the owning ModelRef (cast to void*). It is only used as a
+// registry key for the concurrency guard, so a user mutation elsewhere in the
+// model can cancel this run before it writes.
+extern "C" void farm_auto_orient(void* model_object_ptr, void* model_ptr, double overhang_angle)
 {
     if (model_object_ptr == nullptr) return;
+    const unsigned long long token = farm_orient_enter(model_ptr);
     orient_object(static_cast<Slic3r::Domain::ModelObject*>(model_object_ptr),
-                  overhang_angle, FarmOrientProgressFn(), 0);
+                  overhang_angle, FarmOrientProgressFn(), 0, model_ptr, token);
+    farm_orient_leave(model_ptr);
 }
 
 extern "C" void farm_auto_orient_batch(void* const* raw_objects, size_t count,
-                                       double overhang_angle,
+                                       void* model_ptr, double overhang_angle,
                                        FarmOrientProgressFn progress)
 {
     if (raw_objects == nullptr || count == 0) return;
@@ -182,8 +292,15 @@ extern "C" void farm_auto_orient_batch(void* const* raw_objects, size_t count,
         if (raw_objects[k] == nullptr) continue;
         objects.push_back(static_cast<Slic3r::Domain::ModelObject*>(raw_objects[k]));
     }
+    const unsigned long long token = farm_orient_enter(model_ptr);
     for (size_t j = 0; j < objects.size(); ++j) {
-        orient_object(objects[j], overhang_angle, progress, (unsigned) j);
+        if (farm_orient_is_cancelled(model_ptr, token)) {
+            LOGD("farm_auto_orient_batch: cancelled after %zu of %zu (concurrent mutation)",
+                 j, objects.size());
+            break;
+        }
+        orient_object(objects[j], overhang_angle, progress, (unsigned) j, model_ptr, token);
         LOGD("farm_auto_orient_batch: object %zu of %zu converged", j + 1, objects.size());
     }
+    farm_orient_leave(model_ptr);
 }

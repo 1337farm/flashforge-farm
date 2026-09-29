@@ -472,6 +472,11 @@ extern "C" {
         // matching how the engine itself tests it (ConfigDef.cpp:442).
         if (d.type == nullptr) return "NONE";
         const std::type_info& t = *d.type;
+        // EnumWrapper/EnumVectorWrapper are the enum marker. Do NOT use
+        // d.choices to detect enums: only 8 defs populate that, while every
+        // real enum (seam_position, ironing_type, arc_fitting, ...) carries
+        // its values in EnumValueDefs attached to init_fn instead.
+        if (t == typeid(Domain::EnumWrapper) || t == typeid(Domain::EnumVectorWrapper)) return "ENUM";
         if (!d.choices.empty()) return "ENUM";
         if (t == typeid(bool)) return "BOOL";
         if (t == typeid(int)) return "INT";
@@ -489,7 +494,6 @@ extern "C" {
         // handles them correctly.
         if (t == typeid(Domain::FloatOrPercentage)) return "FLOAT";
         if (t == typeid(Domain::Percentage)) return "PERCENT";
-        if (t == typeid(Domain::EnumWrapper) || t == typeid(Domain::EnumVectorWrapper)) return "ENUM";
         return "STRING";
     }
 
@@ -675,31 +679,51 @@ extern "C" {
                 // Default value. ConfigValue exposes no serialized string, so
                 // visit the variant and render the same form the profile files
                 // carry (scalars plain, vectors comma-joined).
+                // Enum choices. d.choices is only populated for a handful of
+                // defs; real enums keep their values in the EnumValueDefs the
+                // init_fn closed over, reachable through the EnumWrapper's
+                // def(). Populate from whichever is available, otherwise the
+                // UI's single-choice dialog has no items to show.
+                std::vector<std::pair<std::string, std::string>> choice_pairs; // (value, label)
+                for (const auto& c : d.choices) {
+                    const std::string vs = std::visit([](const auto& val) -> std::string {
+                        using T = std::decay_t<decltype(val)>;
+                        if constexpr (std::is_same_v<T, std::string>) return val;
+                        else if constexpr (std::is_same_v<T, int>) return std::to_string(val);
+                        else if constexpr (std::is_same_v<T, double>) {
+                            std::ostringstream os; os << val; return os.str();
+                        } else return std::string();
+                    }, c.first);
+                    choice_pairs.emplace_back(vs, c.second);
+                }
+
                 if (d.init_fn) {
                     try {
                         auto v = d.init_fn();
                         setStr(f.defaultValue, config_value_to_string(v));
+                        if (choice_pairs.empty())
+                            v.visit([&choice_pairs](const auto& val) {
+                                using T = std::decay_t<decltype(val)>;
+                                if constexpr (std::is_same_v<T, Domain::EnumWrapper>)
+                                    for (const auto& evd : val.def())
+                                        choice_pairs.emplace_back(evd.str_serialized, evd.str_ui.empty() ? evd.str_serialized : evd.str_ui);
+                                else if constexpr (std::is_same_v<T, Domain::EnumVectorWrapper>)
+                                    for (const auto& evd : val.def())
+                                        choice_pairs.emplace_back(evd.str_serialized, evd.str_ui.empty() ? evd.str_serialized : evd.str_ui);
+                            });
                     } catch (...) { /* still usable without a default */ }
                 }
 
-                if (!d.choices.empty()) {
+                if (!choice_pairs.empty()) {
                     jclass strCls = env->FindClass("java/lang/String");
-                    const jsize n = static_cast<jsize>(d.choices.size());
+                    const jsize n = static_cast<jsize>(choice_pairs.size());
                     jobjectArray labels = env->NewObjectArray(n, strCls, nullptr);
                     jobjectArray values = env->NewObjectArray(n, strCls, nullptr);
                     for (jsize i = 0; i < n; ++i) {
-                        const auto& choice = d.choices[static_cast<size_t>(i)];
-                        const std::string vs = std::visit([](const auto& val) -> std::string {
-                            using T = std::decay_t<decltype(val)>;
-                            if constexpr (std::is_same_v<T, std::string>) return val;
-                            else if constexpr (std::is_same_v<T, int>) return std::to_string(val);
-                            else if constexpr (std::is_same_v<T, double>) {
-                                std::ostringstream os; os << val; return os.str();
-                            } else return std::string();
-                        }, choice.first);
-                        jstring jv = env->NewStringUTF(vs.c_str());
+                        const auto& cp = choice_pairs[static_cast<size_t>(i)];
+                        jstring jv = env->NewStringUTF(cp.first.c_str());
                         env->SetObjectArrayElement(values, i, jv);
-                        jstring jl = env->NewStringUTF(choice.second.c_str());
+                        jstring jl = env->NewStringUTF(cp.second.c_str());
                         env->SetObjectArrayElement(labels, i, jl);
                         env->DeleteLocalRef(jv);
                         env->DeleteLocalRef(jl);

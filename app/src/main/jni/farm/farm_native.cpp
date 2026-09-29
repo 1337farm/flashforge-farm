@@ -381,17 +381,35 @@ extern "C" {
     // ConfigValue exposes no serialized string, so visit the variant. Formats
     // follow the engine's own GUI controls (ConfigItemControl.cpp:121-124):
     // percentages as "<n> %", everything else via plain stream formatting.
-    // EnumWrapper renders as its serialized name (its `def()` lookup maps the
-    // int to the EnumValueDef whose str_serialized is the profile spelling).
+    //
+    // The two enum wrappers are handled by name, not by member probing:
+    // EnumWrapper exposes get_string() (the EnumValueDef str_serialized, i.e.
+    // the profile spelling) and EnumVectorWrapper exposes get_strings().
+    // Neither is constructible into a ConfigValue, so the vector fallback must
+    // not round-trip elements back through the ConfigValue constructor.
     static std::string config_value_to_string(const Domain::ConfigValue& v) {
         return v.visit([](const auto& val) -> std::string {
             using T = std::decay_t<decltype(val)>;
             std::ostringstream os;
-            if constexpr (std::is_same_v<T, std::string>) return val;
-            else if constexpr (std::is_same_v<T, bool>) return val ? "1" : "0";
-            else if constexpr (std::is_same_v<T, int>) return std::to_string(val);
-            else if constexpr (std::is_same_v<T, double>) { os << val; return os.str(); }
-            else if constexpr (std::is_same_v<T, Domain::Vec2d>) {
+            if constexpr (std::is_same_v<T, Domain::EnumWrapper>) {
+                return std::string(val.get_string());
+            } else if constexpr (std::is_same_v<T, Domain::EnumVectorWrapper>) {
+                std::string out;
+                for (auto s : val.get_strings()) {
+                    if (!out.empty()) out += ",";
+                    out += s;
+                }
+                return out;
+            } else if constexpr (std::is_same_v<T, std::string>) {
+                return val;
+            } else if constexpr (std::is_same_v<T, bool>) {
+                return val ? "1" : "0";
+            } else if constexpr (std::is_same_v<T, int>) {
+                return std::to_string(val);
+            } else if constexpr (std::is_same_v<T, double>) {
+                os << val;
+                return os.str();
+            } else if constexpr (std::is_same_v<T, Domain::Vec2d>) {
                 os << val.x() << "x" << val.y();
                 return os.str();
             } else if constexpr (std::is_same_v<T, Domain::Percentage>) {
@@ -401,19 +419,45 @@ extern "C" {
                 if (val.is_percentage()) os << val.percentage().value << " %";
                 else os << val.float_value();
                 return os.str();
-            } else if constexpr (requires { { val.str_serialized } -> std::convertible_to<std::string>; }) {
-                return val.str_serialized; // EnumWrapper
-            } else if constexpr (requires { val.begin(); val.end(); }) {
-                // Vector alternatives. EnumVectorWrapper first tries its
-                // serialized form (the profile spelling); plain vectors are
-                // comma-joined element-wise.
-                if constexpr (requires { { val.str_serialized } -> std::convertible_to<std::string>; })
-                    if (!val.str_serialized.empty()) return val.str_serialized;
-                bool first = true;
-                for (const auto& e : val) {
-                    if (!first) os << ",";
-                    first = false;
-                    os << config_value_to_string(Domain::ConfigValue(e));
+            } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    os << val[i];
+                }
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<bool>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    os << (val[i] ? "1" : "0");
+                }
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<int>> ||
+                                 std::is_same_v<T, std::vector<std::optional<int>>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    if constexpr (std::is_same_v<T, std::vector<std::optional<int>>>)
+                        os << (val[i] ? std::to_string(*val[i]) : std::string());
+                    else
+                        os << val[i];
+                }
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<double>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    os << val[i];
+                }
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<Domain::Vec2d>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    os << val[i].x() << "x" << val[i].y();
+                }
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<Domain::FloatOrPercentage>> ||
+                                 std::is_same_v<T, std::vector<Domain::Percentage>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    os << config_value_to_string(Domain::ConfigValue(val[i]));
                 }
                 return os.str();
             } else {
@@ -422,11 +466,11 @@ extern "C" {
         });
     }
 
-    // The legacy ConfigOptionType the edit path switches on (BOOL/ENUM/FLOAT/
-    // INT/STRING and their vector forms).
     static const char* config_option_type(const Slic3r::Domain::ConfigItemDef& d) {
-        const std::type_info* t = d.type;
-        if (t == nullptr) return "NONE";
+        // ConfigItemDef::type is a const std::type_info*; compare the pointee,
+        // matching how the engine itself tests it (ConfigDef.cpp:442).
+        if (d.type == nullptr) return "NONE";
+        const std::type_info& t = *d.type;
         if (!d.choices.empty()) return "ENUM";
         if (t == typeid(bool)) return "BOOL";
         if (t == typeid(int)) return "INT";
@@ -435,11 +479,12 @@ extern "C" {
         if (t == typeid(std::vector<bool>)) return "BOOLS";
         if (t == typeid(std::vector<int>)) return "INTS";
         if (t == typeid(std::vector<double>)) return "FLOATS";
-        if (t == typeid(std::vector<std::string)) return "STRINGS";
+        if (t == typeid(std::vector<std::string>)) return "STRINGS";
         if (t == typeid(Domain::Vec2d) || t == typeid(std::vector<Domain::Vec2d))
             return d.gui_type == Slic3r::Domain::ConfigItemDef::GUIType::points ? "POINTS" : "FLOATS";
-        if (t == typeid(Slic3r::Domain::FloatOrPercentage)) return "FLOAT";
-        if (t == typeid(Slic3r::Domain::Percentage)) return "PERCENT";
+        if (t == typeid(Domain::FloatOrPercentage)) return "FLOAT";
+        if (t == typeid(Domain::Percentage)) return "PERCENT";
+        if (t == typeid(Domain::EnumWrapper) || t == typeid(Domain::EnumVectorWrapper)) return "ENUM";
         return "STRING";
     }
 

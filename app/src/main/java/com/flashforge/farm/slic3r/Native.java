@@ -257,6 +257,8 @@ public class Native {
     static native long model_create();
     public static native long model_read_from_file(String path, String baseName, int plateId) throws Slic3rRuntimeError;
     static native int model_get_objects_count(long ptr);
+    /** Name of object i, used to derive a human-meaningful gcode export filename. */
+    static native String model_get_object_name(long ptr, int i);
     static native void model_add_object_from_another(long ptr, long from, int i);
     static native void model_delete_object(long ptr, int i);
     static native int model_split(long ptr, int i);

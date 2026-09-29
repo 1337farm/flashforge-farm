@@ -140,6 +140,10 @@
     <string name="MenuSliceInfoLayers">Layers %1$d - %2$d</string>
     <string name="MenuSliceExportToFile">Export to file</string>
     <string name="MenuSliceShare">Share</string>
+    <string name="MenuSliceSave">Save</string>
+    <string name="MenuSliceSaveHint">Saves to your %1$s folder. Edit the name if you like.</string>
+    <string name="MenuSliceSaveDone">Saved to Downloads as %1$s</string>
+    <string name="MenuSliceExportFailed">Could not save the gcode</string>
     <string name="MenuSlicePerformance">Performance</string>
     <string name="MenuSliceSendToPrinterLoading">Uploading…</string>
     <string name="MenuSliceSendToPrinterOK">File sent to queue.</string>

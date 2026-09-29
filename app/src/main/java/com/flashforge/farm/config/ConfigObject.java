@@ -309,6 +309,20 @@ public class ConfigObject implements ProfileListFragment.ProfileListItem {
         custom.put("retract_before_travel", "2");
 
         custom.put("machine_limits_usage", "time_estimate_only");
+        // Heated-bed defaults. The custom start_gcode below hardcodes
+        // M140/M190 S{first_layer_bed_temperature[0]}, and the engine
+        // suppresses its own bed-temperature emission whenever the custom
+        // start gcode already contains M140/M190
+        // (GCode.cpp::_print_first_layer_bed_temperature, temp_set_by_gcode).
+        // So with no value here the bed target resolves to nothing/0 and never
+        // heats. These are the same values the custom filament profile uses
+        // (bed 60 / first layer 60), kept consistent so a custom printer
+        // paired with a stock filament inherits a sane heated bed.
+        custom.put("first_layer_bed_temperature", "60");
+        custom.put("bed_temperature", "60");
+        custom.put("first_layer_temperature", "210");
+        custom.put("temperature", "210");
+        custom.put("idle_temperature", "150");
         custom.put("machine_max_acceleration_e", "5000");
         custom.put("machine_max_acceleration_extruding", "500");
         custom.put("machine_max_acceleration_retracting", "1000");

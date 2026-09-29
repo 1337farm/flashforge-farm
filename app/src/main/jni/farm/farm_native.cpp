@@ -437,6 +437,13 @@ extern "C" {
         return model->model.objects[i];
     }
 
+    JNIEXPORT jstring JNICALL Java_com_flashforge_farm_slic3r_Native_model_1get_1object_1name(JNIEnv* env, jclass, jlong ptr, jint i) {
+        ModelRef* model = (ModelRef *) (intptr_t) ptr;
+        Domain::ModelObject* obj = check_object(model, i);
+        if (obj == nullptr) return nullptr;
+        return env->NewStringUTF(obj->name.c_str());
+    }
+
     JNIEXPORT jdoubleArray JNICALL Java_com_flashforge_farm_slic3r_Native_model_1get_1rotation(JNIEnv* env, jclass, jlong ptr, jint object_index) {
         ModelRef* model = (ModelRef *) (intptr_t) ptr;
         Domain::ModelObject* obj = check_object(model, object_index);

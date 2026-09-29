@@ -19,6 +19,9 @@ import android.view.View;
 import com.flashforge.farm.utils.PrintQueueManager;
 import com.flashforge.farm.utils.PrinterFleetManager;
 import com.flashforge.farm.api.AutoDispatchService;
+import com.flashforge.farm.utils.GCodeExporter;
+import android.widget.TextView;
+import android.util.Log;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.app.AlertDialog;
@@ -31,7 +34,6 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.Space;
-import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.core.content.FileProvider;
@@ -107,24 +109,7 @@ public class SliceMenu extends ListBedMenu {
                         ((com.flashforge.farm.MainActivity) act).pickFile(i, MainActivity.REQUEST_CODE_EXPORT_GCODE);
                     }
                 }),
-                new BedMenuItem(R.string.MenuSliceShare, R.drawable.share_external_28).onClick(v -> {
-                    if (fragment.getContext() instanceof Activity) {
-                        File f = BedFragment.getTempGCodePath();
-
-                        Activity act = (Activity) fragment.getContext();
-                        Intent i = new Intent(Intent.ACTION_SEND_MULTIPLE);
-                        i.setType("application/x-gcode");
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                            // Simple trick for Samsung to display "1 element" instead of "temp.gcode"
-                            // It doesn't actually resolve name from provider and uses path-parsing instead, bruh.
-                            i.putParcelableArrayListExtra(Intent.EXTRA_STREAM, new ArrayList<>(Collections.singletonList(FileProvider.getUriForFile(act, BuildConfig.APPLICATION_ID + ".provider", f, BedFragment.getTempFileName()))));
-                            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                        } else {
-                            i.putExtra(Intent.EXTRA_STREAM, Uri.fromFile(f));
-                        }
-                        act.startActivity(Intent.createChooser(i, null));
-                    }
-                }),
+                new BedMenuItem(R.string.MenuSliceShare, R.drawable.share_external_28).onClick(v -> saveGCodeToDownloads()),
                 new BedMenuItem(R.string.MenuSlicePerformance, R.drawable.sparkle_28)
                         .setTitleTextSize(8f)
                         .setCheckable((buttonView, isChecked) -> {
@@ -146,6 +131,60 @@ public class SliceMenu extends ListBedMenu {
         return items;
     }
 
+
+    /**
+     * Save the sliced gcode into the device's public Downloads folder.
+     *
+     * Replaces the old ACTION_SEND share flow, which shipped a cache-dir file
+     * named "temp.gcode" and left both the name and the location to the target
+     * app. The filename defaults to the plate's own name (a single imported
+     * STL, else a timestamp) and stays editable in the dialog; the write goes
+     * through MediaStore so it lands in Downloads without a picker round-trip.
+     */
+    private void saveGCodeToDownloads() {
+        android.content.Context ctx = fragment.getContext();
+        if (ctx == null) return;
+        File source = BedFragment.getTempGCodePath();
+        if (source == null || !source.exists()) {
+            Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuSliceExportFailed));
+            return;
+        }
+
+        String suggested = GCodeExporter.suggestedFileName(fragment.getGlView().getRenderer().getModel());
+
+        LinearLayout layout = new LinearLayout(ctx);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(ViewUtils.dp(20), ViewUtils.dp(20), ViewUtils.dp(20), ViewUtils.dp(20));
+
+        TextView hint = new TextView(ctx);
+        hint.setText(ctx.getString(R.string.MenuSliceSaveHint, GCodeExporter.downloadsLabel()));
+        hint.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12f);
+        layout.addView(hint);
+
+        final EditText nameInput = new EditText(ctx);
+        nameInput.setSingleLine(true);
+        nameInput.setText(suggested);
+        nameInput.setSelectAllOnFocus(true);
+        layout.addView(nameInput);
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(ctx);
+        builder.setTitle(R.string.MenuSliceShare);
+        builder.setView(layout);
+        builder.setNegativeButton(android.R.string.cancel, null);
+        builder.setPositiveButton(R.string.MenuSliceSave, (dialog, which) -> {
+            String chosen = nameInput.getText().toString();
+            ViewUtils.postOnMainThread(() -> {
+                try {
+                    GCodeExporter.saveToDownloads(ctx, source, chosen);
+                    Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuSliceSaveDone, GCodeExporter.sanitize(chosen)));
+                } catch (Exception e) {
+                    Log.e("GCodeExporter", "save to Downloads failed", e);
+                    Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuSliceExportFailed));
+                }
+            });
+        });
+        builder.show();
+    }
 
     private void enqueuePrint() {
         android.content.Context ctx = fragment.getContext();

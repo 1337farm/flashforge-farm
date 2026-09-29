@@ -17,6 +17,7 @@
 //
 #include <android/log.h>
 #include <fstream>
+#include <iomanip>
 #include <functional>
 #include <map>
 #include <optional>
@@ -425,6 +426,31 @@ std::string normalize_legacy_ini(const std::string& ini_path) {
 
 } // namespace
 
+// Renders the trailing metadata block appended to an exported gcode. Format
+// mirrors upstream PrusaSlicer's footer so slicer-side parsers that already
+// read "filament used [mm]" keep working.
+//
+// Only quantities the engine actually computed are emitted. Volume (cm3) is
+// deliberately NOT derived here: it needs the filament diameter and density,
+// which live in the filament profile, and guessing a 1.75mm PLA assumption
+// would print a plausible-looking but possibly wrong number into the file.
+// total_g is the engine's own mass, so no assumption is involved.
+std::string gcode_metadata_comment(const SliceStats& stats) {
+    std::ostringstream os;
+    if (stats.total_mm > 0.0)
+        os << "; filament used [mm] = " << std::fixed << std::setprecision(2) << stats.total_mm << "\n";
+    if (stats.total_g > 0.0)
+        os << "; filament used [g] = " << std::fixed << std::setprecision(2) << stats.total_g << "\n";
+
+    if (stats.estimated_seconds > 0.0) {
+        const long total = static_cast<long>(stats.estimated_seconds);
+        std::ostringstream t;
+        t << total / 3600 << "h " << (total % 3600) / 60 << "m " << total % 60 << "s";
+        os << "; estimated printing time (normal mode) = " << t.str() << "\n";
+    }
+    return os.str();
+}
+
 SliceStats slice_to_gcode(Model& model,
                           const std::string& legacy_ini_path,
                           const std::string& gcode_out_path,
@@ -530,30 +556,44 @@ SliceStats slice_to_gcode(Model& model,
     if (result.const_gcode() == nullptr || result.const_gcode()->empty())
         throw std::runtime_error("slicing produced no gcode");
 
-    // 6. Export: ProcessorResult embeds the plain gcode buffer.
+    // 6. Collect totals/time BEFORE writing, so the metadata block can be
+    //    emitted with the file. Per-role stats double-count nothing (roles are
+    //    disjoint portions of the extrusion), but the authoritative total is
+    //    the per-extruder sum.
+    SliceStats stats;
+    std::visit([&stats](const auto& print_statistics) {
+        using StatsT = std::decay_t<decltype(print_statistics)>;
+        for (const auto& [role, mm_g] : print_statistics.used_filaments_per_role)
+            stats.per_role[static_cast<int>(role)] = mm_g;
+        if constexpr (std::is_same_v<StatsT, Domain::FullPrintStatistics>) {
+            stats.per_extruder_mm = print_statistics.used_filament_per_extruder_mm;
+            stats.per_extruder_g = print_statistics.used_filament_per_extruder_g;
+            for (float v : stats.per_extruder_mm) stats.total_mm += v;
+            for (float v : stats.per_extruder_g) stats.total_g += v;
+        }
+        // normal_mode_time.time is the estimate; it is 0 when the profile sets
+        // machine_limits_usage to a mode that does not compute time.
+        stats.estimated_seconds = static_cast<double>(print_statistics.normal_mode_time.time);
+    }, result.print_statistics);
+
+    // 7. Export: ProcessorResult embeds the plain gcode buffer.
     {
         std::ofstream out(gcode_out_path, std::ios::binary | std::ios::trunc);
         if (!out)
             throw std::runtime_error("cannot open " + gcode_out_path + " for writing");
         out << result.const_gcode()->str();
+
+        // Trailing metadata, matching upstream PrusaSlicer's own footer format
+        // so existing slicer-side parsers keep working. Appended rather than
+        // prepended: some firmware reads the first lines of the file, and a
+        // leading comment block can be mistaken for a header it expects.
+        out << farm::gcode_metadata_comment(stats);
         out.flush();
         if (!out)
             throw std::runtime_error("writing " + gcode_out_path + " failed");
     }
-
-    // 7. Filament stats for the app's result panel (Java role ints are 1:1
-    //    with Domain::GCodeExtrusionRole ordering — see farm_driver.hpp).
-    SliceStats stats;
-    std::visit([&stats](const auto& print_statistics) {
-        for (const auto& [role, mm_g] : print_statistics.used_filaments_per_role)
-            stats.per_role[static_cast<int>(role)] = mm_g;
-        if constexpr (std::is_same_v<std::decay_t<decltype(print_statistics)>,
-                                     Domain::FullPrintStatistics>) {
-            stats.per_extruder_mm = print_statistics.used_filament_per_extruder_mm;
-            stats.per_extruder_g = print_statistics.used_filament_per_extruder_g;
-        }
-    }, result.print_statistics);
     return stats;
 }
+
 
 } // namespace farm

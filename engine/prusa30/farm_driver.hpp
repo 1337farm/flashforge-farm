@@ -17,7 +17,17 @@ struct SliceStats {
     RoleFilamentStats per_role;
     std::vector<float> per_extruder_mm;
     std::vector<float> per_extruder_g;
+    // Totals + time estimate, written into the exported gcode as a trailing
+    // comment block (upstream PrusaSlicer's own convention) and surfaced to
+    // the app so the result panel can show them without re-parsing the file.
+    double total_mm{};
+    double total_g{};
+    double estimated_seconds{}; // normal mode; 0 when the profile disables estimates
 };
+
+// Trailing "; key = value" block appended to an exported gcode: filament used
+// in mm and g (both from the engine) plus the normal-mode time estimate.
+std::string gcode_metadata_comment(const SliceStats& stats);
 
 // Slices `model` (already loaded via FileLoadingLogic) with the app-written
 // legacy PrusaSlicer INI config and writes the resulting plain gcode to

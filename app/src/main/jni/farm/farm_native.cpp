@@ -497,12 +497,41 @@ extern "C" {
         jclass defCls = env->GetObjectClass(def);
         jmethodID addOption = env->GetMethodID(defCls, "addOption",
                                               "(Ljava/lang/String;Lcom/flashforge/farm/slic3r/ConfigOptionDef;)V");
-        jclass optCls = env->FindClass("com/flashforge/farm/slic3r/ConfigOptionDef");
-        jclass typeCls = env->FindClass("com/flashforge/farm/slic3r/ConfigOptionDef$ConfigOptionType");
-        jclass guiCls = env->FindClass("com/flashforge/farm/slic3r/ConfigOptionDef$GUIType");
+        // Resolve app classes through the loader that owns `def`. A bare
+        // FindClass on a non-main thread uses the SYSTEM classloader, which
+        // cannot see com.flashforge.farm.* -- FarmApp calls this while
+        // generating the config on a worker thread, so FindClass would fail
+        // and the defs would silently come back empty.
+        jclass optCls = nullptr, typeCls = nullptr, guiCls = nullptr;
+        {
+            jclass loaderCls = env->FindClass("java/lang/ClassLoader");
+            if (loaderCls != nullptr) {
+                jmethodID loadClass = env->GetMethodID(loaderCls, "loadClass",
+                                                      "(Ljava/lang/String;)Ljava/lang/Class;");
+                jmethodID getLoader = env->GetMethodID(defCls, "getClassLoader",
+                                                        "()Ljava/lang/ClassLoader;");
+                jobject loader = (loadClass != nullptr && getLoader != nullptr)
+                    ? env->CallObjectMethod(defCls, getLoader) : nullptr;
+                if (loader != nullptr) {
+                    auto load = [&](const char* name) -> jclass {
+                        jstring n = env->NewStringUTF(name);
+                        jclass c = static_cast<jclass>(env->CallObjectMethod(loader, loadClass, n));
+                        env->DeleteLocalRef(n);
+                        if (env->ExceptionCheck()) { env->ExceptionClear(); return nullptr; }
+                        return c;
+                    };
+                    optCls = load("com.flashforge.farm.slic3r.ConfigOptionDef");
+                    typeCls = load("com.flashforge.farm.slic3r.ConfigOptionDef$ConfigOptionType");
+                    guiCls = load("com.flashforge.farm.slic3r.ConfigOptionDef$GUIType");
+                    env->DeleteLocalRef(loader);
+                }
+            }
+            if (env->ExceptionCheck()) env->ExceptionClear();
+            if (loaderCls != nullptr) env->DeleteLocalRef(loaderCls);
+        }
         if (addOption == nullptr || optCls == nullptr || typeCls == nullptr || guiCls == nullptr) {
             env->ExceptionClear();
-            LOGE("get_print_config_def: Java classes/methods not found");
+            LOGE("get_print_config_def: Java classes/methods not found (loader=%p)", (void*)optCls);
             return;
         }
         jmethodID typeOf = env->GetStaticMethodID(typeCls, "valueOf",
@@ -552,6 +581,16 @@ extern "C" {
                 LOGE("get_print_config_def: field '%s' missing", field_specs[i].first);
                 return;
             }
+        }
+
+        // A native frame bounds the JNI local-reference table. Without one,
+        // looping the FDM schema (several hundred defs, each creating several
+        // local refs) exhausts the table, at which point the runtime starts
+        // handing back null and the process dies with SIGSEGV on a null
+        // deref. 512 is the guaranteed minimum the spec requires.
+        if (env->PushLocalFrame(512) != 0) {
+            LOGE("get_print_config_def: PushLocalFrame failed");
+            return;
         }
 
         size_t emitted = 0;
@@ -680,8 +719,10 @@ extern "C" {
             }
         } catch (const std::exception& e) {
             LOGE("get_print_config_def: aborted after %zu defs: %s", emitted, e.what());
+            env->PopLocalFrame(nullptr);
             return;
         }
+        env->PopLocalFrame(nullptr);
         LOGD("get_print_config_def: bridged %zu FDM config defs", emitted);
     }
 

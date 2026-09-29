@@ -173,17 +173,42 @@ public class SliceMenu extends ListBedMenu {
         builder.setNegativeButton(android.R.string.cancel, null);
         builder.setPositiveButton(R.string.MenuSliceSave, (dialog, which) -> {
             String chosen = nameInput.getText().toString();
-            ViewUtils.postOnMainThread(() -> {
-                try {
-                    GCodeExporter.saveToDownloads(ctx, source, chosen);
-                    Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuSliceSaveDone, GCodeExporter.sanitize(chosen)));
-                } catch (Exception e) {
-                    Log.e("GCodeExporter", "save to Downloads failed", e);
-                    Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuSliceExportFailed));
-                }
-            });
+            confirmThenSave(ctx, source, chosen);
         });
         builder.show();
+    }
+
+    /**
+     * Writes the gcode, asking first when it would replace an existing file.
+     *
+     * MediaStore never reports a name collision as an error -- it quietly
+     * renames to "<name> (1).gcode" and writes a second copy -- so without this
+     * a re-save silently duplicated files in Downloads instead of replacing
+     * the one the user meant to update. Cancelling writes nothing.
+     */
+    private void confirmThenSave(android.content.Context ctx, File source, String chosen) {
+        if (!GCodeExporter.downloadsHas(ctx, chosen)) {
+            writeGCode(ctx, source, chosen);
+            return;
+        }
+        new AlertDialog.Builder(ctx)
+                .setTitle(R.string.MenuSliceOverwriteTitle)
+                .setMessage(ctx.getString(R.string.MenuSliceOverwriteMessage, GCodeExporter.sanitize(chosen)))
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.MenuSliceOverwrite, (d, w) -> writeGCode(ctx, source, chosen))
+                .show();
+    }
+
+    private void writeGCode(android.content.Context ctx, File source, String chosen) {
+        ViewUtils.postOnMainThread(() -> {
+            try {
+                GCodeExporter.saveToDownloads(ctx, source, chosen);
+                Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuSliceSaveDone, GCodeExporter.sanitize(chosen)));
+            } catch (Exception e) {
+                Log.e("GCodeExporter", "save to Downloads failed", e);
+                Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuSliceExportFailed));
+            }
+        });
     }
 
     private void enqueuePrint() {

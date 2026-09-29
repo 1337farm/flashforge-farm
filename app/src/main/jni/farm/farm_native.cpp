@@ -549,11 +549,41 @@ extern "C" {
             if (env->ExceptionCheck()) env->ExceptionClear();
             if (loaderCls != nullptr) env->DeleteLocalRef(loaderCls);
         }
-        if (addOption == nullptr || optCls == nullptr || typeCls == nullptr || guiCls == nullptr) {
-            env->ExceptionClear();
-            LOGE("get_print_config_def: Java classes/methods not found (loader=%p)", (void*)optCls);
-            diag(-1, "classes/methods not found");
-            return;
+        {
+            // Reproduce whatever exception the last failed resolution left
+            // pending so we can see its class/message instead of a bare null.
+            char why[320] = {0};
+            const char* missing = nullptr;
+            if (addOption == nullptr) missing = "addOption";
+            else if (optCls == nullptr) missing = "ConfigOptionDef";
+            else if (typeCls == nullptr) missing = "ConfigOptionType";
+            else if (guiCls == nullptr) missing = "GUIType";
+            if (missing != nullptr) {
+                jthrowable ex = env->ExceptionOccurred();
+                if (ex != nullptr) {
+                    env->ExceptionClear();
+                    jclass cls = env->GetObjectClass(ex);
+                    jmethodID toString = env->GetMethodID(cls, "toString", "()Ljava/lang/String;");
+                    if (toString != nullptr) {
+                        jstring s = static_cast<jstring>(env->CallObjectMethod(ex, toString));
+                        if (s != nullptr) {
+                            const char* c = env->GetStringUTFChars(s, nullptr);
+                            if (c != nullptr) {
+                                snprintf(why, sizeof(why), "%s <- %s", missing, c);
+                                env->ReleaseStringUTFChars(s, c);
+                            }
+                        }
+                        env->DeleteLocalRef(s);
+                    }
+                    env->DeleteLocalRef(cls);
+                    env->DeleteLocalRef(ex);
+                } else {
+                    snprintf(why, sizeof(why), "%s (no pending exception)", missing);
+                }
+                LOGE("get_print_config_def: %s", why);
+                diag(-1, why);
+                return;
+            }
         }
         jmethodID typeOf = env->GetStaticMethodID(typeCls, "valueOf",
             "(Ljava/lang/String;)Lcom/flashforge/farm/slic3r/ConfigOptionDef$ConfigOptionType;");

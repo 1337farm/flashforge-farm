@@ -142,6 +142,12 @@ public class Model {
         return Native.model_get_objects_count(pointer);
     }
 
+    /** Name of object i, or null when out of range. */
+    public String getObjectName(int i) {
+        if (pointer == 0) return null;
+        return Native.model_get_object_name(pointer, i);
+    }
+
     public void addObject(Model from, int i) {
         Native.model_add_object_from_another(pointer, from.pointer, i);
     }

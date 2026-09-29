@@ -29,8 +29,8 @@ import shutil
 import sys
 from pathlib import Path
 
-# Pinned upstream commit = tag version_3.0.0-alpha11 (== master at clone time).
-PRUSA30_PIN = "6f510128d7c2e543b62919b74bea7e876f564205"
+# Pinned upstream commit = tag version_3.0.0-alpha12.
+PRUSA30_PIN = "30ef59195e0f3ee6f270b185bb5f9fb5f349f81f"
 REPO_URL = "https://github.com/prusa3d/PrusaSlicer"
 
 # Headless modules `src/CMakeLists.txt` add unconditionally (before the
@@ -101,7 +101,7 @@ def emit_manifest(upstream: Path) -> dict:
         "schema": "prusaslicer30-vendor-manifest",
         "repo": REPO_URL,
         "pin": PRUSA30_PIN,
-        "tag": "version_3.0.0-alpha11",
+        "tag": "version_3.0.0-alpha12",
         "host_build_support": {"headless_build": False,
                                 "note": "src/CMakeLists.txt fatal-errors on SLIC3R_GUI=OFF; "
                                         "a headless path must be added + a slice driver written"},

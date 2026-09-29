@@ -549,9 +549,15 @@ extern "C" {
                 jmethodID loadClass = env->GetMethodID(loaderCls, "loadClass",
                                                       "(Ljava/lang/String;)Ljava/lang/Class;");
                 loadClass_ok = (loadClass != nullptr);
-                jmethodID getLoader = env->GetMethodID(defCls, "getClassLoader",
-                                                        "()Ljava/lang/ClassLoader;");
+                // getClassLoader() is declared on java.lang.Class, NOT on the
+                // app class, so the method id must come from java.lang.Class
+                // and be invoked on defCls (the class object) as the receiver.
+                jclass clsCls = env->FindClass("java/lang/Class");
+                jmethodID getLoader = (clsCls != nullptr)
+                    ? env->GetMethodID(clsCls, "getClassLoader",
+                                       "()Ljava/lang/ClassLoader;") : nullptr;
                 getLoader_ok = (getLoader != nullptr);
+                if (clsCls != nullptr) env->DeleteLocalRef(clsCls);
                 jobject loader = (loadClass_ok && getLoader_ok)
                     ? env->CallObjectMethod(defCls, getLoader) : nullptr;
                 if (env->ExceptionCheck()) env->ExceptionClear();

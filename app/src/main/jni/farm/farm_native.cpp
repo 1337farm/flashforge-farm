@@ -498,6 +498,22 @@ extern "C" {
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_get_1print_1config_1def(JNIEnv *env, jclass, jobject def) {
+        // Diagnostics: native logcat output is not visible on-device (only
+        // Java Log.* reaches logcat), so the bridge writes its outcome into
+        // diagEmitted/diagStatus fields on the def object and Java relays it.
+        auto diag = [&](jint emitted, const char* status) -> void {
+            jclass dc = env->GetObjectClass(def);
+            jfieldID fe = env->GetFieldID(dc, "diagEmitted", "I");
+            jfieldID fs = env->GetFieldID(dc, "diagStatus", "Ljava/lang/String;");
+            if (fe != nullptr) env->SetIntField(def, fe, emitted);
+            if (fs != nullptr) {
+                jstring st = env->NewStringUTF(status);
+                env->SetObjectField(def, fs, st);
+                env->DeleteLocalRef(st);
+            }
+            env->DeleteLocalRef(dc);
+            if (env->ExceptionCheck()) env->ExceptionClear();
+        };
         jclass defCls = env->GetObjectClass(def);
         jmethodID addOption = env->GetMethodID(defCls, "addOption",
                                               "(Ljava/lang/String;Lcom/flashforge/farm/slic3r/ConfigOptionDef;)V");
@@ -536,6 +552,7 @@ extern "C" {
         if (addOption == nullptr || optCls == nullptr || typeCls == nullptr || guiCls == nullptr) {
             env->ExceptionClear();
             LOGE("get_print_config_def: Java classes/methods not found (loader=%p)", (void*)optCls);
+            diag(-1, "classes/methods not found");
             return;
         }
         jmethodID typeOf = env->GetStaticMethodID(typeCls, "valueOf",
@@ -546,6 +563,7 @@ extern "C" {
         if (typeOf == nullptr || guiOf == nullptr || optCtor == nullptr) {
             env->ExceptionClear();
             LOGE("get_print_config_def: enum valueOf/opt ctor not found");
+            diag(-2, "valueOf/opt ctor not found");
             return;
         }
 
@@ -583,6 +601,8 @@ extern "C" {
             if (*slots[i] == nullptr) {
                 env->ExceptionClear();
                 LOGE("get_print_config_def: field '%s' missing", field_specs[i].first);
+                char buf[128]; snprintf(buf, sizeof(buf), "field '%s' missing", field_specs[i].first);
+                diag(-3, buf);
                 return;
             }
         }
@@ -594,6 +614,7 @@ extern "C" {
         // deref. 512 is the guaranteed minimum the spec requires.
         if (env->PushLocalFrame(512) != 0) {
             LOGE("get_print_config_def: PushLocalFrame failed");
+            diag(-4, "PushLocalFrame failed");
             return;
         }
 
@@ -744,10 +765,14 @@ extern "C" {
         } catch (const std::exception& e) {
             LOGE("get_print_config_def: aborted after %zu defs: %s", emitted, e.what());
             env->PopLocalFrame(nullptr);
+            char buf[192]; snprintf(buf, sizeof(buf), "aborted after %zu defs: %s", emitted, e.what());
+            diag(static_cast<jint>(emitted), buf);
             return;
         }
         env->PopLocalFrame(nullptr);
         LOGD("get_print_config_def: bridged %zu FDM config defs", emitted);
+        if (emitted == 0) diag(0, "no defs emitted");
+        else diag(static_cast<jint>(emitted), "ok");
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_model_1read_1from_1file(JNIEnv *env, jclass, jstring path, jstring base_name, jint plateId) {

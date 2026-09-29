@@ -58,6 +58,14 @@ public class PrintConfigDef {
 
     public Map<String, ConfigOptionDef> options = new HashMap<>();
 
+    // Diagnostics for the native ConfigDef bridge. The native side sets these
+    // so getInstance() can report (via adb logcat) what actually happened,
+    // since native logcat output is invisible on-device.
+    @Keep
+    public int diagEmitted = -1;
+    @Keep
+    public String diagStatus = "";
+
     @Keep
     PrintConfigDef() {}
 
@@ -159,13 +167,13 @@ public class PrintConfigDef {
         if (instance == null) {
             Native.get_print_config_def(instance = new PrintConfigDef());
             applyPrusaLabels(instance);
-            // Log the bridged schema size. DEBUG-level native logs are not
-            // reliably visible in logcat, but an ERROR-level Java log always
-            // is, so this is the signal for whether the ConfigDef bridge
-            // actually populated (an empty map means every config row renders
-            // as a blank placeholder).
+            // Native LOGD/LOGE never surfaces in this device's logcat, so the
+            // bridge reports progress/failure through diagEmitted/diagStatus
+            // and we relay them here as an ERROR-level line that always shows.
             android.util.Log.e("PrintConfigDef",
                 "bridged options=" + instance.options.size()
+                + " emitted=" + instance.diagEmitted
+                + " status=" + instance.diagStatus
                 + " sample=" + (instance.options.containsKey("layer_height") ? "layer_height" : "MISSING_layer_height")
                 + "," + (instance.options.containsKey("seam_position") ? "seam_position" : "MISSING_seam_position"));
         }

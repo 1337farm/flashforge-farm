@@ -38,6 +38,8 @@
 #include "Slic3r/Domain/TriangleMesh.hpp"
 #include "Slic3r/Domain/CutConnector.hpp"
 #include "Slic3r/Domain/LayerHeightProfile.hpp"
+#include "Slic3r/Domain/ConfigDefsFDM.hpp"
+#include "Slic3r/Domain/ConfigValue.hpp"
 #include "farm_driver.hpp"
 #include "farm_progress.hpp"
 #include "Slic3r/Biz/FileLoadingLogic.hpp"
@@ -350,11 +352,337 @@ extern "C" {
         env->ReleaseStringUTFChars(path, chars);
     }
 
+    // Maps a 3.0 ConfigItemDef onto the legacy
+    // com/flashforge/farm/slic3r/ConfigOptionDef shape the settings UI is
+    // written against.
+    //
+    // The UI asks the engine for a def per option key. While this function was
+    // a stub, every lookup returned null and ProfileListFragment.OptionElement
+    // substituted a 0x0 SpaceItem, so the printer/filament/print config
+    // screens rendered rows with a label but no value widget and nothing
+    // tappable. Populating the defs restores them.
+    static const char* config_option_gui_type(Slic3r::Domain::ConfigItemDef::GUIType gt) {
+        using GT = Slic3r::Domain::ConfigItemDef::GUIType;
+        switch (gt) {
+        case GT::i_enum_open:
+        case GT::f_enum_open: return "i_enum_open";
+        case GT::s_enum_open:
+        case GT::extruder_selection:
+        case GT::language_selection: return "select_open";
+        case GT::color: return "color";
+        case GT::one_string: return "one_string";
+        case GT::select_close: return "select_close";
+        case GT::password: return "password";
+        default: return nullptr; // the ConfigOptionType drives these, not the gui type
+        }
+    }
+
+    // Renders a ConfigValue the way the settings UI spells it.
+    //
+    // ConfigValue exposes no serialized string, so visit the variant. Formats
+    // follow the engine's own GUI controls (ConfigItemControl.cpp:121-124):
+    // percentages as "<n> %", everything else via plain stream formatting.
+    //
+    // The two enum wrappers are handled by name, not by member probing:
+    // EnumWrapper exposes get_string() (the EnumValueDef str_serialized, i.e.
+    // the profile spelling) and EnumVectorWrapper exposes get_strings().
+    // Neither is constructible into a ConfigValue, so the vector fallback must
+    // not round-trip elements back through the ConfigValue constructor.
+    static std::string config_value_to_string(const Domain::ConfigValue& v) {
+        return v.visit([](const auto& val) -> std::string {
+            using T = std::decay_t<decltype(val)>;
+            std::ostringstream os;
+            if constexpr (std::is_same_v<T, Domain::EnumWrapper>) {
+                return std::string(val.get_string());
+            } else if constexpr (std::is_same_v<T, Domain::EnumVectorWrapper>) {
+                std::string out;
+                for (auto s : val.get_strings()) {
+                    if (!out.empty()) out += ",";
+                    out += s;
+                }
+                return out;
+            } else if constexpr (std::is_same_v<T, std::string>) {
+                return val;
+            } else if constexpr (std::is_same_v<T, bool>) {
+                return val ? "1" : "0";
+            } else if constexpr (std::is_same_v<T, int>) {
+                return std::to_string(val);
+            } else if constexpr (std::is_same_v<T, double>) {
+                os << val;
+                return os.str();
+            } else if constexpr (std::is_same_v<T, Domain::Vec2d>) {
+                os << val.x() << "x" << val.y();
+                return os.str();
+            } else if constexpr (std::is_same_v<T, Domain::Percentage>) {
+                os << val.value << " %";
+                return os.str();
+            } else if constexpr (std::is_same_v<T, Domain::FloatOrPercentage>) {
+                if (val.is_percentage()) os << val.percentage().value << " %";
+                else os << val.float_value();
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    os << val[i];
+                }
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<bool>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    os << (val[i] ? "1" : "0");
+                }
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<int>> ||
+                                 std::is_same_v<T, std::vector<std::optional<int>>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    if constexpr (std::is_same_v<T, std::vector<std::optional<int>>>)
+                        os << (val[i] ? std::to_string(*val[i]) : std::string());
+                    else
+                        os << val[i];
+                }
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<double>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    os << val[i];
+                }
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<Domain::Vec2d>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    os << val[i].x() << "x" << val[i].y();
+                }
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<Domain::FloatOrPercentage>> ||
+                                 std::is_same_v<T, std::vector<Domain::Percentage>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    os << config_value_to_string(Domain::ConfigValue(val[i]));
+                }
+                return os.str();
+            } else {
+                return std::string();
+            }
+        });
+    }
+
+    static const char* config_option_type(const Slic3r::Domain::ConfigItemDef& d) {
+        // ConfigItemDef::type is a const std::type_info*; compare the pointee,
+        // matching how the engine itself tests it (ConfigDef.cpp:442).
+        if (d.type == nullptr) return "NONE";
+        const std::type_info& t = *d.type;
+        if (!d.choices.empty()) return "ENUM";
+        if (t == typeid(bool)) return "BOOL";
+        if (t == typeid(int)) return "INT";
+        if (t == typeid(double)) return "FLOAT";
+        if (t == typeid(std::string)) return "STRING";
+        if (t == typeid(std::vector<bool>)) return "BOOLS";
+        if (t == typeid(std::vector<int>)) return "INTS";
+        if (t == typeid(std::vector<double>)) return "FLOATS";
+        if (t == typeid(std::vector<std::string>)) return "STRINGS";
+        // NOTE: Domain::Vec2d is an alias template (Advanced::Vec<double, 2>),
+        // so typeid() on it does not name a complete type and fails to compile.
+        // Upstream never typeid's it either -- it matches Vec2d through the
+        // variant's alternatives instead. The only Vec2d options (points,
+        // bed_shape) are both edited as text, so the STRING fallback below
+        // handles them correctly.
+        if (t == typeid(Domain::FloatOrPercentage)) return "FLOAT";
+        if (t == typeid(Domain::Percentage)) return "PERCENT";
+        if (t == typeid(Domain::EnumWrapper) || t == typeid(Domain::EnumVectorWrapper)) return "ENUM";
+        return "STRING";
+    }
+
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_get_1print_1config_1def(JNIEnv *env, jclass, jobject def) {
-        // TODO(#212): the legacy PrintConfigDef/ConfigOptionDef enum system is gone;
-        // exposing Domain::ConfigDef FDM schema to Java needs #212 schema design.
-        (void) env; (void) def;
-        LOGD("get_print_config_def: stub, 3.0 ConfigDef mapping pending");
+        jclass defCls = env->GetObjectClass(def);
+        jmethodID addOption = env->GetMethodID(defCls, "addOption",
+                                              "(Ljava/lang/String;Lcom/flashforge/farm/slic3r/ConfigOptionDef;)V");
+        jclass optCls = env->FindClass("com/flashforge/farm/slic3r/ConfigOptionDef");
+        jclass typeCls = env->FindClass("com/flashforge/farm/slic3r/ConfigOptionDef$ConfigOptionType");
+        jclass guiCls = env->FindClass("com/flashforge/farm/slic3r/ConfigOptionDef$GUIType");
+        if (addOption == nullptr || optCls == nullptr || typeCls == nullptr || guiCls == nullptr) {
+            env->ExceptionClear();
+            LOGE("get_print_config_def: Java classes/methods not found");
+            return;
+        }
+        jmethodID typeOf = env->GetStaticMethodID(typeCls, "valueOf",
+            "(Ljava/lang/String;)Lcom/flashforge/farm/slic3r/ConfigOptionDef$ConfigOptionType;");
+        jmethodID guiOf = env->GetStaticMethodID(guiCls, "valueOf",
+            "(Ljava/lang/String;)Lcom/flashforge/farm/slic3r/ConfigOptionDef$GUIType;");
+        jmethodID optCtor = env->GetMethodID(optCls, "<init>", "()V");
+        if (typeOf == nullptr || guiOf == nullptr || optCtor == nullptr) {
+            env->ExceptionClear();
+            LOGE("get_print_config_def: enum valueOf/opt ctor not found");
+            return;
+        }
+
+        // Field ids are cached: reflection per option across a few hundred
+        // defs is measurably slow on a phone.
+        struct Fields {
+            jfieldID key, type, guiType, label, fullLabel, category, tooltip,
+                      sidetext, multiline, fullWidth, height,
+                      min, max, defaultValue, enumLabels, enumValues;
+        };
+        Fields f{};
+        const std::pair<const char*, const char*> field_specs[] = {
+            { "key",          "Ljava/lang/String;" },
+            { "type",         "Lcom/flashforge/farm/slic3r/ConfigOptionDef$ConfigOptionType;" },
+            { "guiType",      "Lcom/flashforge/farm/slic3r/ConfigOptionDef$GUIType;" },
+            { "label",        "Ljava/lang/String;" },
+            { "fullLabel",    "Ljava/lang/String;" },
+            { "category",     "Ljava/lang/String;" },
+            { "tooltip",      "Ljava/lang/String;" },
+            { "sidetext",     "Ljava/lang/String;" },
+            { "multiline",    "Z" },
+            { "fullWidth",    "Z" },
+            { "height",       "I" },
+            { "min",          "F" },
+            { "max",          "F" },
+            { "defaultValue", "Ljava/lang/String;" },
+            { "enumLabels",   "[Ljava/lang/String;" },
+            { "enumValues",   "[Ljava/lang/String;" },
+        };
+        jfieldID* slots[] = { &f.key, &f.type, &f.guiType, &f.label, &f.fullLabel, &f.category,
+                              &f.tooltip, &f.sidetext, &f.multiline, &f.fullWidth, &f.height,
+                              &f.min, &f.max, &f.defaultValue, &f.enumLabels, &f.enumValues };
+        for (size_t i = 0; i < sizeof(field_specs) / sizeof(field_specs[0]); ++i) {
+            *slots[i] = env->GetFieldID(optCls, field_specs[i].first, field_specs[i].second);
+            if (*slots[i] == nullptr) {
+                env->ExceptionClear();
+                LOGE("get_print_config_def: field '%s' missing", field_specs[i].first);
+                return;
+            }
+        }
+
+        size_t emitted = 0;
+        try {
+            for (const auto& d : Slic3r::Domain::get_defs_fdm().defs()) {
+                if (d.name.empty()) continue;
+                jobject o = env->NewObject(optCls, optCtor);
+                if (o == nullptr) { env->ExceptionClear(); continue; }
+
+                auto setStr = [&](jfieldID id, const std::string& v) {
+                    if (v.empty()) return;
+                    jstring s = env->NewStringUTF(v.c_str());
+                    env->SetObjectField(o, id, s);
+                    env->DeleteLocalRef(s);
+                };
+
+                setStr(f.key, d.name);
+                setStr(f.label, d.label);
+                setStr(f.fullLabel, d.full_label);
+                setStr(f.tooltip, d.tooltip);
+                if (!d.units.empty()) setStr(f.sidetext, d.units.front());
+                env->SetBooleanField(o, f.multiline, d.multiline ? JNI_TRUE : JNI_FALSE);
+                env->SetBooleanField(o, f.fullWidth, d.full_width ? JNI_TRUE : JNI_FALSE);
+                if (d.height > 0) env->SetIntField(o, f.height, d.height);
+                if (d.min) env->SetFloatField(o, f.min, static_cast<float>(*d.min));
+                if (d.max) env->SetFloatField(o, f.max, static_cast<float>(*d.max));
+
+                if (d.category != Slic3r::Domain::ConfigItemDef::Category::Unknown) {
+                    using Cat = Slic3r::Domain::ConfigItemDef::Category;
+                    const char* cat = nullptr;
+                    switch (d.category) {
+                    case Cat::Print_LayersSurfaces:     cat = "Layers and Perimeters"; break;
+                    case Cat::Print_WallsPerimeters:     cat = "Quality"; break;
+                    case Cat::Print_Infill:              cat = "Infill"; break;
+                    case Cat::Print_BedAdhesion:         cat = "Bed adhesion"; break;
+                    case Cat::Print_Supports:            cat = "Support material"; break;
+                    case Cat::Print_Speed:               cat = "Speed"; break;
+                    case Cat::Print_MotionDynamics:      cat = "Dynamic speed"; break;
+                    case Cat::Print_ExtrusionRetraction: cat = "Extrusion & retraction"; break;
+                    case Cat::Print_MultiMaterial:       cat = "Multiple objects"; break;
+                    case Cat::Print_PrecisionSlicing:    cat = "Precision"; break;
+                    case Cat::Print_CustomGCode:         cat = "Custom G-code"; break;
+                    case Cat::Print_Pad:                 cat = "Pad"; break;
+                    case Cat::Print_Hollowing:           cat = "Hollowing"; break;
+                    case Cat::Print_OutputOptions:       cat = "Output options"; break;
+                    case Cat::Print_Notes:               cat = "Notes"; break;
+                    case Cat::Filament_MaterialTemperatures:   cat = "Filament temperatures"; break;
+                    case Cat::Filament_ExtrusionCalibration:  cat = "Extrusion"; break;
+                    case Cat::Filament_Cooling:                cat = "Cooling"; break;
+                    case Cat::Filament_MultiMaterial:          cat = "Filament"; break;
+                    case Cat::Filament_Overrides:              cat = "Filament overrides"; break;
+                    case Cat::Filament_CustomGCode:            cat = "Custom G-code"; break;
+                    case Cat::Filament_MaterialPrintingProfile: cat = "Material"; break;
+                    case Cat::Filament_Notes:                   cat = "Notes"; break;
+                    case Cat::Filament_Dependencies:            cat = "Filament dependencies"; break;
+                    case Cat::Printer_General:              cat = "General"; break;
+                    case Cat::Printer_Bed:                   cat = "Print bed"; break;
+                    case Cat::Printer_CustomGCode:           cat = "Custom G-code"; break;
+                    case Cat::Printer_MachineLimits:         cat = "Machine limits"; break;
+                    case Cat::Printer_MultipleExtruders:     cat = "Extruders"; break;
+                    case Cat::Printer_SingleExtruderMMSetup: cat = "Extruders"; break;
+                    case Cat::Printer_Notes:                 cat = "Notes"; break;
+                    default: break;
+                    }
+                    setStr(f.category, cat);
+                }
+
+                jstring tName = env->NewStringUTF(config_option_type(d));
+                jobject tObj = env->CallStaticObjectMethod(typeCls, typeOf, tName);
+                env->DeleteLocalRef(tName);
+                if (tObj != nullptr) { env->SetObjectField(o, f.type, tObj); env->DeleteLocalRef(tObj); }
+                else env->ExceptionClear();
+
+                if (const char* gt = config_option_gui_type(d.gui_type)) {
+                    jstring gName = env->NewStringUTF(gt);
+                    jobject gObj = env->CallStaticObjectMethod(guiCls, guiOf, gName);
+                    env->DeleteLocalRef(gName);
+                    if (gObj != nullptr) { env->SetObjectField(o, f.guiType, gObj); env->DeleteLocalRef(gObj); }
+                    else env->ExceptionClear();
+                }
+
+                // Default value. ConfigValue exposes no serialized string, so
+                // visit the variant and render the same form the profile files
+                // carry (scalars plain, vectors comma-joined).
+                if (d.init_fn) {
+                    try {
+                        auto v = d.init_fn();
+                        setStr(f.defaultValue, config_value_to_string(v));
+                    } catch (...) { /* still usable without a default */ }
+                }
+
+                if (!d.choices.empty()) {
+                    jclass strCls = env->FindClass("java/lang/String");
+                    const jsize n = static_cast<jsize>(d.choices.size());
+                    jobjectArray labels = env->NewObjectArray(n, strCls, nullptr);
+                    jobjectArray values = env->NewObjectArray(n, strCls, nullptr);
+                    for (jsize i = 0; i < n; ++i) {
+                        const auto& choice = d.choices[static_cast<size_t>(i)];
+                        const std::string vs = std::visit([](const auto& val) -> std::string {
+                            using T = std::decay_t<decltype(val)>;
+                            if constexpr (std::is_same_v<T, std::string>) return val;
+                            else if constexpr (std::is_same_v<T, int>) return std::to_string(val);
+                            else if constexpr (std::is_same_v<T, double>) {
+                                std::ostringstream os; os << val; return os.str();
+                            } else return std::string();
+                        }, choice.first);
+                        jstring jv = env->NewStringUTF(vs.c_str());
+                        env->SetObjectArrayElement(values, i, jv);
+                        jstring jl = env->NewStringUTF(choice.second.c_str());
+                        env->SetObjectArrayElement(labels, i, jl);
+                        env->DeleteLocalRef(jv);
+                        env->DeleteLocalRef(jl);
+                    }
+                    env->SetObjectField(o, f.enumLabels, labels);
+                    env->SetObjectField(o, f.enumValues, values);
+                    env->DeleteLocalRef(labels);
+                    env->DeleteLocalRef(values);
+                }
+
+                jstring jkey = env->NewStringUTF(d.name.c_str());
+                env->CallVoidMethod(def, addOption, jkey, o);
+                env->DeleteLocalRef(jkey);
+                env->DeleteLocalRef(o);
+                if (env->ExceptionCheck()) env->ExceptionClear();
+                ++emitted;
+            }
+        } catch (const std::exception& e) {
+            LOGE("get_print_config_def: aborted after %zu defs: %s", emitted, e.what());
+            return;
+        }
+        LOGD("get_print_config_def: bridged %zu FDM config defs", emitted);
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_model_1read_1from_1file(JNIEnv *env, jclass, jstring path, jstring base_name, jint plateId) {

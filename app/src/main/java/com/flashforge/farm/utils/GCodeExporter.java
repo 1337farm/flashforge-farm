@@ -72,6 +72,34 @@ public class GCodeExporter {
     }
 
     /**
+     * True when a gcode with this name is already in the public Downloads
+     * collection.
+     *
+     * MediaStore insert never fails on a name clash -- it silently appends
+     * " (1)" and writes a second file -- so the caller has to ask up front if
+     * the user meant to replace the existing one.
+     */
+    public static boolean downloadsHas(Context ctx, String fileName) {
+        String name = sanitize(fileName);
+        if (name.endsWith(".gcode")) name = name.substring(0, name.length() - ".gcode".length());
+        name = name + ".gcode";
+
+        ContentResolver cr = ctx.getContentResolver();
+        String[] proj = { MediaStore.Downloads.DISPLAY_NAME };
+        String sel = MediaStore.Downloads.DISPLAY_NAME + " = ?";
+        String[] args = { name };
+        boolean found = false;
+        try (android.database.Cursor c = cr.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI, proj, sel, args, null)) {
+            if (c != null && c.moveToFirst()) found = true;
+        } catch (RuntimeException e) {
+            // Query unsupported/denied: fall back to "not present" and let the
+            // insert proceed rather than blocking the save on a probe failure.
+            return false;
+        }
+        return found;
+    }
+
+    /**
      * Copy {@code source} into the public Downloads collection under
      * {@code fileName}, returning the resulting content Uri (or null on
      * failure).

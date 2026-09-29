@@ -159,6 +159,15 @@ public class PrintConfigDef {
         if (instance == null) {
             Native.get_print_config_def(instance = new PrintConfigDef());
             applyPrusaLabels(instance);
+            // Log the bridged schema size. DEBUG-level native logs are not
+            // reliably visible in logcat, but an ERROR-level Java log always
+            // is, so this is the signal for whether the ConfigDef bridge
+            // actually populated (an empty map means every config row renders
+            // as a blank placeholder).
+            android.util.Log.e("PrintConfigDef",
+                "bridged options=" + instance.options.size()
+                + " sample=" + (instance.options.containsKey("layer_height") ? "layer_height" : "MISSING_layer_height")
+                + "," + (instance.options.containsKey("seam_position") ? "seam_position" : "MISSING_seam_position"));
         }
         return instance;
     }

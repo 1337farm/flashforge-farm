@@ -14,6 +14,8 @@
 // marked TODO(#212). Slice/export paths throw instead of fake success.
 
 #include <android/log.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
@@ -513,6 +515,17 @@ extern "C" {
             }
             env->DeleteLocalRef(dc);
             if (env->ExceptionCheck()) env->ExceptionClear();
+            // logcat is rotated/filtered on this device, so also append the
+            // bridge outcome to a file in the app's private dir that can be
+            // pulled with "adb shell run-as com.flashforge.farm cat files/farm_bridge.log".
+            int fd = open("/data/data/com.flashforge.farm/files/farm_bridge.log",
+                          O_WRONLY | O_CREAT | O_APPEND, 0644);
+            if (fd >= 0) {
+                char line[560];
+                int n = snprintf(line, sizeof(line), "emitted=%d status=%s\n", (int)emitted, status);
+                if (n > 0) (void)!write(fd, line, (size_t)n);
+                close(fd);
+            }
         };
         jclass defCls = env->GetObjectClass(def);
         jmethodID addOption = env->GetMethodID(defCls, "addOption",
@@ -522,22 +535,56 @@ extern "C" {
         // cannot see com.flashforge.farm.* -- FarmApp calls this while
         // generating the config on a worker thread, so FindClass would fail
         // and the defs would silently come back empty.
+        // Class resolution is the part that keeps failing, and the previous
+        // diag collapsed six possible nulls into one string. Track every stage
+        // separately and preserve the exception text at the exact failing
+        // stage (it is cleared before anyone reads it otherwise).
         jclass optCls = nullptr, typeCls = nullptr, guiCls = nullptr;
+        bool loaderCls_ok = false, loadClass_ok = false, getLoader_ok = false, loader_ok = false, load_ok = true;
+        char loadErr[256] = {0};
         {
             jclass loaderCls = env->FindClass("java/lang/ClassLoader");
-            if (loaderCls != nullptr) {
+            loaderCls_ok = (loaderCls != nullptr);
+            if (loaderCls_ok) {
                 jmethodID loadClass = env->GetMethodID(loaderCls, "loadClass",
                                                       "(Ljava/lang/String;)Ljava/lang/Class;");
+                loadClass_ok = (loadClass != nullptr);
                 jmethodID getLoader = env->GetMethodID(defCls, "getClassLoader",
                                                         "()Ljava/lang/ClassLoader;");
-                jobject loader = (loadClass != nullptr && getLoader != nullptr)
+                getLoader_ok = (getLoader != nullptr);
+                jobject loader = (loadClass_ok && getLoader_ok)
                     ? env->CallObjectMethod(defCls, getLoader) : nullptr;
-                if (loader != nullptr) {
+                if (env->ExceptionCheck()) env->ExceptionClear();
+                loader_ok = (loader != nullptr);
+                if (loader_ok) {
+                    // Exception must be captured here: the helper below clears
+                    // it before returning null so the caller can keep going.
                     auto load = [&](const char* name) -> jclass {
                         jstring n = env->NewStringUTF(name);
                         jclass c = static_cast<jclass>(env->CallObjectMethod(loader, loadClass, n));
                         env->DeleteLocalRef(n);
-                        if (env->ExceptionCheck()) { env->ExceptionClear(); return nullptr; }
+                        if (env->ExceptionCheck()) {
+                            jthrowable ex = env->ExceptionOccurred();
+                            env->ExceptionClear();
+                            jclass climse = env->GetObjectClass(ex);
+                            jmethodID toStr = env->GetMethodID(climse, "toString", "()Ljava/lang/String;");
+                            if (toStr != nullptr) {
+                                jstring s = static_cast<jstring>(env->CallObjectMethod(ex, toStr));
+                                if (s != nullptr) {
+                                    const char* cmsg = env->GetStringUTFChars(s, nullptr);
+                                    if (cmsg != nullptr) {
+                                        snprintf(loadErr, sizeof(loadErr), "%s -> %s",
+                                                 name, cmsg);
+                                        env->ReleaseStringUTFChars(s, cmsg);
+                                    }
+                                }
+                                env->DeleteLocalRef(s);
+                            }
+                            env->DeleteLocalRef(climse);
+                            env->DeleteLocalRef(ex);
+                            load_ok = false;
+                            return nullptr;
+                        }
                         return c;
                     };
                     optCls = load("com.flashforge.farm.slic3r.ConfigOptionDef");
@@ -550,36 +597,20 @@ extern "C" {
             if (loaderCls != nullptr) env->DeleteLocalRef(loaderCls);
         }
         {
-            // Reproduce whatever exception the last failed resolution left
-            // pending so we can see its class/message instead of a bare null.
-            char why[320] = {0};
             const char* missing = nullptr;
             if (addOption == nullptr) missing = "addOption";
             else if (optCls == nullptr) missing = "ConfigOptionDef";
             else if (typeCls == nullptr) missing = "ConfigOptionType";
             else if (guiCls == nullptr) missing = "GUIType";
             if (missing != nullptr) {
-                jthrowable ex = env->ExceptionOccurred();
-                if (ex != nullptr) {
-                    env->ExceptionClear();
-                    jclass cls = env->GetObjectClass(ex);
-                    jmethodID toString = env->GetMethodID(cls, "toString", "()Ljava/lang/String;");
-                    if (toString != nullptr) {
-                        jstring s = static_cast<jstring>(env->CallObjectMethod(ex, toString));
-                        if (s != nullptr) {
-                            const char* c = env->GetStringUTFChars(s, nullptr);
-                            if (c != nullptr) {
-                                snprintf(why, sizeof(why), "%s <- %s", missing, c);
-                                env->ReleaseStringUTFChars(s, c);
-                            }
-                        }
-                        env->DeleteLocalRef(s);
-                    }
-                    env->DeleteLocalRef(cls);
-                    env->DeleteLocalRef(ex);
-                } else {
-                    snprintf(why, sizeof(why), "%s (no pending exception)", missing);
-                }
+                char why[512] = {0};
+                if (missing[0] != 0 && strlen(loadErr) > 0)
+                    snprintf(why, sizeof(why), "%s; %s", missing, loadErr);
+                else
+                    snprintf(why, sizeof(why),
+                        "%s (loaderCls_ok=%d loadClass_ok=%d getLoader_ok=%d loader_ok=%d load_ok=%d)",
+                        missing, (int)loaderCls_ok, (int)loadClass_ok, (int)getLoader_ok,
+                        (int)loader_ok, (int)load_ok);
                 LOGE("get_print_config_def: %s", why);
                 diag(-1, why);
                 return;

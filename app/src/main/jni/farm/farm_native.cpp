@@ -39,6 +39,7 @@
 #include "Slic3r/Domain/CutConnector.hpp"
 #include "Slic3r/Domain/LayerHeightProfile.hpp"
 #include "Slic3r/Domain/ConfigDefsFDM.hpp"
+#include "Slic3r/Domain/ConfigValue.hpp"
 #include "farm_driver.hpp"
 #include "farm_progress.hpp"
 #include "Slic3r/Biz/FileLoadingLogic.hpp"
@@ -480,8 +481,12 @@ extern "C" {
         if (t == typeid(std::vector<int>)) return "INTS";
         if (t == typeid(std::vector<double>)) return "FLOATS";
         if (t == typeid(std::vector<std::string>)) return "STRINGS";
-        if (t == typeid(Domain::Vec2d) || t == typeid(std::vector<Domain::Vec2d))
-            return d.gui_type == Slic3r::Domain::ConfigItemDef::GUIType::points ? "POINTS" : "FLOATS";
+        // NOTE: Domain::Vec2d is an alias template (Advanced::Vec<double, 2>),
+        // so typeid() on it does not name a complete type and fails to compile.
+        // Upstream never typeid's it either -- it matches Vec2d through the
+        // variant's alternatives instead. The only Vec2d options (points,
+        // bed_shape) are both edited as text, so the STRING fallback below
+        // handles them correctly.
         if (t == typeid(Domain::FloatOrPercentage)) return "FLOAT";
         if (t == typeid(Domain::Percentage)) return "PERCENT";
         if (t == typeid(Domain::EnumWrapper) || t == typeid(Domain::EnumVectorWrapper)) return "ENUM";

@@ -760,7 +760,13 @@ extern "C" {
                     case Cat::Printer_MultipleExtruders:     cat = "Extruders"; break;
                     case Cat::Printer_SingleExtruderMMSetup: cat = "Extruders"; break;
                     case Cat::Printer_Notes:                 cat = "Notes"; break;
-                    default: break;
+                    case Cat::Object_Extruders:              cat = "Per object"; break;
+                    case Cat::Volume_WipeOptions:            cat = "Volume modifiers"; break;
+                    case Cat::AppConfig_General:             cat = "General"; break;
+                    case Cat::AppConfig_Services:            cat = "Services"; break;
+                    case Cat::PhysicalPrinter_General:       cat = "General"; break;
+                    case Cat::Hidden:                        cat = "Hidden"; break;
+                    default:                                 cat = "Other"; break;
                     }
                     setStr(f.category, cat);
                 }

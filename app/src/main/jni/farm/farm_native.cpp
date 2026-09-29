@@ -688,6 +688,21 @@ extern "C" {
         size_t emitted = 0;
         try {
             for (const auto& d : Slic3r::Domain::get_defs_fdm().defs()) {
+                // Crash hunting: the def loop now runs for the first time
+                // (class resolution was broken until #310) and dies with a
+                // SEGV_MAPERR on a null memcpy. Write progress per iteration
+                // so the crash dump's tail names the exact def that faults.
+                {
+                    char prog[350];
+                    int pn = snprintf(prog, sizeof(prog), "PROGRESS emitted=%zu name=%s\n",
+                                      emitted, d.name.c_str());
+                    int pfd = open("/data/data/com.flashforge.farm/files/farm_bridge.log",
+                                   O_WRONLY | O_CREAT | O_APPEND, 0644);
+                    if (pfd >= 0) {
+                        if (pn > 0) (void)!write(pfd, prog, (size_t)pn);
+                        close(pfd);
+                    }
+                }
                 if (d.name.empty()) continue;
                 jobject o = env->NewObject(optCls, optCtor);
                 if (o == nullptr) { env->ExceptionClear(); continue; }

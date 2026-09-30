@@ -637,7 +637,7 @@ extern "C" {
         // Field ids are cached: reflection per option across a few hundred
         // defs is measurably slow on a phone.
         struct Fields {
-            jfieldID key, type, guiType, label, fullLabel, category, tooltip,
+            jfieldID key, type, guiType, label, fullLabel, category, optionGroup, tooltip,
                       sidetext, multiline, fullWidth, height,
                       min, max, defaultValue, enumLabels, enumValues;
         };
@@ -649,6 +649,7 @@ extern "C" {
             { "label",        "Ljava/lang/String;" },
             { "fullLabel",    "Ljava/lang/String;" },
             { "category",     "Ljava/lang/String;" },
+            { "optionGroup",  "Ljava/lang/String;" },
             { "tooltip",      "Ljava/lang/String;" },
             { "sidetext",     "Ljava/lang/String;" },
             { "multiline",    "Z" },
@@ -660,9 +661,9 @@ extern "C" {
             { "enumLabels",   "[Ljava/lang/String;" },
             { "enumValues",   "[Ljava/lang/String;" },
         };
-        jfieldID* slots[] = { &f.key, &f.type, &f.guiType, &f.label, &f.fullLabel, &f.category,
-                              &f.tooltip, &f.sidetext, &f.multiline, &f.fullWidth, &f.height,
-                              &f.min, &f.max, &f.defaultValue, &f.enumLabels, &f.enumValues };
+jfieldID* slots[] = { &f.key, &f.type, &f.guiType, &f.label, &f.fullLabel, &f.category,
+                      &f.optionGroup, &f.tooltip, &f.sidetext, &f.multiline, &f.fullWidth, &f.height,
+                      &f.min, &f.max, &f.defaultValue, &f.enumLabels, &f.enumValues };
         for (size_t i = 0; i < sizeof(field_specs) / sizeof(field_specs[0]); ++i) {
             *slots[i] = env->GetFieldID(optCls, field_specs[i].first, field_specs[i].second);
             if (*slots[i] == nullptr) {
@@ -768,10 +769,18 @@ extern "C" {
                     case Cat::Hidden:                        cat = "Hidden"; break;
                     default:                                 cat = "Other"; break;
                     }
-                    setStr(f.category, cat);
-                }
-
-                jstring tName = env->NewStringUTF(config_option_type(d));
+setStr(f.category, cat);
+                 }
+                 
+                 // Set option group using the engine's translation
+                 if (d.option_group != Slic3r::Domain::ConfigItemDef::OptionGroup::Unknown) {
+                     std::string option_group_str = Slic3r::Domain::ConfigItemDef::translate_option_group(d.option_group);
+                     setStr(f.optionGroup, option_group_str);
+                 } else {
+                     setStr(f.optionGroup, "");
+                 }
+                 
+                 jstring tName = env->NewStringUTF(config_option_type(d));
                 jobject tObj = env->CallStaticObjectMethod(typeCls, typeOf, tName);
                 env->DeleteLocalRef(tName);
                 if (tObj != nullptr) { env->SetObjectField(o, f.type, tObj); env->DeleteLocalRef(tObj); }

@@ -30,6 +30,10 @@ public class ConfigOptionDef {
     // One of: "Layers and Perimeters", "Infill", "Support material", "Speed", "Extruders", "Advanced", "Extrusion Width"
     public String category;
 
+    // Grouping category for the configuration option, from the GUI perspective.
+    // One of: "Layers and Perimeters", "Infill", "Support material", "Speed", "Extruders", "Advanced", "Extrusion Width"
+    public String optionGroup;
+
     // A tooltip text shown in the GUI.
     public String tooltip;
 
@@ -70,6 +74,10 @@ public class ConfigOptionDef {
 
     public String getFullLabel() {
         return TextUtils.isEmpty(fullLabel) ? label : fullLabel;
+    }
+
+    public String getOptionGroup() {
+        return optionGroup;
     }
 
     ConfigOptionDef() {}

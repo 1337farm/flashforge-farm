@@ -2177,7 +2177,7 @@ jobs:
           clang++ -std=c++20 -c scripts/tests/engine_repro/slice_repro.cpp \
             "${INC[@]}" \
             -o /tmp/slice_repro.o
-echo "slice_repro + farm_driver compile OK (host link uses NDK cross-compiler;"
+          echo "slice_repro + farm_driver compile OK (host link uses NDK cross-compiler;"
            echo "staged archives are Android arm64; execute on bionic/aarch64 via"
            echo "run_slice_regressions.sh against the CI libslic3r artifact)"
 

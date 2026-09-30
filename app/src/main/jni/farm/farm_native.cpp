@@ -773,10 +773,12 @@ setStr(f.category, cat);
                  }
                  
                  // Set option group using the engine's translation
-                 const char* option_group_str = d.option_group != Slic3r::Domain::ConfigItemDef::OptionGroup::Unknown
-                     ? Slic3r::Domain::ConfigItemDef::translate_option_group(d.option_group)
-                     : nullptr;
-                 setStr(f.optionGroup, option_group_str);
+                 if (d.option_group != Slic3r::Domain::ConfigItemDef::OptionGroup::Unknown) {
+                     std::string option_group_str = Slic3r::Domain::ConfigItemDef::translate_option_group(d.option_group);
+                     setStr(f.optionGroup, option_group_str);
+                 } else {
+                     setStr(f.optionGroup, "");
+                 }
                  
                  jstring tName = env->NewStringUTF(config_option_type(d));
                 jobject tObj = env->CallStaticObjectMethod(typeCls, typeOf, tName);

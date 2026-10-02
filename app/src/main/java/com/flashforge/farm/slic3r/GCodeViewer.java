@@ -66,6 +66,11 @@ public class GCodeViewer {
     };
 
     private long pointer;
+    // App-side layer range mirror: the native viewer is a stub (#212) that always
+    // reports 0 layers, so the layers tab + renderer drive ranges through here.
+    private long layersCountOverride = -1;
+    private long rangeMin = 0;
+    private long rangeMax = -1;
 
     public GCodeViewer() {
         pointer = Native.vgcode_create();
@@ -84,6 +89,8 @@ public class GCodeViewer {
     }
 
     public void setLayersViewRange(long min, long max) {
+        rangeMin = Math.max(0, min);
+        rangeMax = Math.max(rangeMin, max);
         Native.vgcode_set_layers_view_range(pointer, min, max);
     }
 
@@ -129,11 +136,27 @@ public class GCodeViewer {
 
     public Pair<Long, Long> getLayersViewRange() {
         long[] data = Native.vgcode_get_layers_view_range(pointer);
-        return new Pair<>(data[0], data[1] < 0 ? getLayersCount() : data[1]);
+        long max = data[1] < 0 ? getLayersCount() : data[1];
+        // Native stub always returns {0,0}: fall back to the app-side range so the
+        // layers tab keeps the selected window instead of collapsing to layer 1.
+        if (data[0] == 0 && (data[1] == 0 || data[1] < 0) && layersCountOverride >= 0) {
+            return new Pair<>(rangeMin, rangeMax < 0 ? layersCountOverride : Math.min(rangeMax, layersCountOverride));
+        }
+        return new Pair<>(data[0], max);
     }
 
     public long getLayersCount() {
-        return Native.vgcode_get_layers_count(pointer);
+        long nativeCount = Native.vgcode_get_layers_count(pointer);
+        if (nativeCount > 0) return nativeCount;
+        return layersCountOverride >= 0 ? layersCountOverride : 0;
+    }
+
+    /** App-side layer count from the parsed gcode toolpaths (native viewer is a stub). */
+    public void setLayersCountOverride(long count) {
+        layersCountOverride = Math.max(0, count);
+        if (rangeMax < 0 && layersCountOverride > 0) {
+            rangeMax = layersCountOverride - 1;
+        }
     }
 
     public float getEstimatedTime() {

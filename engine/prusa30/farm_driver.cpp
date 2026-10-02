@@ -17,6 +17,7 @@
 //
 #include <android/log.h>
 #include <fstream>
+#include <iomanip>
 #include <functional>
 #include <map>
 #include <optional>
@@ -101,7 +102,13 @@ public:
         (void) id;
         status_ = status;
     }
-    void on_exception(std::exception_ptr exception, SlicingId id) override {
+    // PrusaSlicer 3.0.0-alpha12 removed ProgressListener::on_exception from
+    // libslic3r/InitPrint.hpp (it existed at alpha11:20). Slicing failures
+    // still reach us: slice() throws Slic3r::Biz::Slicing::Exception
+    // synchronously and that catch below enriches the message, which is the
+    // path device crash logs actually depend on. Kept as a plain member (no
+    // `override`, so the shim keeps compiling if a future tag restores it).
+    void on_exception(std::exception_ptr exception, SlicingId id) {
         (void) id;
         exception_ = exception;
     }
@@ -183,6 +190,21 @@ Domain::Bed bed_from_config(const ConfigPackFDM& fdm) {
 std::string stage_name(Slic3r::Biz::Slicing::ProgressInfo stage) {
     std::string name{magic_enum::enum_name(stage)};
     return name.empty() ? "slicing" : name;
+}
+
+// Formats a SlicingStatus::Exception (whose what() is always the bare
+// "Slicing exception") with its numeric ErrorCode + item context, so both
+// the synchronous-throw and async-callback paths log the same diagnosis.
+std::string describe_slice_error(const char* where,
+        const Slic3r::Biz::Slicing::Exception& e) {
+    const auto& err = e.error();
+    std::ostringstream os;
+    os << "Slicing failed at " << where
+       << " (ErrorCode=" << static_cast<int>(err.code) << ")";
+    for (const auto& key : err.item_keys) os << " [" << key << "]";
+    if (err.model_object_id)
+        os << " object_id=" << err.model_object_id->id;
+    return os.str();
 }
 
 // Reads the legacy INI's nozzle_diameter (comma list, one entry per tool)
@@ -404,6 +426,31 @@ std::string normalize_legacy_ini(const std::string& ini_path) {
 
 } // namespace
 
+// Renders the trailing metadata block appended to an exported gcode. Format
+// mirrors upstream PrusaSlicer's footer so slicer-side parsers that already
+// read "filament used [mm]" keep working.
+//
+// Only quantities the engine actually computed are emitted. Volume (cm3) is
+// deliberately NOT derived here: it needs the filament diameter and density,
+// which live in the filament profile, and guessing a 1.75mm PLA assumption
+// would print a plausible-looking but possibly wrong number into the file.
+// total_g is the engine's own mass, so no assumption is involved.
+std::string gcode_metadata_comment(const SliceStats& stats) {
+    std::ostringstream os;
+    if (stats.total_mm > 0.0)
+        os << "; filament used [mm] = " << std::fixed << std::setprecision(2) << stats.total_mm << "\n";
+    if (stats.total_g > 0.0)
+        os << "; filament used [g] = " << std::fixed << std::setprecision(2) << stats.total_g << "\n";
+
+    if (stats.estimated_seconds > 0.0) {
+        const long total = static_cast<long>(stats.estimated_seconds);
+        std::ostringstream t;
+        t << total / 3600 << "h " << (total % 3600) / 60 << "m " << total % 60 << "s";
+        os << "; estimated printing time (normal mode) = " << t.str() << "\n";
+    }
+    return os.str();
+}
+
 SliceStats slice_to_gcode(Model& model,
                           const std::string& legacy_ini_path,
                           const std::string& gcode_out_path,
@@ -421,6 +468,20 @@ SliceStats slice_to_gcode(Model& model,
     // 2. Bed from the config's bed_shape/max_print_height.
     Domain::Bed bed = bed_from_config(*fdm);
     BedInstance bed_instance{bed};
+
+    // The bed only slices instances assigned to it: Print::update erases
+    // every instance not in bed.model_instances (with_limited_instances),
+    // and an emptied model slides past apply-validation straight into a
+    // bare EmptyPrint at the wipe-tower stage. Headless single-bed: assign
+    // every instance (mirrors Biz test ModelOnBed). Missing this dropped
+    // ALL geometry on every slice — the device "Slicing exception [47]".
+    for (Domain::ModelObject* object : model.objects) {
+        if (object == nullptr) continue;
+        for (Domain::ModelInstance* instance : object->instances) {
+            if (instance != nullptr)
+                bed_instance.model_instances.push_back(instance);
+        }
+    }
 
     // 3. Minimal preset metadata (gcode header data + the hardware tool
     //    list slicing validates): technology, one tool per INI nozzle
@@ -455,10 +516,28 @@ SliceStats slice_to_gcode(Model& model,
         LOGE("%s", os.str().c_str());
         throw std::runtime_error(os.str());
     }
+    // update() does NOT throw for an empty print: with no printable
+    // instances on the bed it returns Empty and slicing later dies with a
+    // bare EmptyPrint. Fail loud here instead, naming the cause.
+    if (std::holds_alternative<ApplyStatus::Empty>(status)) {
+        const std::string msg =
+            "print input is empty: no printable instances on the bed";
+        LOGE("%s", msg.c_str());
+        throw std::runtime_error(msg);
+    }
 
     // 5. slice(): synchronous; result lands via on_fdm_result.
+    // NOTE: slice() can also throw SlicingStatus::Exception SYNCHRONOUSLY
+    // (not just via the on_exception callback). Its what() is the bare
+    // "Slicing exception" string — enrich both paths or device crash logs
+    // stay undiagnosable (seen on f4ec1be6cd: bare message despite the
+    // callback enrichment, because callbacks.exception() was empty).
     NoThumbnails thumbnails;
-    print->slice(id, thumbnails, std::nullopt);
+    try {
+        print->slice(id, thumbnails, std::nullopt);
+    } catch (const Slic3r::Biz::Slicing::Exception& e) {
+        throw std::runtime_error(describe_slice_error("sync slice()", e));
+    }
 
     // SlicingStatus::Exception's what() is just "Slicing exception" — the
     // real cause (NoLayers, EmptyPrint, ObjectExceedsHeight, ...) lives in
@@ -467,14 +546,9 @@ SliceStats slice_to_gcode(Model& model,
         try {
             std::rethrow_exception(callbacks.exception());
         } catch (const Slic3r::Biz::Slicing::Exception& e) {
-            const auto& err = e.error();
-            std::ostringstream os;
-            os << "Slicing failed (ErrorCode=" << static_cast<int>(err.code) << ")";
-            for (const auto& key : err.item_keys) os << " [" << key << "]";
-            if (err.model_object_id)
-                os << " object_id=" << err.model_object_id->id;
-            LOGE("%s", os.str().c_str());
-            throw std::runtime_error(os.str());
+            const std::string msg = describe_slice_error("async callback", e);
+            LOGE("%s", msg.c_str());
+            throw std::runtime_error(msg);
         }
     }
 
@@ -482,30 +556,44 @@ SliceStats slice_to_gcode(Model& model,
     if (result.const_gcode() == nullptr || result.const_gcode()->empty())
         throw std::runtime_error("slicing produced no gcode");
 
-    // 6. Export: ProcessorResult embeds the plain gcode buffer.
+    // 6. Collect totals/time BEFORE writing, so the metadata block can be
+    //    emitted with the file. Per-role stats double-count nothing (roles are
+    //    disjoint portions of the extrusion), but the authoritative total is
+    //    the per-extruder sum.
+    SliceStats stats;
+    std::visit([&stats](const auto& print_statistics) {
+        using StatsT = std::decay_t<decltype(print_statistics)>;
+        for (const auto& [role, mm_g] : print_statistics.used_filaments_per_role)
+            stats.per_role[static_cast<int>(role)] = mm_g;
+        if constexpr (std::is_same_v<StatsT, Domain::FullPrintStatistics>) {
+            stats.per_extruder_mm = print_statistics.used_filament_per_extruder_mm;
+            stats.per_extruder_g = print_statistics.used_filament_per_extruder_g;
+            for (float v : stats.per_extruder_mm) stats.total_mm += v;
+            for (float v : stats.per_extruder_g) stats.total_g += v;
+        }
+        // normal_mode_time.time is the estimate; it is 0 when the profile sets
+        // machine_limits_usage to a mode that does not compute time.
+        stats.estimated_seconds = static_cast<double>(print_statistics.normal_mode_time.time);
+    }, result.print_statistics);
+
+    // 7. Export: ProcessorResult embeds the plain gcode buffer.
     {
         std::ofstream out(gcode_out_path, std::ios::binary | std::ios::trunc);
         if (!out)
             throw std::runtime_error("cannot open " + gcode_out_path + " for writing");
         out << result.const_gcode()->str();
+
+        // Trailing metadata, matching upstream PrusaSlicer's own footer format
+        // so existing slicer-side parsers keep working. Appended rather than
+        // prepended: some firmware reads the first lines of the file, and a
+        // leading comment block can be mistaken for a header it expects.
+        out << farm::gcode_metadata_comment(stats);
         out.flush();
         if (!out)
             throw std::runtime_error("writing " + gcode_out_path + " failed");
     }
-
-    // 7. Filament stats for the app's result panel (Java role ints are 1:1
-    //    with Domain::GCodeExtrusionRole ordering — see farm_driver.hpp).
-    SliceStats stats;
-    std::visit([&stats](const auto& print_statistics) {
-        for (const auto& [role, mm_g] : print_statistics.used_filaments_per_role)
-            stats.per_role[static_cast<int>(role)] = mm_g;
-        if constexpr (std::is_same_v<std::decay_t<decltype(print_statistics)>,
-                                     Domain::FullPrintStatistics>) {
-            stats.per_extruder_mm = print_statistics.used_filament_per_extruder_mm;
-            stats.per_extruder_g = print_statistics.used_filament_per_extruder_g;
-        }
-    }, result.print_statistics);
     return stats;
 }
+
 
 } // namespace farm

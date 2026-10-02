@@ -60,8 +60,11 @@ public class GalleryRowItem extends SimpleRecyclerItem<GalleryRowItem.RowView> {
             int p = ViewUtils.dp(12);
             setPadding(p, ViewUtils.dp(8), p, ViewUtils.dp(8));
 
+            // 3D render takes half the full screen width: small features
+            // (bow details, text) stay visible instead of sub-pixel mush.
+            int halfScreen = context.getResources().getDisplayMetrics().widthPixels / 2;
             preview = new SpinningPreviewView(context);
-            addView(preview, new LayoutParams(ViewUtils.dp(64), ViewUtils.dp(64)) {{
+            addView(preview, new LayoutParams(halfScreen, halfScreen) {{
                 setMarginEnd(ViewUtils.dp(8));
             }});
 

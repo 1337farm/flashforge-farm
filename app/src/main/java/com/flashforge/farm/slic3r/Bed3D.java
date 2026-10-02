@@ -27,8 +27,6 @@ public class Bed3D {
     private double[] boundingVolume;
     private Vec3d min, max;
 
-    private boolean likelyDelta;
-
     private double[] modelMatrix = new double[16];
     private double[] outModelMatrix = new double[16];
 
@@ -53,13 +51,6 @@ public class Bed3D {
 
         axes.origin.set(0, 0, GROUND_Z);
         axes.setStemLength(0.1f * Native.bed_get_bounding_volume_max_size(pointer));
-
-        if (isValid()) {
-            Vec3d center = getVolumeMin().center(getVolumeMax());
-            likelyDelta = (center.x == 0 || center.y == 0) && getVolumeMin().x < 0 && getVolumeMin().y < 0;
-        } else {
-            likelyDelta = false;
-        }
     }
 
     public boolean arrange(Model model) {
@@ -92,10 +83,11 @@ public class Bed3D {
         assertTrue(viewModelMatrix.length == 16);
         assertTrue(projectionMatrix.length == 16);
 
+        // The plate mesh is built in bed coordinates ([min,max]) and models
+        // render in those same coordinates, so the plate needs no model
+        // transform: identity keeps plate 1 exactly under the models in both
+        // perspective and orthographic projections.
         DoubleMatrix.setIdentityM(modelMatrix, 0);
-        if (!likelyDelta) {
-            DoubleMatrix.translateM(modelMatrix, 0, -getVolumeMin().x * 2, -getVolumeMin().y * 2, -getVolumeMin().z);
-        }
         DoubleMatrix.multiplyMM(outModelMatrix, 0, viewModelMatrix, 0, modelMatrix, 0);
         renderDefaultBed(shadersManager, bottom, outModelMatrix, projectionMatrix, isActive);
         if (isActive) {

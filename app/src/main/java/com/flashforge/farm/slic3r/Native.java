@@ -235,6 +235,8 @@ public class Native {
     static native void glmodel_render(long ptr);
     static native void glmodel_stilized_arrow(long ptr, float tipRadius, float tipLength, float stemRadius, float stemLength);
     static native void glmodel_init_background_triangles(long ptr);
+    static native void glmodel_init_from_path(long ptr, float[] vertices, int[] indices, boolean lineStrip);
+    static native void glmodel_init_textured_quad(long ptr, float[] xyz, float[] uv);
     static native void glmodel_init_box(long ptr, float width, float depth, float height);
     static native void glmodel_init_bounding_box(long ptr, long modelPtr, int i);
     static native boolean glmodel_is_initialized(long ptr);
@@ -255,6 +257,8 @@ public class Native {
     static native long model_create();
     public static native long model_read_from_file(String path, String baseName, int plateId) throws Slic3rRuntimeError;
     static native int model_get_objects_count(long ptr);
+    /** Name of object i, used to derive a human-meaningful gcode export filename. */
+    static native String model_get_object_name(long ptr, int i);
     static native void model_add_object_from_another(long ptr, long from, int i);
     static native void model_delete_object(long ptr, int i);
     static native int model_split(long ptr, int i);
@@ -280,6 +284,14 @@ public class Native {
     static native void model_remove_connector(long ptr, int objIdx, int connIdx);
     static native void model_clear_connectors(long ptr, int objIdx);
     static native void model_auto_orient(long ptr, int i);
+
+    /** Progress callback for {@link #model_auto_orient_progress}. */
+    interface OnAutoOrientProgressListener {
+        // tag = part index when a part starts, or a 20/30/60/80% stage inside a part.
+        void onAutoOrientProgress(int tag, String name);
+    }
+
+    static native void model_auto_orient_progress(long ptr, int[] indices, OnAutoOrientProgressListener listener);
     static native boolean model_is_big_object(long ptr, int i);
     static native int model_get_extruder(long ptr, int i);
     static native void model_set_extruder(long ptr, int i, int extruder);
@@ -342,5 +354,5 @@ public class Native {
     static native void utils_config_release(long ptr);
 
     static native void utils_calc_view_normal_matrix(double[] viewMatrix, double[] worldMatrix, double[] normalMatrix);
-    static native double[] utils_unproject(double[] viewMatrix, double[] projectionMatrix, int screenWidth, int screenHeight, double x, double y);
+    public static native double[] utils_unproject(double[] viewMatrix, double[] projectionMatrix, int screenWidth, int screenHeight, double x, double y);
 }

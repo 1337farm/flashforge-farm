@@ -48,6 +48,7 @@ public class BedMenuItem extends SimpleRecyclerItem<BedMenuItem.BedMenuItemHolde
     public boolean isChecked = false;
     public boolean isCheckable = false;
     public boolean isShiny = false;
+    public boolean isBusy = false;
     public float titleTextSizeDp = 9.5f;
     public View.OnClickListener clickListener;
     public CompoundButton.OnCheckedChangeListener checkedChangeListener;
@@ -108,6 +109,9 @@ public class BedMenuItem extends SimpleRecyclerItem<BedMenuItem.BedMenuItemHolde
 
         private Paint accentPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private Paint spinnerTrackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private Paint spinnerArcPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private boolean busy;
 
         private Path path = new Path();
         private Path path2 = new Path();
@@ -143,6 +147,12 @@ public class BedMenuItem extends SimpleRecyclerItem<BedMenuItem.BedMenuItemHolde
             setClipToPadding(false);
             setClipChildren(false);
             setWillNotDraw(false);
+            spinnerTrackPaint.setStyle(Paint.Style.STROKE);
+            spinnerTrackPaint.setStrokeWidth(ViewUtils.dp(2f));
+            spinnerTrackPaint.setStrokeCap(Paint.Cap.ROUND);
+            spinnerArcPaint.setStyle(Paint.Style.STROKE);
+            spinnerArcPaint.setStrokeWidth(ViewUtils.dp(2f));
+            spinnerArcPaint.setStrokeCap(Paint.Cap.ROUND);
             onApplyTheme();
         }
 
@@ -169,6 +179,19 @@ public class BedMenuItem extends SimpleRecyclerItem<BedMenuItem.BedMenuItemHolde
             }
 
             super.draw(canvas);
+
+            if (busy && isShown()) {
+                float cx = icon.getLeft() + icon.getWidth() / 2f;
+                float cy = icon.getTop() + icon.getHeight() / 2f;
+                float r = icon.getWidth() * 0.38f;
+                float start = (System.currentTimeMillis() % 1000L) * 360f / 1000f;
+                canvas.drawCircle(cx, cy, r, spinnerTrackPaint);
+                canvas.save();
+                canvas.rotate(start, cx, cy);
+                canvas.drawArc(cx - r, cy - r, cx + r, cy + r, 0f, 110f, false, spinnerArcPaint);
+                canvas.restore();
+                invalidate();
+            }
 
             if (shiny) {
                 float side = Math.min(getWidth(), getHeight());
@@ -238,6 +261,8 @@ public class BedMenuItem extends SimpleRecyclerItem<BedMenuItem.BedMenuItemHolde
         public void bind(BedMenuItem item) {
             enabled = item.isEnabled;
             shiny = item.isShiny;
+            busy = item.isBusy;
+            icon.setVisibility(busy ? View.INVISIBLE : View.VISIBLE);
             title.setMaxLines(item.isSingleLine ? 1 : 2);
             title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, item.titleTextSizeDp);
             title.setText(item.titleRes);
@@ -279,7 +304,10 @@ public class BedMenuItem extends SimpleRecyclerItem<BedMenuItem.BedMenuItemHolde
             icon.setImageTintList(ColorStateList.valueOf(ThemesRepo.getColor(android.R.attr.textColorSecondary)));
             setBackground(ViewUtils.createRipple(ThemesRepo.getColor(android.R.attr.colorControlHighlight), 16));
             bgPaint.setColor(ColorUtils.setAlphaComponent(ThemesRepo.getColor(android.R.attr.colorControlHighlight), 0x10));
-            accentPaint.setColor(ThemesRepo.getColor(android.R.attr.colorAccent));
+            int accent = ThemesRepo.getColor(android.R.attr.colorAccent);
+            accentPaint.setColor(accent);
+            spinnerArcPaint.setColor(accent);
+            spinnerTrackPaint.setColor(ColorUtils.setAlphaComponent(accent, 0x30));
         }
 
         private final static class Sparkle {

@@ -64,6 +64,8 @@ app/screen.png
 
 scripts/tests/engine_repro/regress/.run.log
 scripts/tests/engine_repro/regress/.engine_pin
+scripts/tests/engine_repro/regress/.slice_run.log
+scripts/tests/engine_repro/regress/*.prusa30
 
 # Local APK extraction scratch (unzipped .apk trees)
 /.apk-cache/

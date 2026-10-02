@@ -55,7 +55,9 @@ name: native
 #   before save/publish.
 # - Publishing backfills: any verified content publishes, whether freshly
 #   built or restored, so a past run's unpublished-but-good outputs get
-#   released by the next green run.
+#   released by the next green run. This relies on the cache keys covering
+#   every input that affects the output (2026-09-24: a key missing
+#   engine/prusa30/** let a stale .so publish under a fresh tree name).
 #
 # Caching: heavy builds write their outputs both to a primary output cache and
 # to a compiler cache. The engine compile uses sccache with the distributed GHA
@@ -550,7 +552,13 @@ jobs:
         id: engine-key
         run: |
           DEPKEY="${{ needs.build-dep.outputs.tbb_dep_key }}|${{ needs.build-dep.outputs.boost_dep_key }}|${{ needs.build-dep.outputs.occt_dep_key }}"
-          echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','engine/src/main/jni/**','app/build.gradle','scripts/build_all_deps_android.sh') }}-ndk${{ env.NDK_VERSION }}-$ABI-$DEPKEY" >> "$GITHUB_OUTPUT"
+          # engine/prusa30/** MUST be in the key: fetch_prusaslicer.sh applies
+          # patches/*.patch and farm_driver.cpp feeds the build, so a patch or
+          # driver change with an unchanged key restores a stale .so that then
+          # gets uploaded under the NEW tree-bound artifact name, poisoning
+          # every later reuse (2026-09-22: patch 0011 never reached the APK and
+          # slicing kept SIGABRTing on the unknown-flavor assert).
+          echo "key=engine-${{ hashFiles('engine/CMakeLists.txt','engine/src/main/CMakeLists.txt','engine/src/main/jni/**','engine/prusa30/**','app/build.gradle','scripts/build_all_deps_android.sh') }}-ndk${{ env.NDK_VERSION }}-$ABI-$DEPKEY" >> "$GITHUB_OUTPUT"
 
       - name: Compute engine source tree
         id: engine-src
@@ -875,12 +883,20 @@ jobs:
 
       - name: Publish GMP/MPFR rolling release
         if: github.ref == 'refs/heads/main' && steps.gmp-rel.outputs.hit != '1'
-        uses: 1337farm/actions/publish-release@v1
-        with:
-          tag: dep-gmp-latest
-          title: GMP/MPFR deps (latest)
-          notes: Rolling release of the GMP/MPFR native deps built from source. Re-published whenever the dep rebuilds.
-          files: $OUT/gmp-deps.tar.gz $OUT/gmp-manifest.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          OUT="$RUNNER_TEMP/gmp-release"
+          TAG="dep-gmp-latest"
+          GMP_TAR="$(find "$OUT" -maxdepth 1 -name 'gmp-deps.tar.gz' | head -1)"
+          GMP_MANIFEST="$(find "$OUT" -maxdepth 1 -name 'gmp-manifest.json' | head -1)"
+          test -n "$GMP_TAR" || { echo "ERROR: no gmp-deps.tar.gz staged in $OUT"; exit 1; }
+          test -n "$GMP_MANIFEST" || { echo "ERROR: no gmp-manifest.json staged in $OUT"; exit 1; }
+          gh release delete "$TAG" --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
+          gh release create "$TAG" "$GMP_TAR" "$GMP_MANIFEST" --repo "${{ github.repository }}" \
+            --title "GMP/MPFR deps (latest)" \
+            --notes "Rolling release of the GMP/MPFR native deps built from source. Re-published whenever the dep rebuilds."
 
       - name: Fetch PrusaSlicer 3.0 core (vendored tree deleted in #210)
         if: steps.engine-rel.outputs.hit != '1' && steps.engine-art.outputs.art_hit != '1'
@@ -1160,6 +1176,12 @@ jobs:
           retention-days: 30
 
       - name: Publish engine release
+        # Backfill is safe again: the tree-bound artifact name guarantees the
+        # staged .so was built (or correctly restored) from the current tree
+        # now that the cache key covers all engine inputs (2026-09-24), and
+        # without backfill the rolling release can never repopulate after a
+        # revocation (2026-09-23: empty engine-latest broke every non-native
+        # PR's apk job, which restores the engine from the release only).
         if: github.ref == 'refs/heads/main' && steps.engine-rel.outputs.hit != '1'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1194,13 +1216,23 @@ jobs:
             "$SHA" "$DATE" "$ABI" "$SRC" "$SUM" > "$OUT/engine-manifest.json"
 
       - name: Publish engine rolling release
+        # Same backfill rule as above: publish whatever verified content this
+        # main run staged.
         if: github.ref == 'refs/heads/main' && steps.engine-rel.outputs.hit != '1'
-        uses: 1337farm/actions/publish-release@v1
-        with:
-          tag: engine-latest
-          title: Engine libslic3r.so (latest)
-          notes: Rolling release of libslic3r.so built from source. Re-published whenever the engine rebuilds.
-          files: $OUT/libslic3r.so $OUT/engine-manifest.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          OUT="$RUNNER_TEMP/engine-release"
+          TAG="engine-latest"
+          ENG_SO="$(find "$OUT" -maxdepth 1 -name 'libslic3r.so' | head -1)"
+          ENG_MANIFEST="$(find "$OUT" -maxdepth 1 -name 'engine-manifest.json' | head -1)"
+          test -n "$ENG_SO" || { echo "ERROR: no libslic3r.so staged in $OUT"; exit 1; }
+          test -n "$ENG_MANIFEST" || { echo "ERROR: no engine-manifest.json staged in $OUT"; exit 1; }
+          gh release delete "$TAG" --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
+          gh release create "$TAG" "$ENG_SO" "$ENG_MANIFEST" --repo "${{ github.repository }}" \
+            --title "Engine libslic3r.so (latest)" \
+            --notes "Rolling release of libslic3r.so built from source. Re-published whenever the engine rebuilds."
 
   package-apk:
     name: apk
@@ -1510,6 +1542,9 @@ jobs:
           set -e
           OUT="$RUNNER_TEMP/apk-release"
           TAG="farm-apk-latest"
+          # APK_NAME is scoped to the Prepare step's shell: re-resolve here.
+          APK_NAME="$(basename "$(find "$OUT" -maxdepth 1 -name 'FlashForgeFarm_*.apk' | head -1)")"
+          test -n "$APK_NAME" || { echo "ERROR: no APK staged in $OUT"; exit 1; }
           gh release delete "$TAG" --yes --cleanup-tag --repo "${{ github.repository }}" 2>/dev/null || true
           gh release create "$TAG" "$OUT/$APK_NAME" "$OUT/apk-manifest.json" --repo "${{ github.repository }}" \
             --title "FlashForge Farm APK (latest)" \

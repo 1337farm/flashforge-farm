@@ -140,8 +140,15 @@ public class CameraMenu extends ListBedMenu {
                 }),
                 new BedMenuItem(R.string.MenuCameraOrtho, R.drawable.image_format_32).setCheckable((buttonView, isChecked) -> {
                     Prefs.setOrthoProjectionEnabled(isChecked);
-                    fragment.getGlView().getRenderer().updateProjection();
-                    fragment.getGlView().requestRender();
+                    // GL thread: match the ortho box to the live perspective
+                    // framing first so the toggle never moves the camera nor
+                    // jumps the picture, then rewrite the matrix the draw
+                    // loop reads without locking.
+                    fragment.getGlView().queueEvent(() -> {
+                        if (isChecked) fragment.getGlView().getRenderer().matchOrthoZoomToPerspective();
+                        fragment.getGlView().getRenderer().updateProjection();
+                        fragment.getGlView().requestRender();
+                    });
                 }, Prefs.isOrthoProjectionEnabled()));
     }
 
@@ -159,7 +166,6 @@ public class CameraMenu extends ListBedMenu {
             middlePoint = fromPosition.center(toPosition);
         }
 
-        float zoom = camera.getZoom();
         Vec3d finalMiddlePoint = middlePoint;
         new SpringAnimation(new FloatValueHolder(0))
                 .setMinimumVisibleChange(1 / 1000f)
@@ -167,7 +173,8 @@ public class CameraMenu extends ListBedMenu {
                         .setStiffness(1000f)
                         .setDampingRatio(1f))
                 .addUpdateListener((animation, value, velocity) -> {
-                    camera.setZoom(ViewUtils.lerp(zoom, 1f, value));
+                    // Physical flight only: position/origin lerp moves the
+                    // camera; focal length never changes.
                     camera.position.set(
                             ViewUtils.lerpd(fromPosition.x, Math.abs(toPosition.x - toOrigin.x) <= 5 ? finalMiddlePoint.x : fromPosition.x + (toPosition.x - fromPosition.x) / 2, toPosition.x, value),
                             ViewUtils.lerpd(fromPosition.y, Math.abs(toPosition.y - toOrigin.y) <= 5 ? finalMiddlePoint.y : fromPosition.y + (toPosition.y - fromPosition.y) / 2, toPosition.y, value),
@@ -178,8 +185,13 @@ public class CameraMenu extends ListBedMenu {
                             ViewUtils.lerpd(fromOrigin.y, toOrigin.y, value),
                             ViewUtils.lerpd(fromOrigin.z, toOrigin.z, value)
                     );
-                    glView.getRenderer().updateProjection();
-                    glView.requestRender();
+                    // Projection update on the GL thread (see above); the
+                    // camera fields themselves are plain doubles also read
+                    // by the frame loop, matching existing behavior.
+                    glView.queueEvent(() -> {
+                        glView.getRenderer().updateProjection();
+                        glView.requestRender();
+                    });
                 })
                 .start();
     }

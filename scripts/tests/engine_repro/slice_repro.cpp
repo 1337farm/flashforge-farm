@@ -76,6 +76,23 @@ int main(int argc, char** argv) {
             if (obj == nullptr) continue;
             log_marker("  object %zu '%s' volumes=%zu instances=%zu",
                 i, obj->name.c_str(), obj->volumes.size(), obj->instances.size());
+            for (size_t vi = 0; vi < obj->volumes.size(); ++vi) {
+                auto* vol = obj->volumes[vi];
+                size_t facets = 0;
+                int vtype = -1;
+                if (vol != nullptr) {
+                    auto mesh = vol->mesh_ptr();
+                    if (mesh) facets = mesh->facets_count();
+                    vtype = static_cast<int>(vol->type());
+                }
+                log_marker("    volume %zu facets=%zu type=%d (0=MODEL_PART)", vi, facets, vtype);
+            }
+            for (size_t ii = 0; ii < obj->instances.size(); ++ii) {
+                auto* inst = obj->instances[ii];
+                log_marker("    instance %zu printable=%d pvs=%d", ii,
+                    inst ? (int) inst->printable : -1,
+                    inst ? (int) inst->print_volume_state : -1);
+            }
             BizAlgo::ModelObject::ensure_on_bed(*obj, false);
         }
 

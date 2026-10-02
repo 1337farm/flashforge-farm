@@ -328,7 +328,16 @@ jobs:
             OK=1
             test -f engine/prusa30/jniImports/expat/include/expat.h || OK=0
             find engine/prusa30/jniImports/expat -name 'libexpat.a' | grep -q . || OK=0
-            find engine/prusa30/jniImports/expat -name 'expat-config.cmake' | grep -q . || OK=0
+            CFG="$(find engine/prusa30/jniImports/expat -name 'expat-config.cmake' | head -1)"
+            [ -n "$CFG" ] || OK=0
+            # A config that references a sibling include (classic *-targets* or
+            # the modern expat.cmake wrapper) must have that file staged, or
+            # upstream's find_package dies in CMake configure.
+            if [ -n "$CFG" ] && [ "$OK" = "1" ]; then
+              while IFS= read -r base; do
+                [ -f "$(dirname "$CFG")/$base" ] || OK=0
+              done < <(grep -oE 'include\("[^"]+"\)' "$CFG" | sed -E 's/^include\("//; s/"\)$//; s#.*/##')
+            fi
             [ "$OK" = "1" ] && NEED=0
           fi
           echo "need=$NEED" >> "$GITHUB_OUTPUT"
@@ -364,6 +373,11 @@ jobs:
             || { echo "ERROR: no libexpat.a staged"; exit 1; }
           find engine/prusa30/jniImports/expat -name 'expat-config.cmake' | grep -q . \
             || { echo "ERROR: expat-config.cmake missing"; exit 1; }
+          CFG="$(find engine/prusa30/jniImports/expat -name 'expat-config.cmake' | head -1)"
+          while IFS= read -r base; do
+            [ -f "$(dirname "$CFG")/$base" ] \
+              || { echo "ERROR: expat-config.cmake references missing $base"; exit 1; }
+          done < <(grep -oE 'include\("[^"]+"\)' "$CFG" | sed -E 's/^include\("//; s/"\)$//; s#.*/##')
           echo "expat R_2_8_2 staged and verified"
 
       - name: Save staged expat R_2_8_2

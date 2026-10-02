@@ -5,8 +5,13 @@ import com.flashforge.farm.Bus;
 import static android.opengl.GLES30.*;
 import static com.flashforge.farm.utils.DebugUtils.assertTrue;
 
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Typeface;
 import android.opengl.GLSurfaceView;
+import android.opengl.GLUtils;
 import android.util.Log;
 
 import androidx.core.graphics.ColorUtils;
@@ -46,7 +51,8 @@ import com.flashforge.farm.view.GLView;
 public class GLRenderer implements GLSurfaceView.Renderer {
     private final static float FOV = 60f;
     private final static float NEAR_PLANE = 10f;
-    private final static float FAR_PLANE = 1000f;
+    // Far enough that backing the dolly all the way out never clips the bed.
+    private final static float FAR_PLANE = 5000f;
     private final static int MAX_FILL_BED_OBJECTS = 256;
 
     private Camera camera = new Camera();
@@ -89,6 +95,18 @@ public class GLRenderer implements GLSurfaceView.Renderer {
     private GCodeProcessorResult gcodeResult;
     private GCodeViewer viewer;
     private boolean isViewerEnabled;
+    // App-side toolpath preview (gcode lines) while the libvgcode viewer is a stub (#212).
+    private com.flashforge.farm.slic3r.GCodeToolpaths.Parsed toolpaths;
+    private final List<GLModel> toolpathModels = new ArrayList<>();
+    private long toolpathFrom = 0, toolpathTo = Long.MAX_VALUE;
+    private boolean toolpathsDirty = true;
+
+    // Plate name tag painted flat on the build plate (front-right corner):
+    // a textured quad fixed in bed coordinates. It never rotates or tracks
+    // the camera, so it cannot mirror or edge-on away like an overlay can.
+    private GLModel plateLabelModel = null;
+    private int plateLabelTexId = 0;
+    private String plateLabelKey = "";
 
     // Primary selection (drives the transform gizmo, flatten, fill-bed, duplicate).
     // selectedObjects holds the full multi-selection; when non-empty it always contains selectedObject.
@@ -231,6 +249,80 @@ public class GLRenderer implements GLSurfaceView.Renderer {
 
     public int getViewportHeight() {
         return viewportHeight;
+    }
+
+    /**
+     * World-space point where the ray through a screen position (render
+     * pixels) meets the shared build-plate plane (z = 0), or null when the
+     * ray runs parallel to the plane or points away from it. Used for 1:1
+     * grab-panning and anchored pinch zoom in both projections. Safe to call
+     * off the GL thread: matrices are defensively copied.
+     *
+     * Ray construction differs by projection: perspective rays fan out from
+     * the camera position, while orthographic rays are parallel, so the ray
+     * origin is the unprojected near-plane point and the direction is the
+     * camera forward vector. Using the perspective form for ortho skews the
+     * mapping and makes panning fast and wrong.
+     */
+    public Vec3d screenToBedPlane(float x, float y) {
+        int w = viewportWidth, h = viewportHeight;
+        if (w <= 0 || h <= 0 || camera == null) return null;
+        double[] viewCopy = camera.getViewModelMatrix().clone();
+        double[] projCopy = projectionMatrix.clone();
+        double[] near;
+        try {
+            near = com.flashforge.farm.slic3r.Native.utils_unproject(viewCopy, projCopy, w, h, x, y);
+        } catch (Exception e) {
+            android.util.Log.w("GLRenderer", "unproject failed", e);
+            return null;
+        }
+        if (near == null || near.length < 3) return null;
+        double ox, oy, oz, dx, dy, dz;
+        if (com.flashforge.farm.utils.Prefs.isOrthoProjectionEnabled()) {
+            ox = near[0];
+            oy = near[1];
+            oz = near[2];
+            Vec3d fwd = camera.getDirForward();
+            dx = fwd.x;
+            dy = fwd.y;
+            dz = fwd.z;
+        } else {
+            double px = camera.position.x, py = camera.position.y, pz = camera.position.z;
+            ox = px;
+            oy = py;
+            oz = pz;
+            dx = near[0] - px;
+            dy = near[1] - py;
+            dz = near[2] - pz;
+        }
+        if (Math.abs(dz) < 1e-9) return null;
+        double t = -oz / dz;
+        if (!(t > 0)) return null;
+        return new Vec3d(ox + dx * t, oy + dy * t, 0);
+    }
+
+    /**
+     * Approximate world units per screen pixel at the focus plane, for the
+     * pan fallback when the bed-plane ray misses (camera looking horizontal).
+     */
+    public double worldPerPixel() {
+        if (viewportHeight <= 0) return 0;
+        if (com.flashforge.farm.utils.Prefs.isOrthoProjectionEnabled() && bed != null && bed.isValid()) {
+            Vec3d vmin = bed.getVolumeMin(), vmax = bed.getVolumeMax();
+            double scale = (Math.max(vmax.x - vmin.x, vmax.y - vmin.y) / 2f + 10f) / camera.getZoom();
+            double aspect = viewportWidth > 0 ? (double) viewportWidth / viewportHeight : 1;
+            double halfH = scale * (aspect > 1 ? 1 : 1f / aspect);
+            return 2 * halfH / viewportHeight;
+        }
+        double dx = camera.position.x - camera.origin.x;
+        double dy = camera.position.y - camera.origin.y;
+        double dz = camera.position.z - camera.origin.z;
+        double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (!(dist > 0)) return 0;
+        // Constant-FOV perspective: world-per-pixel follows the physical camera
+        // distance (dolly carries the zoom), not a focal scalar.
+        double halfFovTan = Math.tan(Math.toRadians(FOV / 2f));
+        return 2 * dist * halfFovTan / viewportHeight;
     }
 
     public void setCurrentPlateIndex(int currentPlateIndex) {
@@ -379,21 +471,46 @@ public class GLRenderer implements GLSurfaceView.Renderer {
 
     private void initViewer() {
         if (gcodeResult == null) return;
-        viewer = new GCodeViewer();
-        viewer.initGL();
-        viewer.setThemeColors();
-        viewer.load(gcodeResult);
-        if (!viewer.isOptionVisible(GCodeViewer.OPTION_TYPE_SEAMS)) {
-            viewer.toggleOptionVisibility(GCodeViewer.OPTION_TYPE_SEAMS);
+        GCodeViewer created = null;
+        try {
+            created = new GCodeViewer();
+            created.initGL();
+            created.setThemeColors();
+            created.load(gcodeResult);
+            if (!created.isOptionVisible(GCodeViewer.OPTION_TYPE_SEAMS)) {
+                created.toggleOptionVisibility(GCodeViewer.OPTION_TYPE_SEAMS);
+            }
+            if (isModelMultiColor()) {
+                int[] pal = com.flashforge.farm.utils.Prefs.getFilamentPalette();
+                int[] rgb = new int[pal.length];
+                for (int i = 0; i < pal.length; i++) rgb[i] = pal[i] & 0xFFFFFF;
+                created.setToolColors(rgb);
+                created.setViewType(GCodeViewer.VIEW_TYPE_TOOL);
+            } else {
+                created.setViewType(GCodeViewer.VIEW_TYPE_FEATURE);
+            }
+            viewer = created;
+            created = null;
+            android.util.Log.i("GLRenderer",
+                    "viewer loaded: nativeLayers=" + viewer.getLayersCount());
+        } catch (Exception e) {
+            android.util.Log.e("GLRenderer",
+                    "viewer init/load failed, falling back to parsed toolpaths", e);
+            if (created != null) {
+                try {
+                    created.release();
+                } catch (Exception releaseError) {
+                    android.util.Log.w("GLRenderer", "failed to release broken viewer", releaseError);
+                }
+            }
+            viewer = null;
+            return;
         }
-        if (isModelMultiColor()) {
-            int[] pal = com.flashforge.farm.utils.Prefs.getFilamentPalette();
-            int[] rgb = new int[pal.length];
-            for (int i = 0; i < pal.length; i++) rgb[i] = pal[i] & 0xFFFFFF;
-            viewer.setToolColors(rgb);
-            viewer.setViewType(GCodeViewer.VIEW_TYPE_TOOL);
-        } else {
-            viewer.setViewType(GCodeViewer.VIEW_TYPE_FEATURE);
+        // Seed the layers tab from the parsed toolpaths when the native
+        // viewer reports no layers (stub builds, or load still pending).
+        if (toolpaths != null && toolpaths.getLayersCount() > 0) {
+            viewer.setLayersCountOverride(toolpaths.getLayersCount());
+            viewer.setLayersViewRange(toolpathFrom, Math.min(toolpathTo, toolpaths.getLayersCount() - 1));
         }
     }
 
@@ -406,6 +523,224 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             }
         }
         this.gcodeResult = result;
+        clearToolpaths();
+    }
+
+    /** Parse + upload gcode extrusion lines for the given range (0-based, inclusive). */
+    public void setToolpathRange(long from, long to) {
+        this.toolpathFrom = Math.max(0, from);
+        this.toolpathTo = Math.max(this.toolpathFrom, to);
+        this.toolpathsDirty = true;
+    }
+
+    private void clearToolpaths() {
+        synchronized (this) {
+            toolpaths = null;
+            toolpathFrom = 0;
+            toolpathTo = Long.MAX_VALUE;
+            toolpathsDirty = true;
+        }
+        for (GLModel m : toolpathModels) {
+            m.release();
+        }
+        toolpathModels.clear();
+    }
+
+    public synchronized int getToolpathLayersCount() {
+        return toolpaths != null ? toolpaths.getLayersCount() : 0;
+    }
+
+    private synchronized com.flashforge.farm.slic3r.GCodeToolpaths.Parsed getToolpaths() {
+        return toolpaths;
+    }
+
+    private void ensureToolpaths() {
+        com.flashforge.farm.slic3r.GCodeToolpaths.Parsed parsed = getToolpaths();
+        if (parsed != null && !toolpathsDirty) return;
+        clearToolpathModelsOnly();
+        if (gcodeResult == null) {
+            synchronized (this) {
+                toolpaths = null;
+                toolpathsDirty = false;
+            }
+            return;
+        }
+        java.io.File gcode = com.flashforge.farm.fragment.BedFragment.getTempGCodePath();
+        if (gcode == null || !gcode.isFile() || !gcode.canRead()) {
+            android.util.Log.w("GLRenderer",
+                    "toolpath preview skipped, gcode file unreadable: path="
+                            + (gcode != null ? gcode.getAbsolutePath() : "null")
+                            + " isFile=" + (gcode != null && gcode.isFile())
+                            + " canRead=" + (gcode != null && gcode.canRead()));
+            return;
+        }
+        com.flashforge.farm.slic3r.GCodeToolpaths.Parsed fresh;
+        try {
+            // 4k verts/layer keeps a 300-layer print under ~5M floats worst case; decimated by stride.
+            fresh = com.flashforge.farm.slic3r.GCodeToolpaths.parse(gcode, 4096);
+            android.util.Log.i("GLRenderer",
+                    "toolpath parse ok: file=" + gcode.getAbsolutePath()
+                            + " bytes=" + gcode.length()
+                            + " layers=" + fresh.getLayersCount());
+        } catch (Exception e) {
+            android.util.Log.w("GLRenderer",
+                    "toolpath parse failed: file=" + gcode.getAbsolutePath()
+                            + " bytes=" + gcode.length(), e);
+            return;
+        }
+        synchronized (this) {
+            toolpaths = fresh;
+            toolpathsDirty = false;
+            if (fresh.getLayersCount() > 0 && toolpathTo == Long.MAX_VALUE) {
+                toolpathTo = fresh.getLayersCount() - 1;
+            }
+        }
+    }
+
+    private void clearToolpathModelsOnly() {
+        for (GLModel m : toolpathModels) {
+            m.release();
+        }
+        toolpathModels.clear();
+    }
+
+    private static Bitmap renderPlateLabelBitmap(String text) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setTypeface(Typeface.DEFAULT_BOLD);
+        paint.setTextSize(96f);
+        paint.setColor(0xFFFFFFFF);
+        paint.setShadowLayer(6f, 0f, 3f, 0xCC000000);
+        float w = paint.measureText(text);
+        Paint.FontMetrics fm = paint.getFontMetrics();
+        float h = fm.descent - fm.ascent;
+        Bitmap bmp = Bitmap.createBitmap(Math.max(2, (int) Math.ceil(w + 32)),
+                Math.max(2, (int) Math.ceil(h + 32)), Bitmap.Config.ARGB_8888);
+        new Canvas(bmp).drawText(text, 16f, 16f - fm.ascent, paint);
+        return bmp;
+    }
+
+    private void releasePlateLabel() {
+        if (plateLabelModel != null) {
+            plateLabelModel.release();
+            plateLabelModel = null;
+        }
+        if (plateLabelTexId != 0) {
+            glDeleteTextures(1, new int[]{plateLabelTexId}, 0);
+            plateLabelTexId = 0;
+        }
+        plateLabelKey = "";
+    }
+
+    private void rebuildPlateLabel(String text, Vec3d vmin, Vec3d vmax) {
+        releasePlateLabel();
+        Bitmap bmp = renderPlateLabelBitmap(text);
+        int[] tex = new int[1];
+        glGenTextures(1, tex, 0);
+        if (tex[0] == 0) {
+            bmp.recycle();
+            return;
+        }
+        glBindTexture(GL_TEXTURE_2D, tex[0]);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        GLUtils.texImage2D(GL_TEXTURE_2D, 0, bmp, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        float worldH = 19.6f;
+        float worldW = worldH * bmp.getWidth() / (float) bmp.getHeight();
+        bmp.recycle();
+        // Off the plate, in front of it (below min.y), left-aligned, so the
+        // tag never covers the print area and stays readable at any orbit
+        // angle.
+        float margin = 8f;
+        float gap = 4f;
+        float x0 = (float) (vmin.x + margin);
+        float x1 = x0 + worldW;
+        float y1 = (float) (vmin.y - gap);
+        float y0 = y1 - worldH;
+        float z = 0.06f;
+        GLModel gm = new GLModel();
+        gm.initTexturedQuad(
+                new float[]{x0, y0, z, x1, y0, z, x1, y1, z, x0, y1, z},
+                new float[]{0, 1, 1, 1, 1, 0, 0, 0});
+        if (!gm.isInitialized() || gm.isEmpty()) {
+            gm.release();
+            glDeleteTextures(1, tex, 0);
+            return;
+        }
+        plateLabelModel = gm;
+        plateLabelTexId = tex[0];
+    }
+
+    private void drawPlateLabel(double[] viewMatrix) {
+        if (bed == null || !bed.isValid() || shadersManager == null) return;
+        String text = "Plate " + (currentPlateIndex + 1);
+        Vec3d vmin = bed.getVolumeMin(), vmax = bed.getVolumeMax();
+        String key = text + "|" + vmin.x + "," + vmin.y + "," + vmax.x + "," + vmax.y;
+        if (plateLabelModel == null || plateLabelTexId == 0 || !key.equals(plateLabelKey)) {
+            rebuildPlateLabel(text, vmin, vmax);
+            if (plateLabelModel == null || plateLabelTexId == 0) return;
+            plateLabelKey = key;
+        }
+        GLShaderProgram shader = shadersManager.get(GLShadersManager.SHADER_FLAT_TEXTURE);
+        shader.startUsing();
+        shader.setUniformMatrix4fv("view_model_matrix", viewMatrix);
+        shader.setUniformMatrix4fv("projection_matrix", projectionMatrix);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        boolean cullEnabled = glIsEnabled(GL_CULL_FACE);
+        glDisable(GL_CULL_FACE);
+        glBindTexture(GL_TEXTURE_2D, plateLabelTexId);
+        plateLabelModel.render();
+        glBindTexture(GL_TEXTURE_2D, 0);
+        if (cullEnabled) glEnable(GL_CULL_FACE);
+        glDisable(GL_BLEND);
+        shader.stopUsing();
+    }
+
+    private void drawToolpaths(double[] viewMatrix) {
+        if (!isViewerEnabled || gcodeResult == null) return;
+        ensureToolpaths();
+        com.flashforge.farm.slic3r.GCodeToolpaths.Parsed parsed = getToolpaths();
+        if (parsed == null || parsed.layers.isEmpty()) return;
+        long from, to;
+        synchronized (this) {
+            from = toolpathFrom;
+            to = Math.min(toolpathTo, parsed.getLayersCount() - 1);
+        }
+        if (from > to) return;
+        GLShaderProgram shader = shadersManager.get(GLShadersManager.SHADER_FLAT);
+        shader.startUsing();
+        shader.setUniformMatrix4fv("view_model_matrix", viewMatrix);
+        shader.setUniformMatrix4fv("projection_matrix", projectionMatrix);
+        glLineWidth(com.flashforge.farm.utils.ViewUtils.dp(1.5f));
+        int layerIdx = 0;
+        for (int li = (int) from; li <= (int) to; li++) {
+            com.flashforge.farm.slic3r.GCodeToolpaths.Layer layer = parsed.layers.get(li);
+            GLModel gm;
+            if (layerIdx < toolpathModels.size()) {
+                gm = toolpathModels.get(layerIdx);
+            } else {
+                gm = new GLModel();
+                gm.initFromPath(layer.vertices, layer.indices, false);
+                if (!gm.isInitialized() || gm.isEmpty()) {
+                    gm.release();
+                    layerIdx++;
+                    continue;
+                }
+                toolpathModels.add(gm);
+            }
+            gm.setColor(com.flashforge.farm.theme.ThemesRepo.getColor(com.flashforge.farm.R.attr.modelHoverColor));
+            gm.render();
+            layerIdx++;
+        }
+        // Drop stale models when the range shrinks.
+        while (toolpathModels.size() > layerIdx) {
+            GLModel stale = toolpathModels.remove(toolpathModels.size() - 1);
+            stale.release();
+        }
+        shader.stopUsing();
     }
 
     public synchronized void setInMeasureMode(boolean enabled) {
@@ -456,25 +791,38 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         float aspectRatio = (float) viewportWidth / viewportHeight;
         float invZoom = 1f / camera.getZoom();
         if (Prefs.isOrthoProjectionEnabled()) {
-            Vec3d diff = bed.getVolumeMax().clone().add(bed.getVolumeMin().clone());
-            double scale = (Math.max(diff.x, diff.y) / 2f + 10f) * invZoom;
+            // Frame the bed volume: half-extent of the volume size plus a
+            // margin, scaled by zoom. Both projections share the camera zoom
+            // range, so min/max zoom framing stays comparable.
+            Vec3d vmin = bed.getVolumeMin(), vmax = bed.getVolumeMax();
+            double sizeX = vmax.x - vmin.x, sizeY = vmax.y - vmin.y;
+            double scale = (Math.max(sizeX, sizeY) / 2f + 10f) * invZoom;
 
             float ratioHorizontal = aspectRatio > 1 ? aspectRatio : 1;
             float ratioVertical = aspectRatio < 1 ? 1f / aspectRatio : 1;
             DoubleMatrix.orthoM(projectionMatrix, 0, -scale * ratioHorizontal, scale * ratioHorizontal, -scale * ratioVertical, scale * ratioVertical, NEAR_PLANE, FAR_PLANE);
         } else {
-            // Map zoom to field-of-view via focal length (fovy = 2*atan(tan(FOV/2)/zoom)).
-            // The naive FOV*invZoom breaks when zoomed out: at min zoom 0.25 it
-            // yields fovy=240deg, outside the valid (0,180) range, flipping the
-            // projection (tan goes negative). The atan form stays valid for the
-            // whole [0.25, 10] zoom range (134deg wide .. 6.8deg telephoto).
-            // No aspect correction on fovy: the aspect parameter already shapes
-            // the horizontal field; scaling fovy by 1/aspect made the view jump
-            // on rotation.
-            float halfFovTan = (float) Math.tan(Math.toRadians(FOV / 2f));
-            float fovy = (float) Math.toDegrees(2f * Math.atan(halfFovTan * (1f / camera.getZoom())));
-            DoubleMatrix.perspectiveM(projectionMatrix, 0, fovy, aspectRatio, NEAR_PLANE, FAR_PLANE);
+            // Perspective zoom is a physical dolly (see Camera.dollyBy): the
+            // field of view stays constant at FOV so straight lines stay
+            // straight and the grid keeps true perspective at any distance.
+            // Only the orthographic branch above uses the zoom scalar.
+            DoubleMatrix.perspectiveM(projectionMatrix, 0, FOV, aspectRatio, NEAR_PLANE, FAR_PLANE);
         }
+    }
+
+    /**
+     * Keep the picture stable when switching to orthographic: scale the ortho
+     * box to the current perspective framing. The camera (position/origin)
+     * does not move — only the ortho zoom scalar changes.
+     */
+    public void matchOrthoZoomToPerspective() {
+        if (bed == null || !bed.isValid()) return;
+        Vec3d vmin = bed.getVolumeMin(), vmax = bed.getVolumeMax();
+        double baseHalfExtent = Math.max(vmax.x - vmin.x, vmax.y - vmin.y) / 2.0 + 10.0;
+        double aspect = viewportHeight > 0 ? (double) viewportWidth / viewportHeight : 1.0;
+        float target = Camera.orthoZoomForDistance(camera.currentDistance(), baseHalfExtent, aspect);
+        float current = camera.getZoom();
+        if (current > 0) camera.zoomOrthoBy(target / current);
     }
 
     public int getSelectedObject() {
@@ -524,6 +872,11 @@ public class GLRenderer implements GLSurfaceView.Renderer {
 
     public int getSelectedObjectsCount() {
         return selectedObjects.size();
+    }
+
+    /** Snapshot of the full multi-selection (indexes), empty if nothing is selected. */
+    public java.util.List<Integer> getSelectedObjectsSnapshot() {
+        return new java.util.ArrayList<>(selectedObjects);
     }
 
     /** Select every object on the bed. The first object becomes the primary (gizmo) selection. */
@@ -646,14 +999,15 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             configureBed();
         }
         if (bed.isValid()) {
-            bed.render(shadersManager, bottom, viewMatrix, projectionMatrix, 1f / camera.getZoom());
+            bed.render(shadersManager, bottom, viewMatrix, projectionMatrix, (float) (1.0 / camera.zoomRatio()));
+            drawPlateLabel(viewMatrix);
             // Multi-plate grid: draw the other plates' beds at their offsets (edit mode only).
             if (viewer == null && !isViewerEnabled) {
                 for (int p = 0; p < inactivePlateOffsets.size(); p++) {
                     double[] off = inactivePlateOffsets.get(p);
                     System.arraycopy(viewMatrix, 0, plateViewMatrix, 0, 16);
                     DoubleMatrix.translateM(plateViewMatrix, 0, off[0], off[1], 0);
-                    bed.render(shadersManager, bottom, plateViewMatrix, projectionMatrix, 1f / camera.getZoom(), false);
+                    bed.render(shadersManager, bottom, plateViewMatrix, projectionMatrix, (float) (1.0 / camera.zoomRatio()), false);
                 }
             }
         }
@@ -667,7 +1021,31 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             }
 
             if (viewer != null) {
-                viewer.render(viewMatrix, projectionMatrix);
+                try {
+                    viewer.render(viewMatrix, projectionMatrix);
+                } catch (Exception e) {
+                    long layers = -1;
+                    try {
+                        layers = viewer.getLayersCount();
+                    } catch (Exception ignored) {
+                    }
+                    android.util.Log.e("GLRenderer",
+                            "viewer render failed, dropping viewer and falling back to parsed toolpaths: layers="
+                                    + layers, e);
+                    try {
+                        viewer.release();
+                    } catch (Exception releaseError) {
+                        android.util.Log.w("GLRenderer", "failed to release broken viewer", releaseError);
+                    }
+                    viewer = null;
+                }
+            }
+            // Fallback while the native viewer has no layers (stub builds, or
+            // load still pending): draw parsed toolpath lines so the layers
+            // tab stays live. Yields to the native viewer once it reports a
+            // real layer count.
+            if (viewer == null || viewer.getLayersCount() == 0) {
+                drawToolpaths(viewMatrix);
             }
         }
         // Models on inactive plates: plain dimmed render, no selection/paint/gizmo handling.
@@ -1927,6 +2305,10 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         return viewer;
     }
 
+    public int getToolpathCountForTest() {
+        return getToolpathLayersCount();
+    }
+
     private void configureBed() {
         try {
             lastConfigUid = FarmApp.CONFIG_UID;
@@ -1960,9 +2342,17 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             camera.origin.set(center);
             camera.origin.z = 0;
 
-            camera.position.x = center.x - center.z * 2;
-            camera.position.y = center.y - center.z * 2;
-            camera.position.z = min.z + Math.sqrt(center.z * center.z * 8);
+            double distance = Camera.startupDistance(
+                    Math.max(max.x - min.x, max.y - min.y),
+                    viewportWidth > 0 && viewportHeight > 0
+                            ? (double) viewportWidth / viewportHeight : 0.5);
+            if (distance <= 0) distance = 1;
+            camera.position.x = center.x;
+            camera.position.y = center.y - distance;
+            camera.position.z = 0;
+            camera.rotateAround(0, -30);
+            // Reference dolly distance: zoom limits are distance ratios of this.
+            camera.setDefaultDistance(camera.currentDistance());
             cameraIsDirty = false;
         }
         if (isViewerEnabled) {
@@ -2001,6 +2391,15 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         if (measurePointModel != null) {
             measurePointModel.release();
             measurePointModel = null;
+        }
+        releasePlateLabel();
+        for (GLModel m : toolpathModels) {
+            m.release();
+        }
+        toolpathModels.clear();
+        synchronized (this) {
+            toolpaths = null;
+            toolpathsDirty = true;
         }
         for (int i = 0; i < glModels.size(); i++) {
             glModels.get(i).release();

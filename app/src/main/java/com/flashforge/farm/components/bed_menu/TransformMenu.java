@@ -35,6 +35,7 @@ import com.flashforge.farm.events.ObjectsListChangedEvent;
 import com.flashforge.farm.events.SelectedObjectChangedEvent;
 import com.flashforge.farm.recycler.PreferenceSwitchItem;
 import com.flashforge.farm.recycler.SimpleRecyclerItem;
+import com.flashforge.farm.render.GLRenderer;
 import com.flashforge.farm.slic3r.Model;
 import com.flashforge.farm.theme.ThemesRepo;
 import com.flashforge.farm.utils.DoubleMatrix;
@@ -54,6 +55,35 @@ public class TransformMenu extends ListBedMenu {
 
     private boolean hasSelection() {
         return fragment.getGlView().getRenderer().getModel() != null && fragment.getGlView().getRenderer().getSelectedObject() != -1;
+    }
+
+    /**
+     * Auto-orient the selected objects on the background auto-orient thread;
+     * GL refresh runs via queueEvent once the worker has converged.
+     */
+    private void autoOrient(java.util.List<Integer> selection) {
+        GLRenderer renderer = fragment.getGlView().getRenderer();
+        Model model = renderer.getModel();
+        if (model == null || selection == null || selection.isEmpty()) return;
+        final int[] indices = new int[selection.size()];
+        for (int k = 0; k < indices.length; k++) indices[k] = selection.get(k);
+
+        model.autoOrientAsync(indices, new Model.OnAutoOrient() {
+            @Override
+            public void onAutoOrientProgress(int tag, String name) {
+            }
+
+            @Override
+            public void onAutoOrientFinished() {
+                int[] refresh = indices;
+                fragment.getGlView().queueEvent(() -> {
+                    GLRenderer r = fragment.getGlView().getRenderer();
+                    for (int idx : refresh) r.invalidateGlModel(idx);
+                    fragment.getGlView().requestRender();
+                });
+                Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuOrientationAutoOrientDone));
+            }
+        });
     }
 
     private final Bus.Listener<ObjectsListChangedEvent> onObjectsChanged = e -> updateSelectionDependentItems();
@@ -83,12 +113,7 @@ public class TransformMenu extends ListBedMenu {
 
         // --- Auto orient (needs a selected object) ---
         items.add(selection(new BedMenuItem(R.string.MenuOrientationAutoOrient, R.drawable.menu_orientation_auto_28).onClick(v -> {
-            int i = fragment.getGlView().getRenderer().getSelectedObject();
-            if (i == -1) return;
-            fragment.getGlView().getRenderer().getModel().autoOrient(i);
-            fragment.getGlView().getRenderer().invalidateGlModel(i);
-            fragment.getGlView().requestRender();
-            Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuOrientationAutoOrientDone));
+            autoOrient(fragment.getGlView().getRenderer().getSelectedObjectsSnapshot());
         })));
 
         // --- Arrange all objects (always available) ---

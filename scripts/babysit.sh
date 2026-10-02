@@ -34,6 +34,9 @@
 #   approve <runID...>         Approve held runs (idempotent: non-held runs
 #                              are reported and skipped).
 #   approve --sha <sha>        Approve every held run on a commit.
+#   approve --pr <N>           Approve every held run on a PR, across all its
+#                              head SHAs (incl. superseded pushes) — resilient
+#                              to SHA drift after re-pushes.
 #   held [--sha <sha>]         List runs awaiting approval (optionally scoped
 #                              to a commit). Exit 0 when none.
 #   pr <N> [--approve]         Babysit PR #N: snapshot, optionally approve
@@ -75,6 +78,7 @@ NO_DOWNLOAD=0
 WAIT_MIN=0
 REF="main"
 SHA=""
+PR=""
 APK_RUN_ID=""
 APK_ARTIFACT=""
 APK_STAGE_DIR=""
@@ -98,6 +102,8 @@ while [ "$i" -lt "${#ARGV[@]}" ]; do
     --wait-min=*) WAIT_MIN="${a#--wait-min=}" ;;
     --workflow)  i=$((i+1)); WORKFLOWS+=("${ARGV[$i]:-}") ;;
     --workflow=*) WORKFLOWS+=("${a#--workflow=}") ;;
+    --pr)        i=$((i+1)); PR="${ARGV[$i]:-}" ;;
+    --pr=*)      PR="${a#--pr=}" ;;
     --*)         echo "unknown arg: $a" >&2; exit 2 ;;
     *)           POSARGS+=("$a") ;;
   esac
@@ -279,7 +285,7 @@ cmd_status() {
   head="$(printf '%s' "$prj" | sed -n 's/.*"headRefOid":"\([^"]*\)".*/\1/p')"
   echo "=== PR #$pr ==="
   printf '%s' "$prj" | python3 -c 'import json,sys; d=json.load(sys.stdin); [print(f"{k}: {v}") for k,v in d.items() if k in ("title","state","mergeable","mergeStateStatus","isDraft","headRefOid","mergedAt")]; print("mergeCommit:", (d.get("mergeCommit") or {}).get("oid"))'
-  echo "=== runs on head $head ==="
+  echo "=== runs on head $head (incl. superseded pushes) ==="
   local rid name ev st co att held=0 red=0 active=0
   while IFS=$'\t' read -r rid name ev st co att; do
     [ -n "$rid" ] || continue
@@ -287,7 +293,7 @@ cmd_status() {
     is_held "$st" "$co" && held=1
     case "$(state_verdict "$co")" in RED) red=1 ;; esac
     [ "$st" = "completed" ] || active=1
-  done < <(runs_for_sha "$head")
+  done < <(runs_for_pr "$pr")
   echo "=== required checks ($REF protection) ==="
   local rc
   while IFS= read -r rc; do
@@ -308,6 +314,36 @@ cmd_status() {
   return 0
 }
 
+# Runs across every head SHA of PR $1 (head + earlier pushes) PLUS any
+# same-branch headless/native pull_request runs whose checks feed this PR.
+# Exact-SHA scans go blind two ways: (a) the supply-chain gate keeps the
+# ORIGINAL pending runs alive while approve creates fresh attempts on new
+# SHAs; (b) re-pushed or renamed branches leave stale same-branch runs that
+# still gate the checks. Belt and suspenders: exact PR SHAs first, then the
+# branch's pull_request runs, newest first, de-duplicated by run id.
+runs_for_pr() { # $1 pr number
+  local pr="$1" shas head branch
+  head="$(gh pr view "$pr" -R "$REPO" --json headRefOid -q .headRefOid 2>/dev/null || true)"
+  branch="$(gh pr view "$pr" -R "$REPO" --json headRefName -q .headRefName 2>/dev/null || true)"
+  shas="$(gh pr view "$pr" -R "$REPO" --json commits -q '.commits[].oid' 2>/dev/null || true)"
+  [ -n "$head" ] || return 0
+  # head first, then the rest (skip dupes)
+  { printf '%s\n' "$head"; printf '%s\n' $shas | grep -vxF "$head" || true; } | while read -r sha; do
+    [ -n "$sha" ] || continue
+    runs_for_sha "$sha"
+  done > /tmp/babysit_runs_$$ 2>/dev/null || true
+  awk -F'\t' '!seen[$1]++' /tmp/babysit_runs_$$ 2>/dev/null
+  # same-branch pull_request runs (covers stale/renamed-branch gates).
+  # NOTE: gh 2.101's --jq takes ONE arg (no jq --arg passthrough), so the
+  # branch is interpolated into the filter instead of passed as $br.
+  if [ -n "$branch" ]; then
+    gh api --paginate "repos/$REPO/actions/runs?per_page=100" \
+      --jq ".workflow_runs[] | select(.event==\"pull_request\" and .head_branch==\"$branch\") | [.id, (.name // \"\"), .event, .status, (.conclusion // \"\"), .run_attempt] | @tsv" 2>/dev/null >> /tmp/babysit_runs_$$ || true
+    awk -F'\t' '!seen[$1]++' /tmp/babysit_runs_$$ 2>/dev/null
+  fi
+  rm -f /tmp/babysit_runs_$$
+}
+
 # --- approve -----------------------------------------------------------------
 
 cmd_approve() {
@@ -317,12 +353,24 @@ cmd_approve() {
       [ -n "$rid" ] || continue
       is_held "$st" "$co" && ids+=("$rid")
     done < <(runs_for_sha "$SHA")
-  else
+  fi
+  if [ "${#ids[@]}" -eq 0 ] && [ -n "${PR:-}" ]; then
+    while IFS=$'\t' read -r rid name ev st co att; do
+      [ -n "$rid" ] || continue
+      is_held "$st" "$co" && ids+=("$rid")
+    done < <(runs_for_pr "$PR")
+  fi
+  if [ "${#ids[@]}" -eq 0 ]; then
     ids=("${POSARGS[@]}")
   fi
   [ "${#ids[@]}" -gt 0 ] || { log "no held runs to approve — nothing to do"; return 0; }
-  local id rc=0
+  local id rc=0 seen_id
   for id in "${ids[@]}"; do
+    # de-duplicate: same run may appear under several SHAs in runs_for_pr
+    local seen=0
+    for seen_id in ${APPROVED_IDS:-}; do [ "$seen_id" = "$id" ] && seen=1 && break; done
+    [ "$seen" -eq 1 ] && continue
+    APPROVED_IDS="${APPROVED_IDS:-} $id"
     approve_run "$id" || rc=1
   done
   return "$rc"
@@ -362,7 +410,7 @@ pr_snapshot() { # $1 pr -> MERGED|RED|HELD|PENDING|SETTLED
     is_held "$st" "$co" && held=1
     case "$(state_verdict "$co")" in RED) red=1 ;; esac
     [ "$st" = "completed" ] || active=1
-  done < <(runs_for_sha "$head")
+  done < <(runs_for_pr "$pr")
   [ "$red" -eq 1 ] && { echo RED; return 0; }
   [ "$held" -eq 1 ] && { echo HELD; return 0; }
   [ "$active" -eq 1 ] && { echo PENDING; return 0; }
@@ -386,11 +434,11 @@ cmd_pr() {
       return 1 ;;
   esac
   if [ "$APPROVE" -eq 1 ]; then
-    log "scanning for held runs on $pr"
+    log "scanning for held runs on $pr (all head SHAs, incl. superseded pushes)"
     while IFS=$'\t' read -r rid name ev st co att; do
       [ -n "$rid" ] || continue
       is_held "$st" "$co" && approve_run "$rid" || :
-    done < <(runs_for_sha "$(gh pr view "$pr" -R "$REPO" --json headRefOid -q .headRefOid)")
+    done < <(runs_for_pr "$pr")
     v="$(pr_snapshot "$pr")"
     log "PR #$pr state after approval pass: $v"
   fi
@@ -409,7 +457,7 @@ cmd_pr() {
           while IFS=$'\t' read -r rid name ev st co att; do
             [ -n "$rid" ] || continue
             is_held "$st" "$co" && approve_run "$rid" || :
-          done < <(runs_for_sha "$(gh pr view "$pr" -R "$REPO" --json headRefOid -q .headRefOid)")
+          done < <(runs_for_pr "$pr")
         fi ;;
     esac
   done

@@ -14,6 +14,8 @@
 // marked TODO(#212). Slice/export paths throw instead of fake success.
 
 #include <android/log.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
@@ -21,10 +23,15 @@
 #include <fstream>
 #include <memory>
 #include <numbers>
+#include <sstream>
 #include <string>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include <jni.h>
+
+#include <GLES3/gl3.h>
 
 #include "Slic3r/Domain/Model.hpp"
 #include "Slic3r/Domain/ModelObject.hpp"
@@ -33,7 +40,10 @@
 #include "Slic3r/Domain/TriangleMesh.hpp"
 #include "Slic3r/Domain/CutConnector.hpp"
 #include "Slic3r/Domain/LayerHeightProfile.hpp"
+#include "Slic3r/Domain/ConfigDefsFDM.hpp"
+#include "Slic3r/Domain/ConfigValue.hpp"
 #include "farm_driver.hpp"
+#include "farm_progress.hpp"
 #include "Slic3r/Biz/FileLoadingLogic.hpp"
 #include "Slic3r/Biz/Algorithms/Model.hpp"
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
@@ -41,6 +51,13 @@
 #include "Slic3r/Biz/Algorithms/TriangleSelector.hpp"
 #include "Slic3r/Biz/Algorithms/AABBMesh.hpp"
 #include "Slic3r/Biz/Utils/CutUtils.hpp"
+// Genuine upstream place-on-face plane builder (PrusaSlicer 3.0, compiled into
+// libfarm by app/CMakeLists.txt from the fetched 3.0 source tree) and the
+// genuine upstream auto-orienter (vendored PrusaSlicer 2.x AutoOrienter, ported
+// to 3.0 mesh types).
+#include "Slic3r/App/Plater/PlaceOnFaceGizmoPlanes.hpp"
+#include "Slic3r/Biz/Arrange/Arrange.hpp"
+#include "farm_orient.hpp"
 
 namespace Domain  = Slic3r::Domain;
 namespace BizAlgo = Slic3r::Biz::Algorithms;
@@ -55,10 +72,21 @@ using Domain::TriangleSelector::TriangleStateType;
 // for mesh draw + raycast, GLShaderProgram for program lifecycle, and
 // bed_utils.hpp for the plate/gridline/contour builders.
 #include "Slic3r/Biz/Algorithms/Scaling.hpp"
+#include "Slic3r/Biz/Algorithms/Color.hpp"
+#include "Slic3r/Biz/libpgcode/Processor.hpp"
+#include "Slic3r/Biz/libpgcode/ProcessorConfig.hpp"
+#include "Slic3r/Biz/libpgcode/ProcessorResult.hpp"
+#include "Slic3r/Biz/libpgcode/Types.hpp"
+#include "Slic3r/Domain/Color.hpp"
+#include "Slic3r/Domain/GCodeExtrusionRole.hpp"
 #include "render/GLShader.hpp"
 #include "render/Program.hpp"   // declares Slic3r::get_current_shader() (defined below)
 #include "render/GLModel.hpp"
 #include "render/bed_utils.hpp"
+#include "Viewer.hpp"
+#include "GCodeInputData.hpp"
+#include "PathVertex.hpp"
+#include "Types.hpp"
 
 #define LOG_TAG "NativeCut"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
@@ -93,6 +121,9 @@ struct GLModelRef {
     Domain::TriangleMesh mesh;
     std::unique_ptr<Slic3r::AABBMesh> emesh;
     std::vector<Domain::Vec3f> normals;
+    // Lay-flat plane overlay (model_create_flatten_planes): outward face normal.
+    Domain::Vec3f plane_normal = Domain::Vec3f(0, 0, 1);
+    bool has_plane_normal = false;
 };
 // Bed visuals: scaled contour + print height parsed from the app's legacy INI
 // (bed_shape/max_print_height), and the three GL models Bed3D renders
@@ -107,26 +138,176 @@ struct FarmBedRef {
     std::unique_ptr<GLModelRef> gridlines;
     std::unique_ptr<GLModelRef> contourlines;
 };
-// TODO(#212): opaque until the gcode preview stack ports to 3.0.
+// Real native gcode preview: the vendored libvgcode viewer renders parsed
+// libpgcode moves. GCodeResultRef owns one parsed result; GCodeViewerRef owns
+// the viewer plus the last input data handed to Viewer::load().
+namespace farm_vgcode {
+
+using PgMoveType = Slic3r::Biz::libpgcode::MoveType;
+using PgMoveVertex = Slic3r::Biz::libpgcode::MoveVertex;
+using PgProcessor = Slic3r::Biz::libpgcode::Processor;
+using PgProcessorConfig = Slic3r::Biz::libpgcode::ProcessorConfig;
+using PgProcessorResult = Slic3r::Biz::libpgcode::ProcessorResult;
+
+libvgcode::Vec3 vgcode_convert_position(const Domain::Vec3f& v) {
+    return {v.x(), v.y(), v.z()};
+}
+
+libvgcode::EGCodeExtrusionRole vgcode_convert_role(Domain::GCodeExtrusionRole role) {
+    switch (role) {
+        case Domain::GCodeExtrusionRole::None: return libvgcode::EGCodeExtrusionRole::None;
+        case Domain::GCodeExtrusionRole::Perimeter: return libvgcode::EGCodeExtrusionRole::Perimeter;
+        case Domain::GCodeExtrusionRole::ExternalPerimeter: return libvgcode::EGCodeExtrusionRole::ExternalPerimeter;
+        case Domain::GCodeExtrusionRole::OverhangPerimeter: return libvgcode::EGCodeExtrusionRole::OverhangPerimeter;
+        case Domain::GCodeExtrusionRole::InternalInfill: return libvgcode::EGCodeExtrusionRole::InternalInfill;
+        case Domain::GCodeExtrusionRole::SolidInfill: return libvgcode::EGCodeExtrusionRole::SolidInfill;
+        case Domain::GCodeExtrusionRole::TopSolidInfill: return libvgcode::EGCodeExtrusionRole::TopSolidInfill;
+        case Domain::GCodeExtrusionRole::Ironing: return libvgcode::EGCodeExtrusionRole::Ironing;
+        case Domain::GCodeExtrusionRole::BridgeInfill: return libvgcode::EGCodeExtrusionRole::BridgeInfill;
+        case Domain::GCodeExtrusionRole::GapFill: return libvgcode::EGCodeExtrusionRole::GapFill;
+        case Domain::GCodeExtrusionRole::Skirt: return libvgcode::EGCodeExtrusionRole::Skirt;
+        case Domain::GCodeExtrusionRole::SupportMaterial: return libvgcode::EGCodeExtrusionRole::SupportMaterial;
+        case Domain::GCodeExtrusionRole::SupportMaterialInterface: return libvgcode::EGCodeExtrusionRole::SupportMaterialInterface;
+        case Domain::GCodeExtrusionRole::WipeTower: return libvgcode::EGCodeExtrusionRole::WipeTower;
+        case Domain::GCodeExtrusionRole::Custom: return libvgcode::EGCodeExtrusionRole::Custom;
+        default: return libvgcode::EGCodeExtrusionRole::None;
+    }
+}
+
+libvgcode::EMoveType vgcode_convert_move_type(PgMoveType type) {
+    switch (type) {
+        case PgMoveType::Noop: return libvgcode::EMoveType::Noop;
+        case PgMoveType::Retract: return libvgcode::EMoveType::Retract;
+        case PgMoveType::Unretract: return libvgcode::EMoveType::Unretract;
+        case PgMoveType::Seam: return libvgcode::EMoveType::Seam;
+        case PgMoveType::ToolChange: return libvgcode::EMoveType::ToolChange;
+        case PgMoveType::ColorChange: return libvgcode::EMoveType::ColorChange;
+        case PgMoveType::PausePrint: return libvgcode::EMoveType::PausePrint;
+        case PgMoveType::CustomGCode: return libvgcode::EMoveType::CustomGCode;
+        case PgMoveType::Travel: return libvgcode::EMoveType::Travel;
+        case PgMoveType::Wipe: return libvgcode::EMoveType::Wipe;
+        case PgMoveType::Extrude: return libvgcode::EMoveType::Extrude;
+        case PgMoveType::Flush: return libvgcode::EMoveType::CustomGCode;
+        default: return libvgcode::EMoveType::Noop;
+    }
+}
+
+libvgcode::Color vgcode_convert_color(const std::string& color_str) {
+    Domain::ColorRGBA color;
+    if (Slic3r::Biz::Algorithms::Color::decode_color(color_str, color)) {
+        return {color.r_uchar(), color.g_uchar(), color.b_uchar()};
+    }
+    return libvgcode::DUMMY_COLOR;
+}
+
+// Matches the old 2.x conversion: phantom vertices let libvgcode detect path
+// boundaries for travels/wipes/options whose role/type changes.
+libvgcode::GCodeInputData vgcode_convert_input_data(const PgProcessorResult& result) {
+    libvgcode::GCodeInputData out;
+    out.spiral_vase_mode = result.spiral_vase_enabled;
+
+    out.tools_colors.reserve(result.extruder_str_colors.size());
+    for (const std::string& color : result.extruder_str_colors) {
+        out.tools_colors.emplace_back(vgcode_convert_color(color));
+    }
+    const std::vector<std::string> print_colors = result.color_strings_for_color_print();
+    const std::vector<std::string>& color_source = print_colors.empty() ? result.extruder_str_colors : print_colors;
+    out.color_print_colors.reserve(color_source.size());
+    for (const std::string& color : color_source) {
+        out.color_print_colors.emplace_back(vgcode_convert_color(color));
+    }
+
+    const std::shared_ptr<const Slic3r::Biz::libpgcode::MoveVertices> moves = result.const_moves();
+    if (moves == nullptr || moves->size() < 2) return out;
+    out.vertices.reserve(2 * moves->size());
+    for (size_t i = 1; i < moves->size(); ++i) {
+        const PgMoveVertex& curr = (*moves)[i];
+        const PgMoveVertex& prev = (*moves)[i - 1];
+        const libvgcode::EMoveType curr_type = vgcode_convert_move_type(curr.type);
+        const libvgcode::EOptionType option_type = libvgcode::move_type_to_option(curr_type);
+        if (option_type == libvgcode::EOptionType::COUNT || option_type == libvgcode::EOptionType::Travels ||
+            option_type == libvgcode::EOptionType::Wipes) {
+            if (out.vertices.empty() || prev.type != curr.type || prev.extrusion_role != curr.extrusion_role) {
+                libvgcode::PathVertex vertex = {
+                    vgcode_convert_position(prev.position), curr.height, curr.width, curr.feedrate, prev.actual_feedrate,
+                    curr.mm3_per_mm, curr.fan_speed, curr.temperature, vgcode_convert_role(curr.extrusion_role), curr_type,
+                    curr.gcode_id, curr.layer_id, curr.extruder_id, curr.cp_color_id, -1, {0.0f, 0.0f}};
+                out.vertices.emplace_back(vertex);
+            }
+        }
+        libvgcode::PathVertex vertex = {
+            vgcode_convert_position(curr.position), curr.height, curr.width, curr.feedrate, curr.actual_feedrate,
+            curr.mm3_per_mm, curr.fan_speed, curr.temperature, vgcode_convert_role(curr.extrusion_role), curr_type,
+            curr.gcode_id, curr.layer_id, curr.extruder_id, curr.cp_color_id, -1, {curr.time[0], curr.time[1]}};
+        out.vertices.emplace_back(vertex);
+    }
+    out.vertices.shrink_to_fit();
+    return out;
+}
+
+std::string vgcode_read_file(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) throw std::runtime_error("cannot open gcode file: " + path);
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
+
+// Parse a gcode file with the 3.0 libpgcode processor (the successor of the
+// 2.x GCodeProcessor::process_file/extract_result pair). Throws std::exception
+// on IO/parse failure; never returns a half-parsed result.
+std::unique_ptr<PgProcessorResult> vgcode_parse_gcode_file(const std::string& path) {
+    std::string gcode = vgcode_read_file(path);
+    const Slic3r::Biz::libpgcode::GCodeProducer producer =
+        Slic3r::Biz::libpgcode::detect_producer(gcode);
+    // Diagnostic context for any libassert abort inside the parse
+    // (uncatchable SIGABRT): log the flavor comment up front.
+    std::string flavor = "<none>";
+    {
+        const char* key = "gcode_flavor";
+        size_t pos = gcode.find(key);
+        if (pos != std::string::npos) {
+            size_t end = gcode.find('\n', pos);
+            flavor = gcode.substr(pos, end == std::string::npos ? 64 : std::min(end - pos, (size_t) 64));
+        }
+    }
+    LOGD("vgcode_parse: path=%s bytes=%zu producer=%d flavor=[%s]", path.c_str(), gcode.size(),
+        (int) producer, flavor.c_str());
+    PgProcessorConfig config;
+    config.reset();
+    config.producer = producer;
+    // NOTE: never call extract_processor_config_from_*_gcode here. Upstream
+    // ends the PrusaSlicer extractor with an unconditional PANIC("Must load
+    // hw config!") — libassert aborts even in release, an uncatchable SIGABRT
+    // on the slice thread (device crash, proven by disassembly + the 20-char
+    // panic message in two crash dumps). Default config is what the 2.x
+    // GCodeProcessor path used; time estimates stay approximate.
+    PgProcessor processor(std::move(config));
+    processor.process_buffer(std::move(gcode));
+    return std::make_unique<PgProcessorResult>(processor.finalize());
+}
+
+} // namespace farm_vgcode
+
 struct GCodeViewerRef {
+    libvgcode::Viewer viewer;
+    libvgcode::GCodeInputData data;
     bool initialized = false;
 };
 struct GCodeResultRef {
     std::string name;
     farm::RoleFilamentStats per_role; // Java GCodeViewer.ExtrusionRole int -> (mm, g)
+    std::unique_ptr<farm_vgcode::PgProcessorResult> parsed;
 };
 // TODO(#212): opaque until Java passes JSON presets (Biz::Config::load_preset_and_config).
 struct ConfigRef {
     bool unused = false;
 };
 
-static jclass sliceListenerClass;
-static jmethodID sliceListenerOnProgress;
+static JavaVM* staticVM;
 
 static jclass shadersManagerClass = nullptr;
 static jmethodID shadersManagerGetCurrent = nullptr;
-
-static JavaVM* staticVM;
 
 // The Java GLShadersManager owns the programs (built via shader_init_from_texts)
 // and tracks GLES30.glGetIntegerv(GL_CURRENT_PROGRAM); ask it for the matching
@@ -159,9 +340,6 @@ extern "C" {
 
         staticVM = vm;
 
-        sliceListenerClass = env->FindClass("com/flashforge/farm/slic3r/SliceListener");
-        sliceListenerOnProgress = env->GetMethodID(sliceListenerClass, "onProgress", "(ILjava/lang/String;)V");
-
         shadersManagerClass = static_cast<jclass>(env->NewGlobalRef(env->FindClass("com/flashforge/farm/slic3r/GLShadersManager")));
         shadersManagerGetCurrent = env->GetStaticMethodID(shadersManagerClass, "getCurrentShaderPointer", "()J");
 
@@ -176,11 +354,522 @@ extern "C" {
         env->ReleaseStringUTFChars(path, chars);
     }
 
+    // Maps a 3.0 ConfigItemDef onto the legacy
+    // com/flashforge/farm/slic3r/ConfigOptionDef shape the settings UI is
+    // written against.
+    //
+    // The UI asks the engine for a def per option key. While this function was
+    // a stub, every lookup returned null and ProfileListFragment.OptionElement
+    // substituted a 0x0 SpaceItem, so the printer/filament/print config
+    // screens rendered rows with a label but no value widget and nothing
+    // tappable. Populating the defs restores them.
+    static const char* config_option_gui_type(Slic3r::Domain::ConfigItemDef::GUIType gt) {
+        using GT = Slic3r::Domain::ConfigItemDef::GUIType;
+        switch (gt) {
+        case GT::i_enum_open:
+        case GT::f_enum_open: return "i_enum_open";
+        case GT::s_enum_open:
+        case GT::extruder_selection:
+        case GT::language_selection: return "select_open";
+        case GT::color: return "color";
+        case GT::one_string: return "one_string";
+        case GT::select_close: return "select_close";
+        case GT::password: return "password";
+        default: return nullptr; // the ConfigOptionType drives these, not the gui type
+        }
+    }
+
+    // Renders a ConfigValue the way the settings UI spells it.
+    //
+    // ConfigValue exposes no serialized string, so visit the variant. Formats
+    // follow the engine's own GUI controls (ConfigItemControl.cpp:121-124):
+    // percentages as "<n> %", everything else via plain stream formatting.
+    //
+    // The two enum wrappers are handled by name, not by member probing:
+    // EnumWrapper exposes get_string() (the EnumValueDef str_serialized, i.e.
+    // the profile spelling) and EnumVectorWrapper exposes get_strings().
+    // Neither is constructible into a ConfigValue, so the vector fallback must
+    // not round-trip elements back through the ConfigValue constructor.
+    static std::string config_value_to_string(const Domain::ConfigValue& v) {
+        return v.visit([](const auto& val) -> std::string {
+            using T = std::decay_t<decltype(val)>;
+            std::ostringstream os;
+            if constexpr (std::is_same_v<T, Domain::EnumWrapper>) {
+                return std::string(val.get_string());
+            } else if constexpr (std::is_same_v<T, Domain::EnumVectorWrapper>) {
+                std::string out;
+                for (auto s : val.get_strings()) {
+                    if (!out.empty()) out += ",";
+                    out += s;
+                }
+                return out;
+            } else if constexpr (std::is_same_v<T, std::string>) {
+                return val;
+            } else if constexpr (std::is_same_v<T, bool>) {
+                return val ? "1" : "0";
+            } else if constexpr (std::is_same_v<T, int>) {
+                return std::to_string(val);
+            } else if constexpr (std::is_same_v<T, double>) {
+                os << val;
+                return os.str();
+            } else if constexpr (std::is_same_v<T, Domain::Vec2d>) {
+                os << val.x() << "x" << val.y();
+                return os.str();
+            } else if constexpr (std::is_same_v<T, Domain::Percentage>) {
+                os << val.value << " %";
+                return os.str();
+            } else if constexpr (std::is_same_v<T, Domain::FloatOrPercentage>) {
+                if (val.is_percentage()) os << val.percentage().value << " %";
+                else os << val.float_value();
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    os << val[i];
+                }
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<bool>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    os << (val[i] ? "1" : "0");
+                }
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<int>> ||
+                                 std::is_same_v<T, std::vector<std::optional<int>>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    if constexpr (std::is_same_v<T, std::vector<std::optional<int>>>)
+                        os << (val[i] ? std::to_string(*val[i]) : std::string());
+                    else
+                        os << val[i];
+                }
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<double>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    os << val[i];
+                }
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<Domain::Vec2d>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    os << val[i].x() << "x" << val[i].y();
+                }
+                return os.str();
+            } else if constexpr (std::is_same_v<T, std::vector<Domain::FloatOrPercentage>> ||
+                                 std::is_same_v<T, std::vector<Domain::Percentage>>) {
+                for (size_t i = 0; i < val.size(); ++i) {
+                    if (i) os << ",";
+                    os << config_value_to_string(Domain::ConfigValue(val[i]));
+                }
+                return os.str();
+            } else {
+                return std::string();
+            }
+        });
+    }
+
+    static const char* config_option_type(const Slic3r::Domain::ConfigItemDef& d) {
+        // ConfigItemDef::type is a const std::type_info*; compare the pointee,
+        // matching how the engine itself tests it (ConfigDef.cpp:442).
+        if (d.type == nullptr) return "NONE";
+        const std::type_info& t = *d.type;
+        // EnumWrapper/EnumVectorWrapper are the enum marker. Do NOT use
+        // d.choices to detect enums: only 8 defs populate that, while every
+        // real enum (seam_position, ironing_type, arc_fitting, ...) carries
+        // its values in EnumValueDefs attached to init_fn instead.
+        if (t == typeid(Domain::EnumWrapper) || t == typeid(Domain::EnumVectorWrapper)) return "ENUM";
+        if (!d.choices.empty()) return "ENUM";
+        if (t == typeid(bool)) return "BOOL";
+        if (t == typeid(int)) return "INT";
+        if (t == typeid(double)) return "FLOAT";
+        if (t == typeid(std::string)) return "STRING";
+        if (t == typeid(std::vector<bool>)) return "BOOLS";
+        if (t == typeid(std::vector<int>)) return "INTS";
+        if (t == typeid(std::vector<double>)) return "FLOATS";
+        if (t == typeid(std::vector<std::string>)) return "STRINGS";
+        // NOTE: Domain::Vec2d is an alias template (Advanced::Vec<double, 2>),
+        // so typeid() on it does not name a complete type and fails to compile.
+        // Upstream never typeid's it either -- it matches Vec2d through the
+        // variant's alternatives instead. The only Vec2d options (points,
+        // bed_shape) are both edited as text, so the STRING fallback below
+        // handles them correctly.
+        if (t == typeid(Domain::FloatOrPercentage)) return "FLOAT";
+        if (t == typeid(Domain::Percentage)) return "PERCENT";
+        return "STRING";
+    }
+
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_get_1print_1config_1def(JNIEnv *env, jclass, jobject def) {
-        // TODO(#212): the legacy PrintConfigDef/ConfigOptionDef enum system is gone;
-        // exposing Domain::ConfigDef FDM schema to Java needs #212 schema design.
-        (void) env; (void) def;
-        LOGD("get_print_config_def: stub, 3.0 ConfigDef mapping pending");
+        // Diagnostics: native logcat output is not visible on-device (only
+        // Java Log.* reaches logcat), so the bridge writes its outcome into
+        // diagEmitted/diagStatus fields on the def object and Java relays it.
+        auto diag = [&](jint emitted, const char* status) -> void {
+            jclass dc = env->GetObjectClass(def);
+            jfieldID fe = env->GetFieldID(dc, "diagEmitted", "I");
+            jfieldID fs = env->GetFieldID(dc, "diagStatus", "Ljava/lang/String;");
+            if (fe != nullptr) env->SetIntField(def, fe, emitted);
+            if (fs != nullptr) {
+                jstring st = env->NewStringUTF(status);
+                env->SetObjectField(def, fs, st);
+                env->DeleteLocalRef(st);
+            }
+            env->DeleteLocalRef(dc);
+            if (env->ExceptionCheck()) env->ExceptionClear();
+            // logcat is rotated/filtered on this device, so also append the
+            // bridge outcome to a file in the app's private dir that can be
+            // pulled with "adb shell run-as com.flashforge.farm cat files/farm_bridge.log".
+            int fd = open("/data/data/com.flashforge.farm/files/farm_bridge.log",
+                          O_WRONLY | O_CREAT | O_APPEND, 0644);
+            if (fd >= 0) {
+                char line[560];
+                int n = snprintf(line, sizeof(line), "emitted=%d status=%s\n", (int)emitted, status);
+                if (n > 0) (void)!write(fd, line, (size_t)n);
+                close(fd);
+            }
+        };
+        jclass defCls = env->GetObjectClass(def);
+        jmethodID addOption = env->GetMethodID(defCls, "addOption",
+                                              "(Ljava/lang/String;Lcom/flashforge/farm/slic3r/ConfigOptionDef;)V");
+        // Resolve app classes through the loader that owns `def`. A bare
+        // FindClass on a non-main thread uses the SYSTEM classloader, which
+        // cannot see com.flashforge.farm.* -- FarmApp calls this while
+        // generating the config on a worker thread, so FindClass would fail
+        // and the defs would silently come back empty.
+        // Class resolution is the part that keeps failing, and the previous
+        // diag collapsed six possible nulls into one string. Track every stage
+        // separately and preserve the exception text at the exact failing
+        // stage (it is cleared before anyone reads it otherwise).
+        jclass optCls = nullptr, typeCls = nullptr, guiCls = nullptr;
+        bool loaderCls_ok = false, loadClass_ok = false, getLoader_ok = false, loader_ok = false, load_ok = true;
+        char loadErr[256] = {0};
+        {
+            jclass loaderCls = env->FindClass("java/lang/ClassLoader");
+            loaderCls_ok = (loaderCls != nullptr);
+            if (loaderCls_ok) {
+                jmethodID loadClass = env->GetMethodID(loaderCls, "loadClass",
+                                                      "(Ljava/lang/String;)Ljava/lang/Class;");
+                loadClass_ok = (loadClass != nullptr);
+                // getClassLoader() is declared on java.lang.Class, NOT on the
+                // app class, so the method id must come from java.lang.Class
+                // and be invoked on defCls (the class object) as the receiver.
+                jclass clsCls = env->FindClass("java/lang/Class");
+                jmethodID getLoader = (clsCls != nullptr)
+                    ? env->GetMethodID(clsCls, "getClassLoader",
+                                       "()Ljava/lang/ClassLoader;") : nullptr;
+                getLoader_ok = (getLoader != nullptr);
+                if (clsCls != nullptr) env->DeleteLocalRef(clsCls);
+                jobject loader = (loadClass_ok && getLoader_ok)
+                    ? env->CallObjectMethod(defCls, getLoader) : nullptr;
+                if (env->ExceptionCheck()) env->ExceptionClear();
+                loader_ok = (loader != nullptr);
+                if (loader_ok) {
+                    // Exception must be captured here: the helper below clears
+                    // it before returning null so the caller can keep going.
+                    auto load = [&](const char* name) -> jclass {
+                        jstring n = env->NewStringUTF(name);
+                        jclass c = static_cast<jclass>(env->CallObjectMethod(loader, loadClass, n));
+                        env->DeleteLocalRef(n);
+                        if (env->ExceptionCheck()) {
+                            jthrowable ex = env->ExceptionOccurred();
+                            env->ExceptionClear();
+                            jclass climse = env->GetObjectClass(ex);
+                            jmethodID toStr = env->GetMethodID(climse, "toString", "()Ljava/lang/String;");
+                            if (toStr != nullptr) {
+                                jstring s = static_cast<jstring>(env->CallObjectMethod(ex, toStr));
+                                if (s != nullptr) {
+                                    const char* cmsg = env->GetStringUTFChars(s, nullptr);
+                                    if (cmsg != nullptr) {
+                                        snprintf(loadErr, sizeof(loadErr), "%s -> %s",
+                                                 name, cmsg);
+                                        env->ReleaseStringUTFChars(s, cmsg);
+                                    }
+                                }
+                                env->DeleteLocalRef(s);
+                            }
+                            env->DeleteLocalRef(climse);
+                            env->DeleteLocalRef(ex);
+                            load_ok = false;
+                            return nullptr;
+                        }
+                        return c;
+                    };
+                    optCls = load("com.flashforge.farm.slic3r.ConfigOptionDef");
+                    typeCls = load("com.flashforge.farm.slic3r.ConfigOptionDef$ConfigOptionType");
+                    guiCls = load("com.flashforge.farm.slic3r.ConfigOptionDef$GUIType");
+                    env->DeleteLocalRef(loader);
+                }
+            }
+            if (env->ExceptionCheck()) env->ExceptionClear();
+            if (loaderCls != nullptr) env->DeleteLocalRef(loaderCls);
+        }
+        {
+            const char* missing = nullptr;
+            if (addOption == nullptr) missing = "addOption";
+            else if (optCls == nullptr) missing = "ConfigOptionDef";
+            else if (typeCls == nullptr) missing = "ConfigOptionType";
+            else if (guiCls == nullptr) missing = "GUIType";
+            if (missing != nullptr) {
+                char why[512] = {0};
+                if (missing[0] != 0 && strlen(loadErr) > 0)
+                    snprintf(why, sizeof(why), "%s; %s", missing, loadErr);
+                else
+                    snprintf(why, sizeof(why),
+                        "%s (loaderCls_ok=%d loadClass_ok=%d getLoader_ok=%d loader_ok=%d load_ok=%d)",
+                        missing, (int)loaderCls_ok, (int)loadClass_ok, (int)getLoader_ok,
+                        (int)loader_ok, (int)load_ok);
+                LOGE("get_print_config_def: %s", why);
+                diag(-1, why);
+                return;
+            }
+        }
+        jmethodID typeOf = env->GetStaticMethodID(typeCls, "valueOf",
+            "(Ljava/lang/String;)Lcom/flashforge/farm/slic3r/ConfigOptionDef$ConfigOptionType;");
+        jmethodID guiOf = env->GetStaticMethodID(guiCls, "valueOf",
+            "(Ljava/lang/String;)Lcom/flashforge/farm/slic3r/ConfigOptionDef$GUIType;");
+        jmethodID optCtor = env->GetMethodID(optCls, "<init>", "()V");
+        if (typeOf == nullptr || guiOf == nullptr || optCtor == nullptr) {
+            env->ExceptionClear();
+            LOGE("get_print_config_def: enum valueOf/opt ctor not found");
+            diag(-2, "valueOf/opt ctor not found");
+            return;
+        }
+
+        // Field ids are cached: reflection per option across a few hundred
+        // defs is measurably slow on a phone.
+        struct Fields {
+            jfieldID key, type, guiType, label, fullLabel, category, optionGroup, tooltip,
+                      sidetext, multiline, fullWidth, height,
+                      min, max, defaultValue, enumLabels, enumValues;
+        };
+        Fields f{};
+        const std::pair<const char*, const char*> field_specs[] = {
+            { "key",          "Ljava/lang/String;" },
+            { "type",         "Lcom/flashforge/farm/slic3r/ConfigOptionDef$ConfigOptionType;" },
+            { "guiType",      "Lcom/flashforge/farm/slic3r/ConfigOptionDef$GUIType;" },
+            { "label",        "Ljava/lang/String;" },
+            { "fullLabel",    "Ljava/lang/String;" },
+            { "category",     "Ljava/lang/String;" },
+            { "optionGroup",  "Ljava/lang/String;" },
+            { "tooltip",      "Ljava/lang/String;" },
+            { "sidetext",     "Ljava/lang/String;" },
+            { "multiline",    "Z" },
+            { "fullWidth",    "Z" },
+            { "height",       "I" },
+            { "min",          "F" },
+            { "max",          "F" },
+            { "defaultValue", "Ljava/lang/String;" },
+            { "enumLabels",   "[Ljava/lang/String;" },
+            { "enumValues",   "[Ljava/lang/String;" },
+        };
+jfieldID* slots[] = { &f.key, &f.type, &f.guiType, &f.label, &f.fullLabel, &f.category,
+                      &f.optionGroup, &f.tooltip, &f.sidetext, &f.multiline, &f.fullWidth, &f.height,
+                      &f.min, &f.max, &f.defaultValue, &f.enumLabels, &f.enumValues };
+        for (size_t i = 0; i < sizeof(field_specs) / sizeof(field_specs[0]); ++i) {
+            *slots[i] = env->GetFieldID(optCls, field_specs[i].first, field_specs[i].second);
+            if (*slots[i] == nullptr) {
+                env->ExceptionClear();
+                LOGE("get_print_config_def: field '%s' missing", field_specs[i].first);
+                char buf[128]; snprintf(buf, sizeof(buf), "field '%s' missing", field_specs[i].first);
+                diag(-3, buf);
+                return;
+            }
+        }
+
+        // A native frame bounds the JNI local-reference table. Without one,
+        // looping the FDM schema (several hundred defs, each creating several
+        // local refs) exhausts the table, at which point the runtime starts
+        // handing back null and the process dies with SIGSEGV on a null
+        // deref. 512 is the guaranteed minimum the spec requires.
+        if (env->PushLocalFrame(512) != 0) {
+            LOGE("get_print_config_def: PushLocalFrame failed");
+            diag(-4, "PushLocalFrame failed");
+            return;
+        }
+
+        size_t emitted = 0;
+        try {
+            for (const auto& d : Slic3r::Domain::get_defs_fdm().defs()) {
+                // Crash hunting: the def loop now runs for the first time
+                // (class resolution was broken until #310) and dies with a
+                // SEGV_MAPERR on a null memcpy. Write progress per iteration
+                // so the crash dump's tail names the exact def that faults.
+                {
+                    char prog[350];
+                    int pn = snprintf(prog, sizeof(prog), "PROGRESS emitted=%zu name=%s\n",
+                                      emitted, d.name.c_str());
+                    int pfd = open("/data/data/com.flashforge.farm/files/farm_bridge.log",
+                                   O_WRONLY | O_CREAT | O_APPEND, 0644);
+                    if (pfd >= 0) {
+                        if (pn > 0) (void)!write(pfd, prog, (size_t)pn);
+                        close(pfd);
+                    }
+                }
+                if (d.name.empty()) continue;
+                jobject o = env->NewObject(optCls, optCtor);
+                if (o == nullptr) { env->ExceptionClear(); continue; }
+
+                auto setStr = [&](jfieldID id, const std::string& v) {
+                    if (v.empty()) return;
+                    jstring s = env->NewStringUTF(v.c_str());
+                    env->SetObjectField(o, id, s);
+                    env->DeleteLocalRef(s);
+                };
+
+                setStr(f.key, d.name);
+                setStr(f.label, d.label);
+                setStr(f.fullLabel, d.full_label);
+                setStr(f.tooltip, d.tooltip);
+                if (!d.units.empty()) setStr(f.sidetext, d.units.front());
+                env->SetBooleanField(o, f.multiline, d.multiline ? JNI_TRUE : JNI_FALSE);
+                env->SetBooleanField(o, f.fullWidth, d.full_width ? JNI_TRUE : JNI_FALSE);
+                if (d.height > 0) env->SetIntField(o, f.height, d.height);
+                if (d.min) env->SetFloatField(o, f.min, static_cast<float>(*d.min));
+                if (d.max) env->SetFloatField(o, f.max, static_cast<float>(*d.max));
+
+                if (d.category != Slic3r::Domain::ConfigItemDef::Category::Unknown) {
+                    using Cat = Slic3r::Domain::ConfigItemDef::Category;
+                    const char* cat = nullptr;
+                    switch (d.category) {
+                    case Cat::Print_LayersSurfaces:     cat = "Layers and Perimeters"; break;
+                    case Cat::Print_WallsPerimeters:     cat = "Quality"; break;
+                    case Cat::Print_Infill:              cat = "Infill"; break;
+                    case Cat::Print_BedAdhesion:         cat = "Bed adhesion"; break;
+                    case Cat::Print_Supports:            cat = "Support material"; break;
+                    case Cat::Print_Speed:               cat = "Speed"; break;
+                    case Cat::Print_MotionDynamics:      cat = "Dynamic speed"; break;
+                    case Cat::Print_ExtrusionRetraction: cat = "Extrusion & retraction"; break;
+                    case Cat::Print_MultiMaterial:       cat = "Multiple objects"; break;
+                    case Cat::Print_PrecisionSlicing:    cat = "Precision"; break;
+                    case Cat::Print_CustomGCode:         cat = "Custom G-code"; break;
+                    case Cat::Print_Pad:                 cat = "Pad"; break;
+                    case Cat::Print_Hollowing:           cat = "Hollowing"; break;
+                    case Cat::Print_OutputOptions:       cat = "Output options"; break;
+                    case Cat::Print_Notes:               cat = "Notes"; break;
+                    case Cat::Filament_MaterialTemperatures:   cat = "Filament temperatures"; break;
+                    case Cat::Filament_ExtrusionCalibration:  cat = "Extrusion"; break;
+                    case Cat::Filament_Cooling:                cat = "Cooling"; break;
+                    case Cat::Filament_MultiMaterial:          cat = "Filament"; break;
+                    case Cat::Filament_Overrides:              cat = "Filament overrides"; break;
+                    case Cat::Filament_CustomGCode:            cat = "Custom G-code"; break;
+                    case Cat::Filament_MaterialPrintingProfile: cat = "Material"; break;
+                    case Cat::Filament_Notes:                   cat = "Notes"; break;
+                    case Cat::Filament_Dependencies:            cat = "Filament dependencies"; break;
+                    case Cat::Printer_General:              cat = "General"; break;
+                    case Cat::Printer_Bed:                   cat = "Print bed"; break;
+                    case Cat::Printer_CustomGCode:           cat = "Custom G-code"; break;
+                    case Cat::Printer_MachineLimits:         cat = "Machine limits"; break;
+                    case Cat::Printer_MultipleExtruders:     cat = "Extruders"; break;
+                    case Cat::Printer_SingleExtruderMMSetup: cat = "Extruders"; break;
+                    case Cat::Printer_Notes:                 cat = "Notes"; break;
+                    case Cat::Object_Extruders:              cat = "Per object"; break;
+                    case Cat::Volume_WipeOptions:            cat = "Volume modifiers"; break;
+                    case Cat::AppConfig_General:             cat = "General"; break;
+                    case Cat::AppConfig_Services:            cat = "Services"; break;
+                    case Cat::PhysicalPrinter_General:       cat = "General"; break;
+                    case Cat::Hidden:                        cat = "Hidden"; break;
+                    default:                                 cat = "Other"; break;
+                    }
+setStr(f.category, cat);
+                 }
+                 
+                 // Set option group using the engine's translation
+                 if (d.option_group != Slic3r::Domain::ConfigItemDef::OptionGroup::Unknown) {
+                     std::string option_group_str = Slic3r::Domain::ConfigItemDef::translate_option_group(d.option_group);
+                     setStr(f.optionGroup, option_group_str);
+                 } else {
+                     setStr(f.optionGroup, "");
+                 }
+                 
+                 jstring tName = env->NewStringUTF(config_option_type(d));
+                jobject tObj = env->CallStaticObjectMethod(typeCls, typeOf, tName);
+                env->DeleteLocalRef(tName);
+                if (tObj != nullptr) { env->SetObjectField(o, f.type, tObj); env->DeleteLocalRef(tObj); }
+                else env->ExceptionClear();
+
+                if (const char* gt = config_option_gui_type(d.gui_type)) {
+                    jstring gName = env->NewStringUTF(gt);
+                    jobject gObj = env->CallStaticObjectMethod(guiCls, guiOf, gName);
+                    env->DeleteLocalRef(gName);
+                    if (gObj != nullptr) { env->SetObjectField(o, f.guiType, gObj); env->DeleteLocalRef(gObj); }
+                    else env->ExceptionClear();
+                }
+
+                // Default value. ConfigValue exposes no serialized string, so
+                // visit the variant and render the same form the profile files
+                // carry (scalars plain, vectors comma-joined).
+                // Enum choices. d.choices is only populated for a handful of
+                // defs; real enums keep their values in the EnumValueDefs the
+                // init_fn closed over, reachable through the EnumWrapper's
+                // def(). Populate from whichever is available, otherwise the
+                // UI's single-choice dialog has no items to show.
+                std::vector<std::pair<std::string, std::string>> choice_pairs; // (value, label)
+                for (const auto& c : d.choices) {
+                    const std::string vs = std::visit([](const auto& val) -> std::string {
+                        using T = std::decay_t<decltype(val)>;
+                        if constexpr (std::is_same_v<T, std::string>) return val;
+                        else if constexpr (std::is_same_v<T, int>) return std::to_string(val);
+                        else if constexpr (std::is_same_v<T, double>) {
+                            std::ostringstream os; os << val; return os.str();
+                        } else return std::string();
+                    }, c.first);
+                    choice_pairs.emplace_back(vs, c.second);
+                }
+
+                if (d.init_fn) {
+                    try {
+                        auto v = d.init_fn();
+                        setStr(f.defaultValue, config_value_to_string(v));
+                        if (choice_pairs.empty())
+                            v.visit([&choice_pairs](const auto& val) {
+                                using T = std::decay_t<decltype(val)>;
+                                if constexpr (std::is_same_v<T, Domain::EnumWrapper>)
+                                    for (const auto& evd : val.def())
+                                        choice_pairs.emplace_back(evd.str_serialized, evd.str_ui.empty() ? evd.str_serialized : evd.str_ui);
+                                else if constexpr (std::is_same_v<T, Domain::EnumVectorWrapper>)
+                                    for (const auto& evd : val.def())
+                                        choice_pairs.emplace_back(evd.str_serialized, evd.str_ui.empty() ? evd.str_serialized : evd.str_ui);
+                            });
+                    } catch (...) { /* still usable without a default */ }
+                }
+
+                if (!choice_pairs.empty()) {
+                    jclass strCls = env->FindClass("java/lang/String");
+                    const jsize n = static_cast<jsize>(choice_pairs.size());
+                    jobjectArray labels = env->NewObjectArray(n, strCls, nullptr);
+                    jobjectArray values = env->NewObjectArray(n, strCls, nullptr);
+                    for (jsize i = 0; i < n; ++i) {
+                        const auto& cp = choice_pairs[static_cast<size_t>(i)];
+                        jstring jv = env->NewStringUTF(cp.first.c_str());
+                        env->SetObjectArrayElement(values, i, jv);
+                        jstring jl = env->NewStringUTF(cp.second.c_str());
+                        env->SetObjectArrayElement(labels, i, jl);
+                        env->DeleteLocalRef(jv);
+                        env->DeleteLocalRef(jl);
+                    }
+                    env->SetObjectField(o, f.enumLabels, labels);
+                    env->SetObjectField(o, f.enumValues, values);
+                    env->DeleteLocalRef(labels);
+                    env->DeleteLocalRef(values);
+                }
+
+                jstring jkey = env->NewStringUTF(d.name.c_str());
+                env->CallVoidMethod(def, addOption, jkey, o);
+                env->DeleteLocalRef(jkey);
+                env->DeleteLocalRef(o);
+                if (env->ExceptionCheck()) env->ExceptionClear();
+                ++emitted;
+            }
+        } catch (const std::exception& e) {
+            LOGE("get_print_config_def: aborted after %zu defs: %s", emitted, e.what());
+            env->PopLocalFrame(nullptr);
+            char buf[192]; snprintf(buf, sizeof(buf), "aborted after %zu defs: %s", emitted, e.what());
+            diag(static_cast<jint>(emitted), buf);
+            return;
+        }
+        env->PopLocalFrame(nullptr);
+        LOGD("get_print_config_def: bridged %zu FDM config defs", emitted);
+        if (emitted == 0) diag(0, "no defs emitted");
+        else diag(static_cast<jint>(emitted), "ok");
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_model_1read_1from_1file(JNIEnv *env, jclass, jstring path, jstring base_name, jint plateId) {
@@ -250,12 +939,24 @@ extern "C" {
         (void) env;
         ModelRef* model = (ModelRef *) (intptr_t) ptr;
         if (model == nullptr || i < 0 || i >= (jint) model->model.objects.size()) return;
+        // A background auto-orient worker may hold ModelObject* into this
+        // model. Cancel it, then wait for it to actually leave, so nothing is
+        // dereferencing the object we are about to free.
+        farm_orient_cancel(model);
+        farm_orient_drain(model);
         model->model.delete_object((size_t) i);
     }
 
     static Domain::ModelObject* check_object(ModelRef* model, jint i) {
         if (model == nullptr || i < 0 || i >= (jint) model->model.objects.size()) return nullptr;
         return model->model.objects[i];
+    }
+
+    JNIEXPORT jstring JNICALL Java_com_flashforge_farm_slic3r_Native_model_1get_1object_1name(JNIEnv* env, jclass, jlong ptr, jint i) {
+        ModelRef* model = (ModelRef *) (intptr_t) ptr;
+        Domain::ModelObject* obj = check_object(model, i);
+        if (obj == nullptr) return nullptr;
+        return env->NewStringUTF(obj->name.c_str());
     }
 
     JNIEXPORT jdoubleArray JNICALL Java_com_flashforge_farm_slic3r_Native_model_1get_1rotation(JNIEnv* env, jclass, jlong ptr, jint object_index) {
@@ -417,11 +1118,39 @@ extern "C" {
     }
 
     JNIEXPORT jint JNICALL Java_com_flashforge_farm_slic3r_Native_model_1split(JNIEnv* env, jclass, jlong ptr, jint i) {
-        // TODO(#212): ModelObject::split has no 3.0 counterpart (mesh split lives in
-        // Biz::Algorithms::MeshSplitImpl, not yet wired to ModelObject topology).
-        (void) env; (void) ptr; (void) i;
-        LOGD("model_split: stub, no 3.0 counterpart");
-        return 0;
+        (void) env;
+        ModelRef* model = (ModelRef *) (intptr_t) ptr;
+        Domain::ModelObject* obj = check_object(model, i);
+        if (obj == nullptr || obj->volumes.empty()) return 0;
+        // split removes volumes/objects the orient worker may be holding.
+        farm_orient_cancel(model);
+        farm_orient_drain(model);
+
+        // Genuine upstream split (Biz::Algorithms::ModelObject::split): every
+        // model-part volume becomes its own object, meshes broken into their
+        // connected components first. Appends the new objects to the model.
+        std::vector<Domain::ModelObject*> new_objects;
+        try {
+            BizAlgo::ModelObject::split(obj, &new_objects);
+        } catch (const std::exception&) {
+            return 0;   // leave the model untouched on a bad mesh
+        }
+
+        // A single connected part means there is nothing to split: drop the
+        // duplicate the upstream split always appends and report no-op.
+        if (new_objects.size() <= 1) {
+            for (Domain::ModelObject* extra : new_objects)
+                model->model.delete_object(extra->id());
+            return 0;
+        }
+
+        // Replace the original (which the split leaves in place) with the
+        // pieces. delete_object reuses the original's slot; look the index up
+        // by pointer so appended-object index drift cannot bite.
+        const auto it = std::find(model->model.objects.begin(), model->model.objects.end(), obj);
+        if (it != model->model.objects.end())
+            model->model.delete_object((size_t) std::distance(model->model.objects.begin(), it));
+        return (jint) new_objects.size();
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1translate(JNIEnv* env, jclass, jlong ptr, jint i, jdouble x, jdouble y, jdouble z) {
@@ -429,6 +1158,7 @@ extern "C" {
         ModelRef* model = (ModelRef *) (intptr_t) ptr;
         Domain::ModelObject* obj = check_object(model, i);
         if (obj == nullptr) return;
+        farm_orient_cancel(model);
         BizAlgo::ModelObject::translate(*obj, x, y, z);
     }
 
@@ -445,6 +1175,7 @@ extern "C" {
         ModelRef* model = (ModelRef *) (intptr_t) ptr;
         Domain::ModelObject* obj = check_object(model, i);
         if (obj == nullptr) return;
+        farm_orient_cancel(model);
         Vec3d factor(x, y, z);
         for (Domain::ModelVolume* vol : obj->volumes) {
             if (vol != nullptr)
@@ -466,6 +1197,10 @@ extern "C" {
         ModelRef* model = (ModelRef *) (intptr_t) ptr;
         Domain::ModelObject* obj = check_object(model, i);
         if (obj == nullptr) return;
+        // A running auto-orient rewrites these same transforms; cancel it so it
+        // cannot overwrite the user's rotation (and we do not restore, so the
+        // user's new angle stands).
+        farm_orient_cancel(model);
         Vec3d vec(x, y, z);
         for (Domain::ModelVolume* vol : obj->volumes) {
             if (vol == nullptr) continue;
@@ -488,11 +1223,53 @@ extern "C" {
         obj->invalidate_bounding_box();
     }
 
+} // extern "C" — the orient helpers below need C++ linkage; reopened after.
+
+// ---- Orient rotation helpers (C++ linkage; the JNI block reopens after) ----
+// The object's merged mesh (BizAlgo::ModelObject::mesh) already carries volume
+// + instance transforms, so a world-space delta composes onto every volume
+// exactly like model_rotate does.
+namespace {
+
+    // Same XYZ-euler convention as model_rotate (R = Rz * Ry * Rx).
+    Eigen::Quaterniond quat_from_euler_xyz(const Vec3d& e) {
+        return Eigen::AngleAxisd(e[2], Eigen::Vector3d::UnitZ()) *
+               Eigen::AngleAxisd(e[1], Eigen::Vector3d::UnitY()) *
+               Eigen::AngleAxisd(e[0], Eigen::Vector3d::UnitX());
+    }
+
+    Vec3d euler_xyz_from_quat(const Eigen::Quaterniond& q) {
+        Eigen::Vector3d e = q.toRotationMatrix().eulerAngles(2, 1, 0);
+        return Vec3d(e[2], e[1], e[0]);
+    }
+
+    void apply_world_delta(Domain::ModelObject* obj, const Eigen::Quaterniond& delta) {
+        for (Domain::ModelVolume* vol : obj->volumes) {
+            if (vol == nullptr) continue;
+            Eigen::Quaterniond q = delta * quat_from_euler_xyz(vol->get_rotation());
+            vol->set_rotation(euler_xyz_from_quat(q));
+        }
+        obj->invalidate_bounding_box();
+    }
+
+    } // namespace
+
+    extern "C" {
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1flatten_1rotate(JNIEnv* env, jclass, jlong ptr, jint i, jlong surface_ptr) {
-        // TODO(#212): flatten planes (model_create_flatten_planes) are stubbed with the
-        // GL pipeline, so there is no surface to align to yet.
-        (void) env; (void) ptr; (void) i; (void) surface_ptr;
-        LOGD("model_flatten_rotate: stub, flatten planes pending");
+        ModelRef* model = (ModelRef *) (intptr_t) ptr;
+        GLModelRef* surf = (GLModelRef *) (intptr_t) surface_ptr;
+        if (model == nullptr || surf == nullptr || !surf->has_plane_normal) return;
+        Domain::ModelObject* obj = check_object(model, i);
+        if (obj == nullptr) return;
+        // Lay the picked face onto the bed: rotate its outward normal to -Z.
+        Eigen::Vector3d n(surf->plane_normal.x(), surf->plane_normal.y(), surf->plane_normal.z());
+        if (!(n.norm() > 1e-9) || !n.allFinite()) return;
+        n.normalize();
+        Eigen::Quaterniond delta =
+            Eigen::Quaterniond::FromTwoVectors(n, Eigen::Vector3d(0, 0, -1));
+        apply_world_delta(obj, delta);
+        LOGD("model_flatten_rotate: laid face down (nx=%.3f ny=%.3f nz=%.3f)", n.x(), n.y(), n.z());
+        (void) env;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1translate_1global(JNIEnv* env, jclass, jlong ptr, jdouble x, jdouble y, jdouble z) {
@@ -547,18 +1324,97 @@ extern "C" {
     }
 
     JNIEXPORT jlongArray JNICALL Java_com_flashforge_farm_slic3r_Native_model_1create_1flatten_1planes(JNIEnv* env, jclass, jlong ptr, jint i) {
-        // TODO(#212): plane extraction needs the convex-hull facet walk ported to
-        // Domain::TriangleMesh plus GL planes for picking; both pending. Return an
-        // EMPTY array (never null): Model.java dereferences ptr.length immediately.
-        (void) ptr; (void) i;
-        LOGD("model_create_flatten_planes: stub, pending");
-        return env->NewLongArray(0);
+        ModelRef* model = (ModelRef *) (intptr_t) ptr;
+        std::vector<jlong> out;
+        if (model != nullptr) {
+            if (Domain::ModelObject* obj = check_object(model, i); obj != nullptr) {
+                // Genuine PrusaSlicer 3.0 plane builder (PlaceOnFaceGizmoPlanes.cpp,
+                // compiled into libfarm from the fetched 3.0 tree). It returns
+                // data in the FIRST INSTANCE's coordinate system, so lift it to
+                // world space here — the Java side raycasts against world coords.
+                std::vector<Slic3r::App::Plater::PlaneData> planes =
+                    Slic3r::App::Plater::calculate_planes(*obj);
+                const bool has_inst = !obj->instances.empty() && obj->instances.front() != nullptr;
+                const Domain::Transform3d inst = has_inst
+                    ? obj->instances.front()->get_matrix() : Domain::Transform3d::Identity();
+                const Domain::Vec3d nrm(inst.matrix()(0, 0), inst.matrix()(0, 1), inst.matrix()(0, 2));
+                const Domain::Vec3d nrm_y(inst.matrix()(1, 0), inst.matrix()(1, 1), inst.matrix()(1, 2));
+                const Domain::Vec3d nrm_z(inst.matrix()(2, 0), inst.matrix()(2, 1), inst.matrix()(2, 2));
+                for (const Slic3r::App::Plater::PlaneData& p : planes) {
+                    if (p.its.vertices.empty() || p.its.indices.empty()) continue;
+                    ::indexed_triangle_set world = p.its;
+                    if (has_inst)
+                        for (auto& v : world.vertices)
+                            v = (inst * v.cast<double>()).cast<float>();
+                    const Domain::Vec3f normal =
+                        (nrm * p.normal.x() + nrm_y * p.normal.y() + nrm_z * p.normal.z())
+                            .cast<float>().normalized();
+                    GLModelRef* ref = new GLModelRef();
+                    Slic3r::GUI::GLModel::Geometry g;
+                    g.format = {Slic3r::GUI::GLModel::Geometry::EPrimitiveType::Triangles,
+                                Slic3r::GUI::GLModel::Geometry::EVertexLayout::P3N3};
+                    g.reserve_vertices((unsigned int) world.vertices.size());
+                    g.reserve_indices((unsigned int) world.indices.size() * 3);
+                    for (size_t v = 0; v < world.vertices.size(); ++v)
+                        g.add_vertex(world.vertices[v], normal);
+                    for (const ::stl_triangle_vertex_indices& tri : world.indices)
+                        g.add_triangle(tri[0], tri[1], tri[2]);
+                    ref->model.init_from(std::move(g));
+                    ref->mesh.its = std::move(world);
+                    ref->plane_normal = normal;
+                    ref->has_plane_normal = true;
+                    out.push_back((jlong) (intptr_t) ref);
+                }
+                LOGD("model_create_flatten_planes: %zu planes", out.size());
+            }
+        }
+        jlongArray arr = env->NewLongArray((jsize) out.size());
+        if (!out.empty()) env->SetLongArrayRegion(arr, 0, (jsize) out.size(), out.data());
+        return arr;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1auto_1orient(JNIEnv* env, jclass, jlong ptr, jint i) {
-        // TODO(#212): compat/Orient.hpp needs the deleted 2.x Model header.
-        (void) env; (void) ptr; (void) i;
-        LOGD("model_auto_orient: stub, orient pending");
+        (void) env;
+        ModelRef* model = (ModelRef *) (intptr_t) ptr;
+        if (model == nullptr) return;
+        Domain::ModelObject* obj = check_object(model, i);
+        if (obj == nullptr) return;
+        // Genuine upstream AutoOrienter (compat/Orient.cpp), isolated in
+        // farm_orient.cpp so its libslic3r.h include cannot collide with the
+        // engine headers used here. 60deg reproduces the default OrientParams
+        // (ASCENT = cos(120deg) = -0.5) used by upstream orient(ModelObject*).
+        farm_auto_orient(obj, model, 60.0);
+    }
+
+    JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1auto_1orient_1progress(JNIEnv* env, jclass, jlong ptr, jintArray indices, jobject listener) {
+        ModelRef* model = (ModelRef *) (intptr_t) ptr;
+        if (model == nullptr || indices == nullptr || listener == nullptr) return;
+        jsize count = env->GetArrayLength(indices);
+        if (count == 0) return;
+        std::vector<jint> idx((size_t) count);
+        env->GetIntArrayRegion(indices, 0, count, idx.data());
+        std::vector<Domain::ModelObject*> objects;
+        for (jint k : idx) {
+            Domain::ModelObject* obj = check_object(model, k);
+            if (obj != nullptr) objects.push_back(obj);
+        }
+        if (objects.empty()) return;
+
+        jclass cls = env->GetObjectClass(listener);
+        jmethodID onProgress = env->GetMethodID(cls, "onAutoOrientProgress", "(ILjava/lang/String;)V");
+        if (onProgress == nullptr || env->ExceptionCheck()) {
+            env->ExceptionClear();
+            return;
+        }
+        // orient() runs synchronously on this (worker) thread; env is valid for
+        // the whole call, so the progress lambda can up-call Java directly.
+        farm_auto_orient_batch((void* const*) objects.data(), objects.size(), model, 60.0,
+                               [env, listener, onProgress](unsigned tag, const std::string& name) {
+                                   jstring jname = env->NewStringUTF(name.c_str());
+                                   env->CallVoidMethod(listener, onProgress, (jint) tag, jname);
+                                   env->DeleteLocalRef(jname);
+                                   if (env->ExceptionCheck()) env->ExceptionClear();
+                               });
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_model_1is_1big_1object(JNIEnv* env, jclass, jlong ptr, jint i) {
@@ -637,12 +1493,20 @@ extern "C" {
         (void) numFilaments; (void) colorsArr;
         (void) calibMode; (void) calibStart; (void) calibEnd; (void) calibStep;
 
-        // model_slice runs on the app's farm-slice Java thread, so the
-        // captured env is valid for the whole call.
+        // Progress callbacks fire on arbitrary TBB worker threads during
+        // print->process() (worse with 2+ models), so reporting must go
+        // through the mailbox pump: calling JNI env methods captured from
+        // this thread on a worker thread is a CheckJNI abort (SIGABRT).
+        JavaVM* vm = nullptr;
+        if (env->GetJavaVM(&vm) != JNI_OK || vm == nullptr) {
+            LOGE("model_slice: GetJavaVM failed");
+            env->ThrowNew(env->FindClass("com/flashforge/farm/slic3r/Slic3rRuntimeError"),
+                "slice progress channel unavailable");
+            return 0;
+        }
+        farm::ScopedProgress scopedProgress(env, vm, listener);
         auto progress = [&](int percent, const std::string& stage) {
-            jstring js = env->NewStringUTF(stage.c_str());
-            env->CallVoidMethod(listener, sliceListenerOnProgress, (jint) percent, js);
-            env->DeleteLocalRef(js);
+            farm::progress_set(percent, stage.c_str());
         };
 
         try {
@@ -651,6 +1515,24 @@ extern "C" {
             const size_t slash = cppGcodePath.find_last_of('/');
             result->name = slash == std::string::npos ? cppGcodePath : cppGcodePath.substr(slash + 1);
             result->per_role = std::move(stats.per_role);
+            // The native viewer needs parsed moves, not just the file: run the
+            // same libpgcode pass the load-file path uses. A parse failure must
+            // not fail the slice itself (the gcode file is already written);
+            // the viewer then stays empty and the app-side fallback still draws.
+            try {
+                result->parsed = farm_vgcode::vgcode_parse_gcode_file(cppGcodePath);
+                const auto moves = result->parsed->const_moves();
+                LOGD("model_slice: libpgcode parse ok: path=%s moves=%zu tool_colors=%zu",
+                    cppGcodePath.c_str(),
+                    moves != nullptr ? moves->size() : 0,
+                    result->parsed->extruder_str_colors.size());
+            } catch (const std::exception& e) {
+                LOGE("model_slice: libpgcode parse failed (viewer empty): path=%s: %s",
+                    cppGcodePath.c_str(), e.what());
+            } catch (...) {
+                LOGE("model_slice: libpgcode parse failed with unknown exception (viewer empty): path=%s",
+                    cppGcodePath.c_str());
+            }
             return (jlong) (intptr_t) result;
         } catch (const std::exception& e) {
             LOGE("model_slice failed: %s", e.what());
@@ -672,18 +1554,47 @@ extern "C" {
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_model_1release(JNIEnv* env, jclass, jlong ptr) {
         (void) env;
         ModelRef* model = (ModelRef*) (intptr_t) ptr;
+        // Same hazard as delete_object: an orient worker may still be holding
+        // pointers into this model. Drain before the delete, otherwise the
+        // worker touches freed memory and the process crashes.
+        farm_orient_cancel(model);
+        farm_orient_drain(model);
         delete model;
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_gcoderesult_1load_1file(JNIEnv* env, jclass, jstring path, jstring name) {
-        // TODO(#212): GCodeProcessor::process_file/extract_result have no verified 3.0
-        // counterpart (preview moved to libpgcode/slic3r-gcode-reader); throw, never
-        // return an empty-but-successful handle.
-        (void) path; (void) name;
-        LOGE("gcoderesult_load_file: 3.0 gcode-parse path not wired");
-        env->ThrowNew(env->FindClass("java/lang/RuntimeException"),
-            "G-code preview is not available in this build yet (#212)");
-        return 0;
+        const char* pathChars = env->GetStringUTFChars(path, JNI_FALSE);
+        const char* nameChars = env->GetStringUTFChars(name, JNI_FALSE);
+        std::string cppPath(pathChars != nullptr ? pathChars : "");
+        std::string cppName(nameChars != nullptr ? nameChars : "");
+        if (pathChars != nullptr) env->ReleaseStringUTFChars(path, pathChars);
+        if (nameChars != nullptr) env->ReleaseStringUTFChars(name, nameChars);
+
+        try {
+            auto parsed = farm_vgcode::vgcode_parse_gcode_file(cppPath);
+            GCodeResultRef* ref = new GCodeResultRef();
+            ref->name = cppName;
+            // print_statistics is a Basic/Full variant; both carry per-role filament stats.
+            std::visit([&ref](const auto& stats) {
+                for (const auto& entry : stats.used_filaments_per_role) {
+                    ref->per_role[static_cast<int>(entry.first)] = {entry.second.first, entry.second.second};
+                }
+            }, parsed->print_statistics);
+            const auto moves = parsed->const_moves();
+            LOGD("gcoderesult_load_file ok: path=%s moves=%zu tool_colors=%zu roles=%zu",
+                cppPath.c_str(), moves != nullptr ? moves->size() : 0,
+                parsed->extruder_str_colors.size(), ref->per_role.size());
+            ref->parsed = std::move(parsed);
+            return (jlong) (intptr_t) ref;
+        } catch (const std::exception& e) {
+            LOGE("gcoderesult_load_file failed: path=%s: %s", cppPath.c_str(), e.what());
+            env->ThrowNew(env->FindClass("java/lang/RuntimeException"), e.what());
+            return 0;
+        } catch (...) {
+            LOGE("gcoderesult_load_file failed with unknown exception: path=%s", cppPath.c_str());
+            env->ThrowNew(env->FindClass("java/lang/RuntimeException"), "unknown native error while parsing gcode");
+            return 0;
+        }
     }
 
     JNIEXPORT jstring JNICALL Java_com_flashforge_farm_slic3r_Native_gcoderesult_1get_1recommended_1name(JNIEnv* env, jclass, jlong ptr) {
@@ -825,6 +1736,72 @@ extern "C" {
         if (ref == nullptr) return;
         // Resolution 16 matches the 2.x arrow the Java CoordAxes expects.
         ref->model.init_from(Slic3r::GUI::stilized_arrow(16, tip_radius, tip_length, stem_radius, stem_length));
+    }
+
+    JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1from_1path(JNIEnv* env, jclass, jlong ptr, jfloatArray verticesArr, jintArray indicesArr, jboolean lineStrip) {
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        if (ref == nullptr || verticesArr == nullptr || indicesArr == nullptr) return;
+        const jsize vertexCount = env->GetArrayLength(verticesArr);
+        const jsize indexCount = env->GetArrayLength(indicesArr);
+        if (vertexCount % 3 != 0 || vertexCount <= 0 || indexCount <= 0) return;
+        jfloat* vertices = env->GetFloatArrayElements(verticesArr, nullptr);
+        jint* indices = env->GetIntArrayElements(indicesArr, nullptr);
+        if (vertices == nullptr || indices == nullptr) {
+            if (vertices != nullptr) env->ReleaseFloatArrayElements(verticesArr, vertices, JNI_ABORT);
+            if (indices != nullptr) env->ReleaseIntArrayElements(indicesArr, indices, JNI_ABORT);
+            return;
+        }
+        Slic3r::GUI::GLModel::Geometry g;
+        g.format = {lineStrip == JNI_TRUE
+                            ? Slic3r::GUI::GLModel::Geometry::EPrimitiveType::LineStrip
+                            : Slic3r::GUI::GLModel::Geometry::EPrimitiveType::Lines,
+                    Slic3r::GUI::GLModel::Geometry::EVertexLayout::P3};
+        g.reserve_vertices((size_t) (vertexCount / 3));
+        g.reserve_indices((size_t) indexCount);
+        for (jsize i = 0; i < vertexCount; i += 3) {
+            g.add_vertex(Domain::Vec3f(vertices[i], vertices[i + 1], vertices[i + 2]));
+        }
+        for (jsize i = 0; i < indexCount; ++i) {
+            const jint id = indices[i];
+            if (id < 0 || id * 3 + 2 >= vertexCount) {
+                env->ReleaseFloatArrayElements(verticesArr, vertices, JNI_ABORT);
+                env->ReleaseIntArrayElements(indicesArr, indices, JNI_ABORT);
+                return;
+            }
+            g.add_index((unsigned int) id);
+        }
+        env->ReleaseFloatArrayElements(verticesArr, vertices, JNI_ABORT);
+        env->ReleaseIntArrayElements(indicesArr, indices, JNI_ABORT);
+        ref->model.reset();
+        ref->model.init_from(std::move(g));
+    }
+
+    JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1textured_1quad(JNIEnv* env, jclass, jlong ptr, jfloatArray xyzArr, jfloatArray uvArr) {
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        if (ref == nullptr || xyzArr == nullptr || uvArr == nullptr) return;
+        if (env->GetArrayLength(xyzArr) != 12 || env->GetArrayLength(uvArr) != 8) return;
+        jfloat* xyz = env->GetFloatArrayElements(xyzArr, nullptr);
+        jfloat* uv = env->GetFloatArrayElements(uvArr, nullptr);
+        if (xyz == nullptr || uv == nullptr) {
+            if (xyz != nullptr) env->ReleaseFloatArrayElements(xyzArr, xyz, JNI_ABORT);
+            if (uv != nullptr) env->ReleaseFloatArrayElements(uvArr, uv, JNI_ABORT);
+            return;
+        }
+        Slic3r::GUI::GLModel::Geometry g;
+        g.format = {Slic3r::GUI::GLModel::Geometry::EPrimitiveType::Triangles,
+                    Slic3r::GUI::GLModel::Geometry::EVertexLayout::P3T2};
+        g.reserve_vertices(4);
+        g.reserve_indices(6);
+        for (int i = 0; i < 4; ++i) {
+            g.add_vertex(Domain::Vec3f(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]),
+                         Domain::Vec2f(uv[i * 2], uv[i * 2 + 1]));
+        }
+        g.add_triangle(0, 1, 2);
+        g.add_triangle(0, 2, 3);
+        env->ReleaseFloatArrayElements(xyzArr, xyz, JNI_ABORT);
+        env->ReleaseFloatArrayElements(uvArr, uv, JNI_ABORT);
+        ref->model.reset();
+        ref->model.init_from(std::move(g));
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1background_1triangles(JNIEnv* env, jclass, jlong ptr) {
@@ -1315,12 +2292,47 @@ extern "C" {
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1arrange(JNIEnv* env, jclass, jlong ptr, jlong model) {
-        // TODO(#212): target is Biz::Arrange::arrange_model_in_place(model, contour,
-        // Settings) once the arrange surface is verified; false = "did not fit",
-        // matching the old failure signal; never claim a layout we did not compute.
-        (void) env; (void) ptr; (void) model;
-        LOGD("bed_arrange: stub, arrange port pending");
-        return false;
+        FarmBedRef* bed = (FarmBedRef*) (intptr_t) ptr;
+        ModelRef* mr = (ModelRef*) (intptr_t) model;
+        if (bed == nullptr || mr == nullptr || !bed->configured || bed->contour_mm.size() < 3)
+            return false;
+
+        // The packer works in scaled bed units (Domain::Point = Vec2crd); the
+        // app configures the contour in millimetres, same as bed_build_visuals.
+        Domain::Points bed_contour_scaled;
+        bed_contour_scaled.reserve(bed->contour_mm.size());
+        for (const Domain::Vec2d& v : bed->contour_mm)
+            bed_contour_scaled.push_back(BizAlgo::Scaling::scaled(v));
+
+        // Re-pack every instance on the plate (Arrange button semantics).
+        std::vector<const Domain::ModelInstance*> instances;
+        for (const Domain::ModelObject* object : mr->model.objects)
+            for (const Domain::ModelInstance* inst : object->instances)
+                instances.push_back(inst);
+        if (instances.empty()) return true;
+
+        Slic3r::Biz::Arrange::Settings settings;   // AutoArrange defaults: fill bed, keep orientation.
+        const auto transforms = Slic3r::Biz::Arrange::arrange_instances(instances, bed_contour_scaled, settings);
+
+        // Apply exactly the transforms the packer returned; whatever did not
+        // fit stays where it was. Same application as upstream arrange_model_in_place.
+        for (Domain::ModelObject* object : mr->model.objects) {
+            for (Domain::ModelInstance* inst : object->instances) {
+                const auto it = std::find_if(transforms.cbegin(), transforms.cend(), [inst](const auto& t) {
+                    return t.instance_ref.object_id == inst->get_object()->id().id
+                        && t.instance_ref.instance_id == inst->id().id;
+                });
+                if (it == transforms.cend()) continue;
+                Domain::Transform3d m = inst->get_transformation().get_matrix();
+                m.translation().x() = it->absolute_offset.x();
+                m.translation().y() = it->absolute_offset.y();
+                Domain::Transform3d rot = Domain::Transform3d::Identity();
+                rot.rotate(Eigen::AngleAxisd(it->rotation_delta, Eigen::Vector3d::UnitZ()));
+                inst->set_transformation(Domain::Transformation{m * rot});
+                object->invalidate_bounding_box();
+            }
+        }
+        return transforms.size() == instances.size();
     }
 
     JNIEXPORT jdoubleArray JNICALL Java_com_flashforge_farm_slic3r_Native_bed_1get_1bounding_1volume(JNIEnv* env, jclass, jlong ptr) {
@@ -1364,132 +2376,227 @@ extern "C" {
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1create(JNIEnv* env, jclass) {
-        // TODO(#212): libvgcode Viewer stack still 2.x (Viewer.hpp needs deleted headers).
         (void) env;
-        return 0;
+        return (jlong) (intptr_t) new GCodeViewerRef();
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1set_1colors(JNIEnv* env, jclass, jlong ptr, jintArray colorsArr) {
-        // TODO(#212): see vgcode_create. Silent: called on preview setup paths.
-        (void) env; (void) ptr; (void) colorsArr;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr || colorsArr == nullptr) return;
+        jint* colors = env->GetIntArrayElements(colorsArr, JNI_FALSE);
+        if (colors == nullptr) return;
+        ref->viewer.set_extrusion_role_color(libvgcode::EGCodeExtrusionRole::Skirt,                    { (unsigned char) colors[0],  (unsigned char) colors[1],  (unsigned char) colors[2] });
+        ref->viewer.set_extrusion_role_color(libvgcode::EGCodeExtrusionRole::ExternalPerimeter,        { (unsigned char) colors[3],  (unsigned char) colors[4],  (unsigned char) colors[5] });
+        ref->viewer.set_extrusion_role_color(libvgcode::EGCodeExtrusionRole::SupportMaterial,          { (unsigned char) colors[6],  (unsigned char) colors[7],  (unsigned char) colors[8] });
+        ref->viewer.set_extrusion_role_color(libvgcode::EGCodeExtrusionRole::SupportMaterialInterface, { (unsigned char) colors[9],  (unsigned char) colors[10], (unsigned char) colors[11] });
+        ref->viewer.set_extrusion_role_color(libvgcode::EGCodeExtrusionRole::InternalInfill,           { (unsigned char) colors[12], (unsigned char) colors[13], (unsigned char) colors[14] });
+        ref->viewer.set_extrusion_role_color(libvgcode::EGCodeExtrusionRole::SolidInfill,              { (unsigned char) colors[15], (unsigned char) colors[16], (unsigned char) colors[17] });
+        ref->viewer.set_extrusion_role_color(libvgcode::EGCodeExtrusionRole::WipeTower,                { (unsigned char) colors[18], (unsigned char) colors[19], (unsigned char) colors[20] });
+        env->ReleaseIntArrayElements(colorsArr, colors, JNI_ABORT);
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1render(JNIEnv* env, jclass, jlong ptr, jfloatArray viewMatrixArr, jfloatArray projectionMatrixArr) {
-        // TODO(#212): see vgcode_create. Silent: called per frame, must not log-spam.
-        (void) env; (void) ptr; (void) viewMatrixArr; (void) projectionMatrixArr;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr || viewMatrixArr == nullptr || projectionMatrixArr == nullptr) return;
+        jfloat* viewMatrix = env->GetFloatArrayElements(viewMatrixArr, JNI_FALSE);
+        jfloat* projectionMatrix = env->GetFloatArrayElements(projectionMatrixArr, JNI_FALSE);
+        if (viewMatrix == nullptr || projectionMatrix == nullptr) {
+            if (viewMatrix != nullptr) env->ReleaseFloatArrayElements(viewMatrixArr, viewMatrix, JNI_ABORT);
+            if (projectionMatrix != nullptr) env->ReleaseFloatArrayElements(projectionMatrixArr, projectionMatrix, JNI_ABORT);
+            return;
+        }
+        libvgcode::Mat4x4 converted_view_matrix;
+        std::memcpy(converted_view_matrix.data(), viewMatrix, 16 * sizeof(float));
+        libvgcode::Mat4x4 converted_projection_matrix;
+        std::memcpy(converted_projection_matrix.data(), projectionMatrix, 16 * sizeof(float));
+        // Per-frame path: never let a viewer exception take down the GL thread.
+        try {
+            ref->viewer.render(converted_view_matrix, converted_projection_matrix);
+        } catch (const std::exception& e) {
+            LOGE("vgcode_render failed: %s", e.what());
+        }
+        env->ReleaseFloatArrayElements(viewMatrixArr, viewMatrix, JNI_ABORT);
+        env->ReleaseFloatArrayElements(projectionMatrixArr, projectionMatrix, JNI_ABORT);
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1init(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr;
-        LOGD("vgcode_init: stub, preview stack pending");
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr || ref->initialized) return;
+        try {
+            ref->viewer.init(reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+            ref->initialized = true;
+        } catch (const std::exception& e) {
+            LOGE("vgcode_init failed: %s", e.what());
+            env->ThrowNew(env->FindClass("java/lang/RuntimeException"), e.what());
+        }
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1is_1initialized(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr;
-        return false;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        return (ref != nullptr && ref->initialized) ? JNI_TRUE : JNI_FALSE;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1load(JNIEnv* env, jclass, jlong ptr, jlong resultPtr) {
-        // TODO(#212): needs the 3.0 gcode result (see gcoderesult_load_file).
-        (void) env; (void) ptr; (void) resultPtr;
-        LOGD("vgcode_load: stub, gcode result pending");
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        GCodeResultRef* resultRef = (GCodeResultRef*) (intptr_t) resultPtr;
+        if (ref == nullptr || resultRef == nullptr) {
+            LOGE("vgcode_load: null viewer (%p) or result (%p), nothing to load",
+                (void*) ref, (void*) resultRef);
+            return;
+        }
+        if (resultRef->parsed == nullptr) {
+            // Slice succeeded but the libpgcode pass did not (see model_slice):
+            // keep the viewer empty rather than breaking the GL thread; the
+            // app-side toolpath fallback still draws (#244).
+            LOGE("vgcode_load: no parsed gcode result (result=%p name=%s), viewer stays empty",
+                (void*) resultRef, resultRef->name.c_str());
+            return;
+        }
+        try {
+            ref->data = farm_vgcode::vgcode_convert_input_data(*resultRef->parsed);
+            const size_t vertices = ref->data.vertices.size();
+            ref->viewer.load(std::move(ref->data));
+            ref->viewer.set_time_mode(libvgcode::ETimeMode::Normal);
+            LOGD("vgcode_load ok: vertices=%zu layers=%zu tools=%zu", vertices,
+                ref->viewer.get_layers_count(), ref->viewer.get_tool_colors_count());
+        } catch (const std::exception& e) {
+            LOGE("vgcode_load failed: %s", e.what());
+            env->ThrowNew(env->FindClass("java/lang/RuntimeException"), e.what());
+        }
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1reset(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.reset();
+        ref->initialized = false;
     }
 
     JNIEXPORT jlong JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1get_1layers_1count(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr;
-        return 0;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        return ref == nullptr ? 0 : (jlong) ref->viewer.get_layers_count();
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1set_1layers_1view_1range(JNIEnv* env, jclass, jlong ptr, jlong min, jlong max) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) min; (void) max;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.set_layers_view_range(static_cast<uint32_t>(std::max<jlong>(0, min)), static_cast<uint32_t>(std::max<jlong>(0, max)));
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1set_1infill_1visibility_1depth(JNIEnv* env, jclass, jlong ptr, jint depth) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) depth;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.set_infill_visibility_depth(depth);
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1set_1fast_1mode(JNIEnv* env, jclass, jlong ptr, jboolean fastMode) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) fastMode;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.set_fast_mode(fastMode == JNI_TRUE);
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1set_1selected_1object_1id(JNIEnv* env, jclass, jlong ptr, jint id) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) id;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.set_selected_object_id(id);
     }
 
     JNIEXPORT jlongArray JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1get_1layers_1view_1range(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create.
-        (void) ptr;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
         jlongArray arr = env->NewLongArray(2);
-        jlong range[2] = { 0, 0 };
+        jlong range[2] = {0, 0};
+        if (ref != nullptr) {
+            const auto native = ref->viewer.get_layers_view_range();
+            range[0] = (jlong) native[0];
+            range[1] = (jlong) native[1];
+        }
         env->SetLongArrayRegion(arr, 0, 2, range);
         return arr;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1release(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create. create() returns 0: nothing to free.
-        (void) env; (void) ptr;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.shutdown();
+        delete ref;
     }
 
     JNIEXPORT jfloat JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1get_1estimated_1time(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr;
-        return 0;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        return ref == nullptr ? 0.0f : ref->viewer.get_estimated_time();
     }
 
     JNIEXPORT jfloat JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1get_1estimated_1time_1role(JNIEnv* env, jclass, jlong ptr, jint role) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) role;
-        return 0;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return 0.0f;
+        return ref->viewer.get_extrusion_role_estimated_time(farm_vgcode::vgcode_convert_role(static_cast<Domain::GCodeExtrusionRole>(role)));
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1is_1extrusion_1role_1visible(JNIEnv* env, jclass, jlong ptr, jint role) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) role;
-        return false;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return JNI_FALSE;
+        return ref->viewer.is_extrusion_role_visible(farm_vgcode::vgcode_convert_role(static_cast<Domain::GCodeExtrusionRole>(role))) ? JNI_TRUE : JNI_FALSE;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1toggle_1extrusion_1role_1visibility(JNIEnv* env, jclass, jlong ptr, jint role) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) role;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.toggle_extrusion_role_visibility(farm_vgcode::vgcode_convert_role(static_cast<Domain::GCodeExtrusionRole>(role)));
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1set_1view_1type(JNIEnv* env, jclass, jlong ptr, jint type) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) type;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.set_view_type(static_cast<libvgcode::EViewType>(type));
     }
 
     JNIEXPORT jint JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1get_1view_1type(JNIEnv* env, jclass, jlong ptr) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr;
-        return 0;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        return ref == nullptr ? 0 : static_cast<jint>(ref->viewer.get_view_type());
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1set_1tool_1colors(JNIEnv* env, jclass, jlong ptr, jintArray colorsArr) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) colorsArr;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr || colorsArr == nullptr) return;
+        const jsize n = env->GetArrayLength(colorsArr);
+        jint* colors = env->GetIntArrayElements(colorsArr, JNI_FALSE);
+        if (colors == nullptr) return;
+        libvgcode::Palette palette;
+        palette.reserve((size_t) n);
+        for (jsize i = 0; i < n; ++i) {
+            const int v = colors[i];
+            palette.push_back({(unsigned char) ((v >> 16) & 0xFF), (unsigned char) ((v >> 8) & 0xFF), (unsigned char) (v & 0xFF)});
+        }
+        env->ReleaseIntArrayElements(colorsArr, colors, JNI_ABORT);
+        if (!palette.empty()) ref->viewer.set_tool_colors(palette);
     }
 
     JNIEXPORT jboolean JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1is_1option_1visible(JNIEnv* env, jclass, jlong ptr, jint optionType) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) optionType;
-        return false;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return JNI_FALSE;
+        return ref->viewer.is_option_visible(static_cast<libvgcode::EOptionType>(optionType)) ? JNI_TRUE : JNI_FALSE;
     }
 
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_vgcode_1toggle_1option_1visibility(JNIEnv* env, jclass, jlong ptr, jint optionType) {
-        // TODO(#212): see vgcode_create.
-        (void) env; (void) ptr; (void) optionType;
+        (void) env;
+        GCodeViewerRef* ref = (GCodeViewerRef*) (intptr_t) ptr;
+        if (ref == nullptr) return;
+        ref->viewer.toggle_option_visibility(static_cast<libvgcode::EOptionType>(optionType));
     }
 
     // ---- Multi-color painting (mm segmentation) ----

@@ -1,0 +1,16 @@
+diff --git a/src/libpgcode/src/Slic3r/Biz/libpgcode/ProcessorConfig.cpp b/src/libpgcode/src/Slic3r/Biz/libpgcode/ProcessorConfig.cpp
+index 1111111..2222222 100644
+--- a/src/libpgcode/src/Slic3r/Biz/libpgcode/ProcessorConfig.cpp
++++ b/src/libpgcode/src/Slic3r/Biz/libpgcode/ProcessorConfig.cpp
+@@ -361,5 +361,10 @@ GCodeFlavor flavor_from_string(std::string_view str)
+     else if (str == "mach3"sv)          { return GCodeFlavor::gcfMach3; }
+     else if (str == "machinekit"sv)     { return GCodeFlavor::gcfMachinekit; }
+     else if (str == "no-extrusion"sv)   { return GCodeFlavor::gcfNoExtrusion; }
+-    else                                { assert(false); return GCodeFlavor::gcfRepRapSprinter; }
++    // Farm: legacy INI and third-party gcode can carry flavor strings outside
++    // this list. assert() here is libassert, which aborts even in release
++    // builds - SIGABRT on the slice thread with no catchable exception
++    // (device crash inside extract_processor_config). Fall through to the
++    // default flavor instead.
++    else                                { return GCodeFlavor::gcfRepRapSprinter; }
+ }

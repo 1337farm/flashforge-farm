@@ -1,11 +1,29 @@
 #ifndef ORIENT_HPP
 #define ORIENT_HPP
 
-#include "libslic3r/Model.hpp"
+// 3.0 port of the vendored PrusaSlicer 2.x auto-orienter (engine/src/main/jni/
+// compat/Orient.cpp, upstream AutoOrienter). Only the two 2.x Model wrappers
+// were removed; the orienter itself is mesh-only and runs on 3.0 types.
+#include "Slic3r/Domain/TriangleMesh.hpp"
+#include "Slic3r/Domain/Transformation.hpp"
+// Slic3r::{Vec3d,Vec3f,Matrix3d,Transform3d,Point,BoundingBoxf3} aliases.
+// NOTE: libslic3r/Geometry.hpp is intentionally NOT included here — it leaks
+// a global SCALED_EPSILON macro that clashes with the engine's own macro in any
+// TU that also includes render/bed_utils.hpp. Orient.cpp includes it instead.
+#include "libslic3r/Point.hpp"
+
+#include <Eigen/Geometry>
+#include <functional>
+#include <string>
+#include <vector>
 
 namespace Slic3r {
 
 namespace orientation {
+
+// The orienter only ever needs the plain mesh; the 2.x Model-based entry
+// points (orient(ModelObject*), orient(ModelInstance*)) were dropped with the
+// 2.x headers, so callers apply the returned direction themselves.
 
 
 /// A logical bed representing an object not being orientd. Either the orient
@@ -23,7 +41,7 @@ static const constexpr int UNORIENTD = -1;
 /// (also the initial state before orient), 0..N means the index of the bed.
 /// Zero is the physical bed, larger than zero means a virtual bed.
 struct OrientMesh {
-    TriangleMesh mesh;              /// The real mesh data
+    Domain::TriangleMesh mesh;      /// The real mesh data
     double overhang_angle = 30;
     double angle{ 0 };
     Vec3d axis{ 0,0,1 };
@@ -31,6 +49,17 @@ struct OrientMesh {
     Matrix3d rotation_matrix;
     Vec3d euler_angles;
     std::string name;
+
+    /// Projection axis the caller's CURRENT stance has pointing at the bed
+    /// (the mesh-space direction that currently maps to world-up). The
+    /// winner's unprintability and this stance's unprintability are both
+    /// scored during the run so the app can decide whether reorienting is
+    /// genuinely worthwhile. Defaults to the shape's file pose (identity).
+    Vec3d requested_up{ 0,0,1 };
+    /// Unprintability of the minimizer's best stance (after orient()).
+    float unprintability = 0;
+    /// Unprintability of the requested_up stance (after orient()).
+    float current_unprintability = 0;
 
     /// Optional setter function which can store arbitrary data in its closure
     std::function<void(const OrientMesh&)> setter = nullptr;
@@ -149,10 +178,6 @@ using OrientMeshs = std::vector<OrientMesh>;
  */
 void orient(OrientMeshs &items, const OrientMeshs &excludes, const OrientParams &params = {});
 
-// this function should be deleted, since rotating objects are so complicated that its inherited transformation may be a trouble
-void orient(ModelObject* obj);
-
-void orient(ModelInstance* instance);
 
 }} // namespace Slic3r::orientment
 

@@ -1,5 +1,7 @@
 package com.flashforge.farm.gallery;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -126,7 +128,7 @@ public final class GalleryMesh {
 
     // Binary serialization for disk caching
     public void writeToFile(File file) throws IOException {
-        try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(file))) {
+        try (DataOutputStream dos = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(file), 64 * 1024))) {
             dos.writeInt(triCount);
             for (int i = 0; i < xyz.length; i++) {
                 dos.writeFloat(xyz[i]);
@@ -138,8 +140,9 @@ public final class GalleryMesh {
     }
 
     public static GalleryMesh readFromFile(File file) throws IOException {
-        try (DataInputStream dis = new DataInputStream(new FileInputStream(file))) {
+        try (DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(file), 64 * 1024))) {
             int triCount = dis.readInt();
+            if (triCount <= 0 || triCount > 2000000) throw new IOException("bad cache triangle count");
             int vertexCount = triCount * 9;
             float[] xyz = new float[vertexCount];
             float[] normals = new float[vertexCount];

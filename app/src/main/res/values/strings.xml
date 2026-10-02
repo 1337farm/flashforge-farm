@@ -47,6 +47,7 @@
     <string name="ModelContextDeleteAll">Delete all</string>
     <string name="ModelContextDeletedAll">All models deleted.</string>
     <string name="MenuFileCalibrations">Calibrat.</string>
+    <string name="MenuFileGalleryButton">Gallery</string>
     <string name="MenuFileShapeGallery">Shape gallery</string>
     <string name="MenuFileShapeGalleryAdd">Add model…</string>
     <string name="MenuFileShapeGalleryAdded">Model added to gallery.</string>
@@ -139,6 +140,13 @@
     <string name="MenuSliceInfoLayers">Layers %1$d - %2$d</string>
     <string name="MenuSliceExportToFile">Export to file</string>
     <string name="MenuSliceShare">Share</string>
+    <string name="MenuSliceSave">Save</string>
+    <string name="MenuSliceSaveHint">Saves to your %1$s folder. Edit the name if you like.</string>
+    <string name="MenuSliceSaveDone">Saved to Downloads as %1$s</string>
+    <string name="MenuSliceExportFailed">Could not save the gcode</string>
+    <string name="MenuSliceOverwriteTitle">Replace existing file?</string>
+    <string name="MenuSliceOverwriteMessage">%1$s already exists in Downloads. Replace it?</string>
+    <string name="MenuSliceOverwrite">Replace</string>
     <string name="MenuSlicePerformance">Performance</string>
     <string name="MenuSliceSendToPrinterLoading">Uploading…</string>
     <string name="MenuSliceSendToPrinterOK">File sent to queue.</string>

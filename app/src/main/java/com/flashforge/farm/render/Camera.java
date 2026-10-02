@@ -13,7 +13,6 @@ public class Camera {
     public Vec3d origin = new Vec3d(0, 0, 0);
     public Vec3d up = new Vec3d(0, 0, 1);
 
-    private double[] tempMatrix = new double[16];
     private float zoom = 1f;
 
     // Pre-allocated scratch buffers — avoids Vec3d allocation on every gesture event
@@ -21,7 +20,6 @@ public class Camera {
     private final Vec3d scratchUpMod = new Vec3d();
     private final Vec3d scratchRight = new Vec3d();
     private final Vec3d scratchScreenY = new Vec3d();
-    private final double[] rotBuf = new double[4];
 
     public void invalidate() {
         viewMatrixDirty = true;
@@ -53,32 +51,116 @@ public class Camera {
         return viewMatrix;
     }
 
+    /**
+     * Orthographic box-scale factor. Perspective NEVER reads this: apparent
+     * size in perspective comes only from physical camera distance (dolly),
+     * never from focal length.
+     */
     public float getZoom() {
         return zoom;
     }
 
-    public void zoom(float zoom) {
-        // Allow zooming OUT ~4x below the default view (0.25x) so the whole bed
-        // / large models fit on screen; zoom IN is capped at 10x.
-        this.zoom = MathUtils.clamp(this.zoom + zoom / 25f, 0.25f, 10f);
+    private final static float MIN_ZOOM = 0.4f;
+    private final static float MAX_ZOOM = 15f;
+
+    /**
+     * Scale the orthographic view box only. The pinch handler calls this in
+     * ortho mode; perspective pinch uses {@link #dollyBy} instead.
+     */
+    public void zoomOrthoBy(float factor) {
+        if (!(factor > 0f) || Float.isNaN(factor) || Float.isInfinite(factor)) return;
+        this.zoom = MathUtils.clamp(this.zoom * factor, MIN_ZOOM, MAX_ZOOM);
     }
 
-    public void setZoom(float zoom) {
-        this.zoom = MathUtils.clamp(zoom, 0.25f, 10f);
+    /**
+     * Ortho box zoom that reproduces the current perspective framing: matches
+     * the ortho vertical half-extent to dist*tan(30deg) so toggling ortho
+     * keeps the picture stable without moving the camera.
+     */
+    public static float orthoZoomForDistance(double dist, double baseHalfExtent, double aspect) {
+        if (!(dist > 0) || !(baseHalfExtent > 0)) return 1f;
+        if (!(aspect > 0)) aspect = 1.0;
+        double ratioVertical = aspect < 1 ? 1.0 / aspect : 1.0;
+        double zoom = baseHalfExtent * ratioVertical / (dist * Math.tan(Math.toRadians(30.0)));
+        if (zoom < MIN_ZOOM) return MIN_ZOOM;
+        if (zoom > MAX_ZOOM) return MAX_ZOOM;
+        return (float) zoom;
     }
 
-    public Vec3d calcScreenMovement(float x, float y) {
-        x /= zoom;
-        y /= zoom;
-        computeScreenBasis();
-        return new Vec3d(
-                scratchRight.x * x + scratchScreenY.x * y,
-                scratchRight.y * x + scratchScreenY.y * y,
-                scratchRight.z * x + scratchScreenY.z * y
-        );
+    /**
+     * Startup camera distance that frames the whole bed volume plus a margin
+     * at the constant 60deg field of view. Width-bound on narrow (portrait)
+     * screens, height-bound otherwise; the 30deg downward tilt only
+     * foreshortens the bed vertically on screen, so the height fit is
+     * conservative.
+     */
+    public static double startupDistance(double maxDim, double aspect) {
+        if (!(maxDim > 0)) return 1.0;
+        if (!(aspect > 0)) aspect = 0.5;
+        double needHalf = maxDim / 2.0 + 2.0;
+        double tan30 = Math.tan(Math.toRadians(30.0));
+        double forWidth = needHalf / (tan30 * Math.min(aspect, 1.0));
+        double forHeight = needHalf / tan30;
+        return Math.max(forWidth, forHeight);
     }
 
-    // Computes scratchRight and scratchScreenY from current camera direction — no allocation.
+    /** Reference camera-to-target distance captured at default framing. */
+    private double defaultDistance = 0;
+
+    public void setDefaultDistance(double distance) {
+        if (distance > 0 && Double.isFinite(distance)) this.defaultDistance = distance;
+    }
+
+    public double currentDistance() {
+        double dx = position.x - origin.x;
+        double dy = position.y - origin.y;
+        double dz = position.z - origin.z;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    /**
+     * Physical zoom: dolly the camera along the view axis. factor > 1 moves
+     * closer (zooms in), factor < 1 moves away. Travel is clamped to [0.4, 15]
+     * as distance ratios of the default framing distance, so the bed can be
+     * inspected up close and the whole farm still fits when backed out.
+     */
+    public void dollyBy(double factor) {
+        if (!(factor > 0) || Double.isNaN(factor) || Double.isInfinite(factor)) return;
+        double dx = position.x - origin.x;
+        double dy = position.y - origin.y;
+        double dz = position.z - origin.z;
+        double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (!(dist > 1e-12) || !Double.isFinite(dist)) return;
+        double minDist = defaultDistance > 0 ? defaultDistance / MAX_ZOOM : dist / MAX_ZOOM;
+        double maxDist = defaultDistance > 0 ? defaultDistance / MIN_ZOOM : dist / MIN_ZOOM;
+        double target = dist / factor;
+        if (target < minDist) target = minDist;
+        if (target > maxDist) target = maxDist;
+        double s = target / dist;
+        position.x = origin.x + dx * s;
+        position.y = origin.y + dy * s;
+        position.z = origin.z + dz * s;
+        viewMatrixDirty = true;
+    }
+
+    /**
+     * Apparent-size ratio vs default framing (&gt;1 = closer/larger). Replaces
+     * the old focal zoom for constant-screen-size compensation (axes).
+     */
+    public double zoomRatio() {
+        double dist = currentDistance();
+        if (!(dist > 1e-12) || !(defaultDistance > 0)) return 1.0;
+        return defaultDistance / dist;
+    }
+
+    /** Translate camera and focus point together by a world-space delta. */
+    public void moveByWorld(double dx, double dy, double dz) {
+        position.x += dx; position.y += dy; position.z += dz;
+        origin.x += dx; origin.y += dy; origin.z += dz;
+        viewMatrixDirty = true;
+    }
+
+        // Computes scratchRight and scratchScreenY from current camera direction — no allocation.
     private void computeScreenBasis() {
         scratchDir.x = origin.x - position.x;
         scratchDir.y = origin.y - position.y;
@@ -104,9 +186,11 @@ public class Camera {
         scratchScreenY.z = scratchDir.x * scratchRight.y - scratchDir.y * scratchRight.x;
     }
 
-    public void move(float x, float y) {
-        x /= zoom;
-        y /= zoom;
+    /**
+     * Screen-basis pan for pre-scaled world-unit deltas (no zoom scaling;
+     * callers scale by world-per-pixel themselves).
+     */
+    public void moveWorld(float x, float y) {
         computeScreenBasis();
 
         double mx = scratchRight.x * x + scratchScreenY.x * y;
@@ -119,36 +203,21 @@ public class Camera {
     }
 
     public void rotateAround(double rx, double ry) {
-        rotBuf[0] = position.x - origin.x;
-        rotBuf[1] = position.y - origin.y;
-        rotBuf[2] = position.z - origin.z;
-        rotBuf[3] = 1.0;
+        double vx = position.x - origin.x;
+        double vy = position.y - origin.y;
+        double vz = position.z - origin.z;
+        double radius = Math.sqrt(vx * vx + vy * vy + vz * vz);
+        if (radius <= 1e-12 || !Double.isFinite(radius)) return;
 
-        DoubleMatrix.setIdentityM(tempMatrix, 0);
+        double yaw = Math.atan2(-vx, -vy);
+        double pitch = Math.toDegrees(Math.asin(Math.max(-1.0, Math.min(1.0, vz / radius))));
+        double targetPitch = Math.max(-89.0, Math.min(89.0, pitch - ry));
+        double targetYaw = yaw + Math.toRadians(rx);
+        double horizontal = radius * Math.cos(Math.toRadians(targetPitch));
 
-        scratchDir.x = origin.x - position.x;
-        scratchDir.y = origin.y - position.y;
-        scratchDir.z = origin.z - position.z;
-        scratchDir.normalize();
-
-        double yaw = Math.atan2(scratchDir.x, scratchDir.y);
-        double pitch = Math.toDegrees(Math.asin(-scratchDir.z));
-
-        double mry = -ry;
-        if (pitch + mry > 90) {
-            mry = 0;
-        } else if (pitch + mry < -90) {
-            mry = 0;
-        }
-
-        DoubleMatrix.rotateM(tempMatrix, 0, -mry * Math.cos(yaw), 1, 0, 0);
-        DoubleMatrix.rotateM(tempMatrix, 0, mry * Math.sin(yaw), 0, 1, 0);
-        DoubleMatrix.rotateM(tempMatrix, 0, rx, 0, 0, 1);
-
-        DoubleMatrix.multiplyMV(rotBuf, 0, tempMatrix, 0, rotBuf, 0);
-        position.x = rotBuf[0] / rotBuf[3] + origin.x;
-        position.y = rotBuf[1] / rotBuf[3] + origin.y;
-        position.z = rotBuf[2] / rotBuf[3] + origin.z;
+        position.x = origin.x - horizontal * Math.sin(targetYaw);
+        position.y = origin.y - horizontal * Math.cos(targetYaw);
+        position.z = origin.z + radius * Math.sin(Math.toRadians(targetPitch));
         viewMatrixDirty = true;
     }
 }

@@ -412,10 +412,20 @@ public class MainActivity extends AppCompatActivity {
                     try {
                         String name = IOUtils.getDisplayName(importUri);
                         in = getContentResolver().openInputStream(importUri);
-                        com.flashforge.farm.gallery.GalleryStore.importStream(in, name);
-                        ViewUtils.postOnMainThread(() ->
-                                Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuFileShapeGalleryAdded)));
+                        File imported =
+                                com.flashforge.farm.gallery.GalleryStore.importStream(in, name);
+                        // Warm the row preview now, so the freshly added tile
+                        // has its thumbnail without waiting for the gallery to
+                        // open (and the cause of a broken mesh is logged here
+                        // on the read path, not silently swallowed later).
+                        com.flashforge.farm.gallery.ShapeGallery.warmCustomPreview(imported);
+                        ViewUtils.postOnMainThread(() -> {
+                            Bus.GALLERY_CHANGED.postValue(new com.flashforge.farm.events.GalleryChangedEvent());
+                            Bus.NEED_SNACKBAR.postValue(new NeedSnackbarEvent(R.string.MenuFileShapeGalleryAdded));
+                        });
                     } catch (Exception e) {
+                        android.util.Log.e("GalleryImport",
+                                "add-to-gallery failed uri=" + importUri, e);
                         ViewUtils.postOnMainThread(() ->
                             new FarmAlertDialogBuilder(this)
                                     .setTitle(R.string.MenuFileShapeGalleryAdd)
@@ -1154,17 +1164,22 @@ public class MainActivity extends AppCompatActivity {
 
                             Bus.OBJECTS_LIST_CHANGED.postValue(new ObjectsListChangedEvent());
                             boolean bigObject = false;
+                            java.util.List<Integer> oriented = new ArrayList<>();
                             for (int i = firstNewObject; i < firstNewObject + addedObjects; i++) {
                                 if (autoorient && !project3mf) {
                                     model.autoOrient(i);
-                                    fragment.getGlView().getRenderer().invalidateGlModel(i);
+                                    oriented.add(i);
                                 }
                                 if (model.isBigObject(i)) {
                                     bigObject = true;
                                 }
                             }
-                            if (autoorient && !project3mf) {
-                                fragment.getGlView().requestRender();
+                            if (!oriented.isEmpty()) {
+                                java.util.List<Integer> refresh = oriented;
+                                fragment.getGlView().queueEvent(() -> {
+                                    for (int idx : refresh) fragment.getGlView().getRenderer().invalidateGlModel(idx);
+                                    fragment.getGlView().requestRender();
+                                });
                             }
                             Bus.DISMISS_SNACKBAR.postValue(new NeedDismissSnackbarEvent(tag));
                             if (project3mf) {

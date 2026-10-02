@@ -1,19 +1,28 @@
 #include "Orient.hpp"
-#include "Geometry.hpp"
+#include "libslic3r/Geometry.hpp"
+#include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
 #include <numeric>
-#include <ClipperUtils.hpp>
+#include <unordered_set>
+#include "Slic3r/Biz/Algorithms/ClipperUtils.hpp"
 #include <boost/geometry/index/rtree.hpp>
 #include <tbb/parallel_for.h>
 #include "prusa_utils.hpp"
-#include "libslic3r/AABBMesh.hpp"
+#include "Slic3r/Biz/Algorithms/AABBMesh.hpp"
 
 #if defined(_MSC_VER) && defined(__clang__)
 #define BOOST_NO_CXX17_HDR_STRING_VIEW
 #endif
 
-#include <boost/log/trivial.hpp>
 #include <boost/multiprecision/integer.hpp>
 #include <boost/rational.hpp>
+
+// Upstream logs orientation runs through boost::log. The farm does not link
+// libboost_log (farm_driver.cpp avoided it), so swallow those calls instead
+// of dragging a whole logging library into libfarm.so.
+struct OrientNullLog {
+    template<class T> OrientNullLog& operator<<(const T&) { return *this; }
+};
+#define BOOST_LOG_TRIVIAL(sev) OrientNullLog()
 
 #undef MAX3
 #define MAX3(a, b, c) std::max(std::max(a,b),c)
@@ -65,8 +74,8 @@ namespace Slic3r {
         public:
             int face_count_hull;
             OrientMesh *orient_mesh = NULL;
-            TriangleMesh *mesh;
-            TriangleMesh mesh_convex_hull;
+            Domain::TriangleMesh *mesh;
+            Domain::TriangleMesh mesh_convex_hull;
             Eigen::MatrixXf normals, normals_quantize, normals_hull, normals_hull_quantize;
             Eigen::VectorXf areas, areas_hull;
             Eigen::VectorXf is_apperance; // whether a facet is outer apperance
@@ -100,7 +109,7 @@ namespace Slic3r {
                 preprocess();
             }
 
-            AutoOrienter(TriangleMesh *mesh_) {
+            AutoOrienter(Domain::TriangleMesh *mesh_) {
                 mesh = mesh_;
                 preprocess();
             }
@@ -169,22 +178,33 @@ namespace Slic3r {
                 if (progressind)
                     progressind(80);
 
-                //To avoid flipping, we need to verify if there are orientations with same unprintability.
+                // To avoid flipping, prefer -- among the orientations tied for
+                // the best unprintability -- the one aligned with the stance the
+                // caller is currently standing in. Upstream only protected the
+                // assessed frame's own up ({0,0,1}); generalizing to requested_up
+                // means a caller who manually arranged a face (for example one
+                // side of a two-sided medallion) gets that face back instead of
+                // an arbitrary unordered_map/sort coin flip. With the default
+                // requested_up this is exactly upstream's +Z anti-flip.
                 Vec3f n1 = {0, 0, 1};
+                Vec3f requested = n1;
+                if (orient_mesh != nullptr &&
+                    orient_mesh->requested_up.norm() > 1e-9) {
+                    requested = orient_mesh->requested_up.cast<float>();
+                    requested.normalize();
+                }
                 auto best_orientation = results_vector[0].first;
-
-                for (int i = 1; i < results_vector.size() - 1; i++) {
+                float best_align = best_orientation.dot(requested);
+                for (size_t i = 1; i < results_vector.size(); i++) {
+                    // Ties are contiguous: the vector is cost-ascending.
                     if (abs(results_vector[i].second.unprintability -
-                            results_vector[0].second.unprintability) < EPSILON &&
-                        abs(results_vector[0].first.dot(n1) - 1) > EPSILON) {
-                        if (abs(results_vector[i].first.dot(n1) - 1) < EPSILON * EPSILON) {
-                            best_orientation = n1;
-                            break;
-                        }
-                    } else {
+                            results_vector[0].second.unprintability) >= EPSILON)
                         break;
+                    const float align = results_vector[i].first.dot(requested);
+                    if (align > best_align) {
+                        best_align = align;
+                        best_orientation = results_vector[i].first;
                     }
-
                 }
 
                 BOOST_LOG_TRIVIAL(info) << std::fixed << std::setprecision(6) << "best:"
@@ -193,6 +213,15 @@ namespace Slic3r {
                 std::cout << std::fixed << std::setprecision(6) << "best:"
                           << best_orientation.transpose() << ", costs:"
                           << results_vector[0].second.field_values() << std::endl;
+
+                // Expose both the winner's unprintability and the score of the
+                // stance the caller is currently standing in, so an app-level
+                // no-op policy can avoid thrashing a pose that is already fine.
+                if (orient_mesh != nullptr) {
+                    orient_mesh->unprintability = results_vector[0].second.unprintability;
+                    orient_mesh->current_unprintability = score(
+                            orient_mesh->requested_up.cast<float>());
+                }
 
                 return best_orientation.cast<double>();
             }
@@ -203,7 +232,10 @@ namespace Slic3r {
                 float m_sample_interval = 0.5;
                 AABBMesh indexed_mesh(mesh->its, true);
                 BoundingBoxf3 bbox = mesh->bounding_box();
-                bbox.offset(BBOX_OFFSET);
+                // 3.0 BoundingBox dropped offset(); rebuild it grown instead.
+                {   const Vec3d off(BBOX_OFFSET, BBOX_OFFSET, BBOX_OFFSET);
+                    bbox = BoundingBoxf3(bbox.min - off, bbox.max + off);
+                }
 
                 std::vector<FaceProperty> properties(mesh->its.indices.size());
                 std::unordered_set<size_t> hit_face_indices;
@@ -256,7 +288,7 @@ namespace Slic3r {
                 {
                     int face_count = mesh->facets_count();
                     auto its = mesh->its;
-                    face_normals = its_face_normals(its);
+                    face_normals = Biz::Algorithms::TriangleMesh::its_face_normals(its);
                     areas = Eigen::VectorXf::Zero(face_count);
                     is_apperance = Eigen::VectorXf::Zero(face_count);
                     normals = Eigen::MatrixXf::Zero(face_count, 3);
@@ -277,13 +309,13 @@ namespace Slic3r {
 
                 // get convex hull statistics
                 {
-                    mesh_convex_hull = mesh->convex_hull_3d();
+                    mesh_convex_hull = Biz::Algorithms::TriangleMesh::convex_hull_3d(*mesh);
                     //mesh_convex_hull.write_binary("convex_hull_debug.stl");
 
                     int face_count = mesh_convex_hull.facets_count();
                     auto its = mesh_convex_hull.its;
                     face_count_hull = mesh_convex_hull.facets_count();
-                    face_normals_hull = its_face_normals(its);
+                    face_normals_hull = Biz::Algorithms::TriangleMesh::its_face_normals(its);
                     areas_hull = Eigen::VectorXf::Zero(face_count);
                     normals_hull = Eigen::MatrixXf::Zero(face_count_hull, 3);
                     normals_hull_quantize = Eigen::MatrixXf::Zero(face_count_hull, 3);
@@ -400,6 +432,17 @@ namespace Slic3r {
                 }
             }
 
+            /// Unprintability of a specific projection axis (the direction
+            /// that will be rolled onto +Z / away from the bed). Reuses the
+            /// already-computed facet data, so it is a cheap per-candidate
+            /// pass; lets callers compare the current stance against the
+            /// minimizer's best without a second preprocess().
+            float score(Vec3f axis) {
+                project_vertices(axis);
+                CostItems costs = get_features(axis, params.min_volume);
+                return target_function(costs, params.min_volume);
+            }
+
             void project_vertices(Vec3f orientation) {
                 int face_count = mesh->facets_count();
                 auto its = mesh->its;
@@ -456,10 +499,10 @@ namespace Slic3r {
             CostItems get_features(Vec3f orientation, bool min_volume = true) {
                 CostItems costs;
                 costs.area_total = area_of_boundingbox(mesh->bounding_box());
-                costs.radius = mesh->bounding_box().radius();
+                costs.radius = 0.5 * (mesh->bounding_box().max - mesh->bounding_box().min).norm();  // 3.0 dropped radius()
                 // volume
                 costs.volume =
-                        mesh->stats().volume > 0 ? mesh->stats().volume : its_volume(mesh->its);
+                        mesh->stats().volume > 0 ? mesh->stats().volume : Domain::its_volume(mesh->its);
 
                 float total_min_z = z_projected.minCoeff();
                 // filter bottom area
@@ -587,10 +630,12 @@ namespace Slic3r {
                 for (size_t i = 0; i != meshs_.size(); ++i) {
                     auto &mesh_ = meshs_[i];
                     progressfn(i, mesh_.name);
-                    //auto progressfn_i = [&](unsigned cnt) {progressfn(cnt, "Orienting " + mesh_.name); };
-                    AutoOrienter orienter(&mesh_, params, /*progressfn_i*/{}, stopfn);
+                    // Re-enable upstream's (commented-out) per-stage progress so
+                    // orient() reports 20/30/60/80 as the orienter runs.
+                    auto progressfn_i = [&](unsigned cnt) { progressfn(cnt, "Orienting " + mesh_.name); };
+                    AutoOrienter orienter(&mesh_, params, progressfn_i, stopfn);
                     mesh_.orientation = orienter.process();
-                    Geometry::rotation_from_two_vectors(mesh_.orientation, {0, 0, 1}, mesh_.axis,
+                    rotation_from_two_vectors(mesh_.orientation, {0, 0, 1}, mesh_.axis,
                                                         mesh_.angle, &mesh_.rotation_matrix);
                     BOOST_LOG_TRIVIAL(info) << std::fixed << std::setprecision(3) << "v,phi: "
                                             << mesh_.axis.transpose() << ", " << mesh_.angle;
@@ -603,13 +648,14 @@ namespace Slic3r {
                                       for (size_t i = range.begin(); i != range.end(); ++i) {
                                           auto &mesh_ = meshs_[i];
                                           progressfn(i, mesh_.name);
-                                          AutoOrienter orienter(&mesh_, params, {}, stopfn);
+                                          auto progressfn_i = [&](unsigned cnt) { progressfn(cnt, "Orienting " + mesh_.name); };
+                                          AutoOrienter orienter(&mesh_, params, progressfn_i, stopfn);
                                           mesh_.orientation = orienter.process();
-                                          Geometry::rotation_from_two_vectors(mesh_.orientation,
+                                          rotation_from_two_vectors(mesh_.orientation,
                                                                               {0, 0, 1}, mesh_.axis,
                                                                               mesh_.angle,
                                                                               &mesh_.rotation_matrix);
-                                          mesh_.euler_angles = Geometry::extract_euler_angles(
+                                          mesh_.euler_angles = extract_euler_angles(
                                                   mesh_.rotation_matrix);
                                           BOOST_LOG_TRIVIAL(debug) << "rotation_from_two_vectors: "
                                                                    << mesh_.orientation.transpose()
@@ -634,35 +680,6 @@ namespace Slic3r {
 
             _orient(arrangables, params, pri, cfn);
 
-        }
-
-        void orient(ModelObject *obj) {
-            auto m = obj->mesh();
-            AutoOrienter orienter(&m);
-            Vec3d orientation = orienter.process();
-            orientation *= -1;
-            ModelVolumePtrs ptrs = obj->volumes;
-            for (int i = 0, c = ptrs.size(); i < c; i++) {
-                auto vol = ptrs[i];
-                const Geometry::Transformation& old_transform = vol->get_transformation();
-                const Vec3d tnormal = orientation;
-                const Transform3d rotation_matrix = Transform3d(Eigen::Quaterniond().setFromTwoVectors(tnormal, -Vec3d::UnitZ()));
-                vol->set_transformation(old_transform.get_offset_matrix() * rotation_matrix * old_transform.get_matrix_no_offset());
-            }
-            obj->invalidate_bounding_box();
-            obj->ensure_on_bed(false);
-        }
-
-        void orient(ModelInstance *instance) {
-            auto m = instance->get_object()->mesh();
-            AutoOrienter orienter(&m);
-            Vec3d orientation = orienter.process();
-            Vec3d axis;
-            double angle;
-            Matrix3d rotation_matrix;
-            Geometry::rotation_from_two_vectors(orientation, {0, 0, 1}, axis, angle, &rotation_matrix);
-
-            rotate_model_instance(instance, rotation_matrix);
         }
 
 

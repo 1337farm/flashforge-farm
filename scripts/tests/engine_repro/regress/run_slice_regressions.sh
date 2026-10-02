@@ -27,6 +27,18 @@ fails=0
 TMPGCODE="$(mktemp /tmp/slice_repro_XXXXXX.gcode)"
 trap 'rm -f "$TMPGCODE"' EXIT
 
+# Library path for the harness binary. SLICE_LIBS_DIR overrides (a 3.0
+# engine staging dir, e.g. the CI libslic3r-<src> artifact); otherwise fall
+# back to build_harness.sh resolution (fail-closed on stale engines).
+if [ -z "${SLICE_LIBS_DIR:-}" ]; then
+    SLICE_LIBS_DIR="$(bash "$REPO/scripts/tests/engine_repro/build_harness.sh" 2>/dev/null || true)"
+fi
+if [ -n "$SLICE_LIBS_DIR" ]; then
+    DEPS_LIBS_DIR="$REPO/engine/src/main/jniLibs/$(basename "$SLICE_LIBS_DIR")"
+    [ -d "$DEPS_LIBS_DIR" ] || DEPS_LIBS_DIR="$REPO/engine/src/main/jniLibs/arm64-v8a"
+    export LD_LIBRARY_PATH="$SLICE_LIBS_DIR:$DEPS_LIBS_DIR:${LD_LIBRARY_PATH:-}"
+fi
+
 run() {
     local name="$1" expect="$2"; shift 2
     local log="$REG/.slice_run.log"
@@ -42,17 +54,18 @@ run() {
     return 1
 }
 
-# 1) Baseline: 20mm cube on the reported Benchy AD5M config must slice.
-#    If this throws, the engine slice path itself is broken for everything.
-run "cube_20mm + user_benchy_ad5m.ini slices" 0 \
-    "$REG/user_benchy_ad5m.ini" "$REG/cube_20mm.stl" || fails=$((fails+1))
+# 1) Baseline: 20mm cube on a minimal valid config must slice end to end.
+#    Guards the bed-instances regression: with no instances assigned to the
+#    bed, update() emptied the model and slice died with bare EmptyPrint.
+run "cube_20mm + minimal.ini slices" 0 \
+    "$REG/minimal.ini" "$REG/cube_20mm.stl" || fails=$((fails+1))
 
 # 2) Empty model must fail LOUDLY — explicit error (2) or coded slicing
 #    exception (3). Either names the cause; silent success (0) or an
 #    unclassified crash would be the bug.
 rc_log="$REG/.slice_run.log"
 : > "$TMPGCODE"
-if "$HARNESS" "$REG/user_benchy_ad5m.ini" "$REG/empty.stl" "$TMPGCODE" >"$rc_log" 2>&1; then
+if "$HARNESS" "$REG/minimal.ini" "$REG/empty.stl" "$TMPGCODE" >"$rc_log" 2>&1; then
     echo "FAIL  empty.stl sliced silently (expected loud failure)"
     tail -n 12 "$rc_log"
     fails=$((fails+1))
@@ -62,6 +75,24 @@ else
         echo "PASS  empty.stl fails loudly (exit $rc)"
     else
         echo "FAIL  empty.stl unclassified exit $rc (expected 2 or 3)"
+        tail -n 12 "$rc_log"
+        fails=$((fails+1))
+    fi
+fi
+
+# 3) The reported Benchy AD5M config must never die BARE: exit 2 with a
+#    named cause, or exit 3 carrying a SLICING_EXCEPTION code. A bare
+#    "Slicing exception" with no code is the regression.
+: > "$TMPGCODE"
+if "$HARNESS" "$REG/slice_benchy_ad5m.ini" "$REG/cube_20mm.stl" "$TMPGCODE" >"$rc_log" 2>&1; then
+    echo "PASS  benchy config slices (exit 0)"
+else
+    rc=$?
+    if { [ "$rc" -eq 2 ] && grep -q "REPRO_ERROR" "$rc_log"; } \
+        || { [ "$rc" -eq 3 ] && grep -q "SLICING_EXCEPTION code=" "$rc_log"; }; then
+        echo "PASS  benchy config fails loudly (exit $rc, cause named)"
+    else
+        echo "FAIL  benchy config failed without a named cause (exit $rc)"
         tail -n 12 "$rc_log"
         fails=$((fails+1))
     fi

@@ -64,8 +64,8 @@ public final class ProfilePrintSettingsBuilder {
                 R.drawable.print_layers_28,
                 "Quality",
                 items -> {
-                    addSection(items, "Layer height", "layer_height", "initial_layer_print_height", "adaptive_layer_height");
-                    addSection(items, "Line width", "line_width", "initial_layer_line_width", "inner_wall_line_width", "outer_wall_line_width", "sparse_infill_line_width", "internal_solid_infill_line_width", "top_surface_line_width", "support_line_width");
+                    addSection(items, "Layer height", "first_layer_height", "min_layer_height", "max_layer_height", "variable_layer_height", "automatic_infill_combination_max_layer_height");
+                    addSection(items, "Line width", "extrusion_width", "first_layer_extrusion_width", "perimeter_extrusion_width", "external_perimeter_extrusion_width", "infill_extrusion_width", "solid_infill_extrusion_width", "top_infill_extrusion_width", "support_material_extrusion_width");
                     addSection(items, "Seam", "seam_position", "staggered_inner_seams", "seam_gap", "wipe_speed", "role_based_wipe_speed");
                     addSection(items, "Scarf joint seam", "seam_slope_type", "seam_slope_conditional", "scarf_angle_threshold", "scarf_overhang_threshold", "seam_slope_start_height", "seam_slope_entire_loop", "seam_slope_min_length", "seam_slope_steps", "seam_slope_inner_walls", "scarf_joint_speed", "scarf_joint_flow_ratio");
                     addSection(items, "Precision", "slice_closing_radius", "resolution", "enable_arc_fitting", "elefant_foot_compensation", "elefant_foot_compensation_layers", "precise_z_height", "xy_hole_compensation", "xy_contour_compensation", "hole_to_polyhole", "hole_to_polyhole_threshold", "hole_to_polyhole_twisted");

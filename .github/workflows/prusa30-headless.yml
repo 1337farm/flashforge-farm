@@ -2223,8 +2223,8 @@ jobs:
               -Lengine/prusa30/jniImports/bgcode/lib \
               -Lengine/prusa30/jniImports/jpeg/lib \
               -Lengine/prusa30/jniImports/lua/lib \
-              -lboost_system -lboost_filesystem -lboost_thread -lboost_regex \
-              -lboost_chrono -lboost_atomic -lboost_date_time -lboost_iostreams \
+              -l:libboost_system-clang-mt-a64-1_86.a -l:libboost_filesystem-clang-mt-a64-1_86.a -l:libboost_thread-clang-mt-a64-1_86.a -l:libboost_regex-clang-mt-a64-1_86.a \
+              -l:libboost_chrono-clang-mt-a64-1_86.a -l:libboost_atomic-clang-mt-a64-1_86.a -l:libboost_date_time-clang-mt-a64-1_86.a -l:libboost_iostreams-clang-mt-a64-1_86.a \
               -ltbb -lnlopt_cxx -lexpat -lpng16 -lfmt -lassert \
               -lqhull -lprusa_fdm_mixer -lgmp -lmpfr -lcrypto -lssl \
               -lzstd -lblosc -lopenvdb -lheatshrink -lbgcode_convert -ljpeg \

@@ -61,6 +61,10 @@ public final class ProfilePrintSettingsBuilder {
         ConfigOptionDef opt = def.options.get(key);
         if (opt != null) {
             items.add(fragment.new OptionElement(opt));
+        } else {
+            // Engine-driven visibility: stale keys (renamed/removed upstream)
+            // must show up in logcat instead of silently emptying a section.
+            android.util.Log.w("PrintSettingsBuilder", "option missing from engine defs: " + key);
         }
     }
 
@@ -88,13 +92,13 @@ public final class ProfilePrintSettingsBuilder {
                 R.drawable.print_infill_28,
                 "Strength",
                 items -> {
-                    addSection(items, "Walls", "wall_loops", "alternate_extra_wall", "detect_thin_wall");
-                    addSection(items, "Top/bottom shells", "top_shell_layers", "top_shell_thickness", "bottom_shell_layers", "bottom_shell_thickness", "top_surface_pattern", "bottom_surface_pattern", "internal_solid_infill_pattern", "top_surface_density", "bottom_surface_density", "min_width_top_surface");
-                    addSection(items, "Infill", "sparse_infill_density", "sparse_infill_pattern", "fill_multiline", "infill_direction", "solid_infill_direction", "infill_anchor", "infill_anchor_max", "infill_combination", "infill_combination_max_layer_height", "minimum_sparse_infill_area", "infill_wall_overlap", "detect_narrow_internal_solid_infill", "gyroid_optimized");
+                    addSection(items, "Walls", "perimeters", "extra_perimeters", "thin_walls");
+                    addSection(items, "Top/bottom shells", "top_solid_layers", "top_solid_min_thickness", "bottom_solid_layers", "bottom_solid_min_thickness", "top_fill_pattern", "bottom_fill_pattern");
+                    addSection(items, "Infill", "fill_density", "fill_pattern", "fill_angle", "infill_anchor", "infill_anchor_max", "automatic_infill_combination", "automatic_infill_combination_max_layer_height", "solid_infill_below_area", "infill_overlap", "gap_fill_enabled", "infill_first");
                     addSection(items, "Lightning infill", "lightning_overhang_angle", "lightning_prune_angle", "lightning_straightening_angle");
                     addSection(items, "Flow ratio", "outer_wall_flow_ratio", "inner_wall_flow_ratio", "top_solid_infill_flow_ratio", "bottom_solid_infill_flow_ratio", "internal_solid_infill_flow_ratio", "sparse_infill_flow_ratio", "gap_fill_flow_ratio", "first_layer_flow_ratio");
                     addSection(items, "Internal bridges", "internal_bridge_density", "internal_bridge_flow", "internal_bridge_speed", "internal_bridge_fan_speed");
-                    addSection(items, "Advanced", "bridge_flow", "bridge_density", "minimum_sparse_infill_area");
+                    addSection(items, "Advanced", "bridge_flow_ratio", "solid_infill_below_area");
                 }
         );
     }

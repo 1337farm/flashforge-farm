@@ -929,7 +929,10 @@ default: {
                 });
 
                 if (def.type == ConfigOptionDef.ConfigOptionType.STRING || def.type == ConfigOptionDef.ConfigOptionType.STRINGS) {
-                    ((PreferenceItem) simpleItem).setSubtitleProvider(() -> opt(def, eIndex).trim());
+                    ((PreferenceItem) simpleItem).setSubtitleProvider(() -> {
+                        String s = opt(def, eIndex);
+                        return s == null ? "" : s.trim();
+                    });
                     if (def.key.endsWith("_gcode")) {
                         ((PreferenceItem) simpleItem).setTitle(null);
                     }
@@ -937,6 +940,9 @@ default: {
                     ((PreferenceItem) simpleItem).setValueProvider(() -> {
                         if (def.type == ConfigOptionDef.ConfigOptionType.ENUM) {
                             String v = opt(def, eIndex);
+                            if (v == null) {
+                                return "";
+                            }
                             int i = Arrays.asList(def.enumValues).indexOf(v);
                             if (i != -1 && i < def.enumLabels.length) {
                                 return Slic3rLocalization.getString(def.enumLabels[i]);
@@ -950,7 +956,8 @@ default: {
                                 return v;
                             }
                         } else {
-                            return opt(def, eIndex);
+                            String s = opt(def, eIndex);
+                            return s == null ? "" : s;
                         }
                     });
                 }

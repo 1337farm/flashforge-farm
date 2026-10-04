@@ -806,7 +806,8 @@ default: {
                         String val = opt(def, eIndex);
                         int i = Arrays.asList(values).indexOf(val);
                         if (i == -1 && val.matches("^\\d+$")) {
-                            i = Integer.parseInt(val);
+                            int parsed = Integer.parseInt(val);
+                            i = (parsed >= 0 && parsed < labels.length) ? parsed : -1;
                         }
                         builder.setSingleChoiceItems(labels, i, (dialog, which) -> {
                             updateConfigField(def, eIndex, values[which]);
@@ -937,10 +938,14 @@ default: {
                         if (def.type == ConfigOptionDef.ConfigOptionType.ENUM) {
                             String v = opt(def, eIndex);
                             int i = Arrays.asList(def.enumValues).indexOf(v);
-                            if (i != -1) {
+                            if (i != -1 && i < def.enumLabels.length) {
                                 return Slic3rLocalization.getString(def.enumLabels[i]);
                             } else if (v.matches("^\\d+$")) {
-                                return Slic3rLocalization.getString(def.enumLabels[Integer.parseInt(v)]);
+                                int parsed = Integer.parseInt(v);
+                                if (parsed >= 0 && parsed < def.enumLabels.length) {
+                                    return Slic3rLocalization.getString(def.enumLabels[parsed]);
+                                }
+                                return v;
                             } else {
                                 return v;
                             }

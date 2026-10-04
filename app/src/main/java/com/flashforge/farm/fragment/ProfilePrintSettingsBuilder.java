@@ -56,6 +56,10 @@ public final class ProfilePrintSettingsBuilder {
         ConfigOptionDef opt = def.options.get(key);
         if (opt != null) {
             items.add(fragment.new OptionElement(opt));
+        } else {
+            // Engine-driven visibility: stale keys (renamed/removed upstream)
+            // must show up in logcat instead of silently emptying a section.
+            android.util.Log.w("PrintSettingsBuilder", "option missing from engine defs: " + key);
         }
     }
 

@@ -580,35 +580,19 @@ default: {
                     || el.simpleItem instanceof PreferenceSwitchItem);
     }
 
-    private static boolean isSpacer(OptionElement el) {
-        return el != null && el.simpleItem instanceof SpaceItem;
-    }
-
     private static List<OptionElement> pruneEmptySections(List<OptionElement> items) {
+        List<com.flashforge.farm.slic3r.SectionPruner.Kind> kinds =
+                new ArrayList<>(items.size());
+        for (OptionElement el : items) {
+            if (isSectionHeader(el)) kinds.add(com.flashforge.farm.slic3r.SectionPruner.Kind.SECTION);
+            else if (isCategoryHeader(el)) kinds.add(com.flashforge.farm.slic3r.SectionPruner.Kind.CATEGORY);
+            else if (isRealOption(el)) kinds.add(com.flashforge.farm.slic3r.SectionPruner.Kind.OPTION);
+            else kinds.add(com.flashforge.farm.slic3r.SectionPruner.Kind.OTHER);
+        }
+        List<Boolean> keep = com.flashforge.farm.slic3r.SectionPruner.prune(kinds);
         List<OptionElement> out = new ArrayList<>(items.size());
-        int i = 0;
-        while (i < items.size()) {
-            OptionElement el = items.get(i);
-            if (isSectionHeader(el) || isCategoryHeader(el)) {
-                int j = i + 1;
-                boolean hasOption = false;
-                while (j < items.size()) {
-                    OptionElement n = items.get(j);
-                    if (isSectionHeader(n) || isCategoryHeader(n)) break;
-                    if (isRealOption(n)) {
-                        hasOption = true;
-                        break;
-                    }
-                    j++;
-                }
-                if (!hasOption) {
-                    i++;
-                    if (i < items.size() && isSpacer(items.get(i))) i++;
-                    continue;
-                }
-            }
-            out.add(el);
-            i++;
+        for (int i = 0; i < items.size(); i++) {
+            if (keep.get(i)) out.add(items.get(i));
         }
         return out;
     }

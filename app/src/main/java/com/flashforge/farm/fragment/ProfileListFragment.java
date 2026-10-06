@@ -558,8 +558,64 @@ default: {
         unfolded.clear();
     }
 
+    /**
+     * Drops section headers (and whole tabs) that resolve to zero real
+     * options. Builder lists are curated against engine option keys that get
+     * renamed/removed upstream; without this a stale key list renders as an
+     * empty header. Real options are PreferenceItem/PreferenceSwitchItem rows;
+     * missing defs degrade to invisible SpaceItem placeholders.
+     */
+    private static boolean isSectionHeader(OptionElement el) {
+        return el != null && el.title == null && el.specialType == -1
+                && el.simpleItem instanceof SubHeader;
+    }
+
+    private static boolean isCategoryHeader(OptionElement el) {
+        return el != null && (el.title != null || el.specialType != -1);
+    }
+
+    private static boolean isRealOption(OptionElement el) {
+        return el != null
+                && (el.simpleItem instanceof PreferenceItem
+                    || el.simpleItem instanceof PreferenceSwitchItem);
+    }
+
+    private static boolean isSpacer(OptionElement el) {
+        return el != null && el.simpleItem instanceof SpaceItem;
+    }
+
+    private static List<OptionElement> pruneEmptySections(List<OptionElement> items) {
+        List<OptionElement> out = new ArrayList<>(items.size());
+        int i = 0;
+        while (i < items.size()) {
+            OptionElement el = items.get(i);
+            if (isSectionHeader(el) || isCategoryHeader(el)) {
+                int j = i + 1;
+                boolean hasOption = false;
+                while (j < items.size()) {
+                    OptionElement n = items.get(j);
+                    if (isSectionHeader(n) || isCategoryHeader(n)) break;
+                    if (isRealOption(n)) {
+                        hasOption = true;
+                        break;
+                    }
+                    j++;
+                }
+                if (!hasOption) {
+                    i++;
+                    if (i < items.size() && isSpacer(items.get(i))) i++;
+                    continue;
+                }
+            }
+            out.add(el);
+            i++;
+        }
+        return out;
+    }
+
     @SuppressLint("NotifyDataSetChanged")
     protected void setConfigItems(List<OptionElement> items) {
+        items = pruneEmptySections(items);
         List<OptionWrapper> list = new ArrayList<>();
         int j = 0;
         for (int i = 0; i < items.size(); i++) {
@@ -804,11 +860,7 @@ default: {
                             }
                         }
                         String val = opt(def, eIndex);
-                        int i = Arrays.asList(values).indexOf(val);
-                        if (i == -1 && val.matches("^\\d+$")) {
-                            int parsed = Integer.parseInt(val);
-                            i = (parsed >= 0 && parsed < labels.length) ? parsed : -1;
-                        }
+                        int i = com.flashforge.farm.slic3r.EnumLabelResolver.indexOf(val, values, labels);
                         builder.setSingleChoiceItems(labels, i, (dialog, which) -> {
                             updateConfigField(def, eIndex, values[which]);
                             updateConfigValueOnly(boundIndex);
@@ -929,35 +981,24 @@ default: {
                 });
 
                 if (def.type == ConfigOptionDef.ConfigOptionType.STRING || def.type == ConfigOptionDef.ConfigOptionType.STRINGS) {
-                    ((PreferenceItem) simpleItem).setSubtitleProvider(() -> {
-                        String s = opt(def, eIndex);
-                        return s == null ? "" : s.trim();
-                    });
+                    ((PreferenceItem) simpleItem).setSubtitleProvider(() ->
+                            com.flashforge.farm.slic3r.EnumLabelResolver.orEmpty(opt(def, eIndex)).trim());
                     if (def.key.endsWith("_gcode")) {
                         ((PreferenceItem) simpleItem).setTitle(null);
                     }
                 } else {
                     ((PreferenceItem) simpleItem).setValueProvider(() -> {
-                        if (def.type == ConfigOptionDef.ConfigOptionType.ENUM) {
+                    if (def.type == ConfigOptionDef.ConfigOptionType.ENUM
+                            && def.enumLabels != null && def.enumValues != null) {
                             String v = opt(def, eIndex);
-                            if (v == null) {
-                                return "";
-                            }
-                            int i = Arrays.asList(def.enumValues).indexOf(v);
-                            if (i != -1 && i < def.enumLabels.length) {
+                            int i = com.flashforge.farm.slic3r.EnumLabelResolver.indexOf(
+                                    v, def.enumValues, def.enumLabels);
+                            if (i != -1) {
                                 return Slic3rLocalization.getString(def.enumLabels[i]);
-                            } else if (v.matches("^\\d+$")) {
-                                int parsed = Integer.parseInt(v);
-                                if (parsed >= 0 && parsed < def.enumLabels.length) {
-                                    return Slic3rLocalization.getString(def.enumLabels[parsed]);
-                                }
-                                return v;
-                            } else {
-                                return v;
                             }
+                            return com.flashforge.farm.slic3r.EnumLabelResolver.orEmpty(v);
                         } else {
-                            String s = opt(def, eIndex);
-                            return s == null ? "" : s;
+                            return com.flashforge.farm.slic3r.EnumLabelResolver.orEmpty(opt(def, eIndex));
                         }
                     });
                 }

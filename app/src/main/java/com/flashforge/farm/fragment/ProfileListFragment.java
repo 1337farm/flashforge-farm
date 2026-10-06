@@ -815,6 +815,13 @@ default: {
                 simpleItem = new SpaceItem(0, 0);
                 return;
             }
+            if (def.type == ConfigOptionDef.ConfigOptionType.ENUM
+                    && (def.enumLabels == null || def.enumValues == null)) {
+                // Engine-driven visibility: an ENUM without bridged choices
+                // would degrade to free-text entry with no options (seen with
+                // fuzzy_skin). Log it instead of silently misrendering.
+                android.util.Log.w("ProfileList", "ENUM without choices from engine defs: " + def.key);
+            }
             if (def.type != ConfigOptionDef.ConfigOptionType.BOOL && def.type != ConfigOptionDef.ConfigOptionType.BOOLS) {
                 simpleItem = new PreferenceItem().setTitle(Slic3rLocalization.getString(def.getLabel())).setOnClickListener(v -> {
                     if (def.guiType == ConfigOptionDef.GUIType.COLOR) {

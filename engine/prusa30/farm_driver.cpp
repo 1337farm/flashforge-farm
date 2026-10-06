@@ -16,6 +16,7 @@
 // public INI reader wrapper, so no JSON cutover is needed here.
 //
 #include <android/log.h>
+#include <cctype>
 #include <fstream>
 #include <iomanip>
 #include <functional>
@@ -189,7 +190,24 @@ Domain::Bed bed_from_config(const ConfigPackFDM& fdm) {
 
 std::string stage_name(Slic3r::Biz::Slicing::ProgressInfo stage) {
     std::string name{magic_enum::enum_name(stage)};
-    return name.empty() ? "slicing" : name;
+    if (name.empty()) return "slicing";
+    // magic_enum yields CamelCase/kebab tokens ("SlicingObjects"); the slice
+    // progress UI shows this verbatim, so humanize: underscores to spaces
+    // plus a space before each capital that follows a lowercase letter.
+    std::string out;
+    out.reserve(name.size() + 4);
+    for (size_t i = 0; i < name.size(); ++i) {
+        const char c = name[i];
+        if (c == '_') {
+            out += ' ';
+            continue;
+        }
+        if (i > 0 && std::isupper(static_cast<unsigned char>(c))
+            && std::islower(static_cast<unsigned char>(name[i - 1])))
+            out += ' ';
+        out += c;
+    }
+    return out;
 }
 
 // Formats a SlicingStatus::Exception (whose what() is always the bare

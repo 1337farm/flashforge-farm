@@ -7,14 +7,31 @@
 set -euo pipefail
 DEV="${1:-127.0.0.1:5555}"
 shift || true
+PKG="${PKG:-com.flashforge.farm}"
 OUT="${OUT:-/tmp/ui-probe}"
 mkdir -p "$OUT"
+
+# Abort instead of tapping blindly when our app is not in front.
+require_focus() {
+    local tries=0
+    while [ $tries -lt 5 ]; do
+        if adb -s "$DEV" shell "dumpsys activity activities" 2>/dev/null \
+            | grep -q "mFocusedApp=.*$PKG"; then
+            return 0
+        fi
+        tries=$((tries + 1))
+        sleep 2
+    done
+    echo "PROBE-ABORT: $PKG not in foreground, refusing to tap" >&2
+    return 1
+}
 
 dump() {
     local tag="$1" tries=0
     while [ $tries -lt 10 ]; do
         if adb -s "$DEV" shell uiautomator dump "/sdcard/$tag.xml" >/dev/null 2>&1; then
-            adb -s "$DEV" pull "/sdcard/$tag.xml" "$OUT/$tag.xml" >/dev/null 2>&1 && return 0
+            adb -s "$DEV" pull "/sdcard/$tag.xml" "$OUT/$tag.xml" >/dev/null 2>&1 \
+                && grep -q "$PKG" "$OUT/$tag.xml" && return 0
         fi
         tries=$((tries + 1))
         sleep 2
@@ -41,8 +58,10 @@ crashes() {
 }
 
 i=0
+require_focus || exit 2
 for tap in "$@"; do
     i=$((i + 1))
+    require_focus || exit 2
     adb -s "$DEV" shell input tap "${tap%,*}" "${tap#*,}"
     dump "step$i"
     echo "--- after tap $tap ---"

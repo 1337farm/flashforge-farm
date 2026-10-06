@@ -76,6 +76,7 @@ public final class ProfilePrintSettingsBuilder {
                     addSection(items, "Layer height", "layer_height", "first_layer_height", "variable_layer_height");
                     addSection(items, "Line width", "extrusion_width", "first_layer_extrusion_width", "perimeter_extrusion_width", "external_perimeter_extrusion_width", "infill_extrusion_width", "solid_infill_extrusion_width", "top_infill_extrusion_width", "support_material_extrusion_width");
                     addSection(items, "Seam", "seam_position", "staggered_inner_seams");
+                    addSection(items, "Scarf joint seam", "scarf_seam_placement", "scarf_seam_entire_loop", "scarf_seam_length", "scarf_seam_max_segment_length", "scarf_seam_on_inner_perimeters", "scarf_seam_only_on_smooth", "scarf_seam_start_height");
                     addSection(items, "Precision", "slice_closing_radius", "resolution", "elefant_foot_compensation");
                     addSection(items, "Ironing", "ironing_type", "ironing_flowrate", "ironing_spacing");
                     addSection(items, "Wall generator", "perimeter_generator", "wall_transition_angle", "wall_transition_filter_deviation", "wall_transition_length", "wall_distribution_count", "min_bead_width", "min_feature_size");
@@ -105,6 +106,7 @@ public final class ProfilePrintSettingsBuilder {
                 "Speed",
                 items -> {
                     addSection(items, "Speed", "perimeter_speed", "small_perimeter_speed", "external_perimeter_speed", "infill_speed", "solid_infill_speed", "top_solid_infill_speed", "support_material_speed", "support_material_interface_speed", "bridge_speed", "gap_fill_speed", "ironing_speed", "travel_speed", "travel_speed_z", "first_layer_speed", "first_layer_infill_speed", "max_volumetric_speed");
+                    addSection(items, "Overhang speed", "enable_dynamic_overhang_speeds", "overhang_speed_0", "overhang_speed_1", "overhang_speed_2", "overhang_speed_3");
                     addSection(items, "Acceleration", "perimeter_acceleration", "external_perimeter_acceleration", "top_solid_infill_acceleration", "solid_infill_acceleration", "infill_acceleration", "bridge_acceleration", "first_layer_acceleration", "travel_acceleration", "default_acceleration");
                     addSection(items, "Junction deviation", "machine_max_junction_deviation");
                     addSection(items, "Pressure advance", "pressure_advance");

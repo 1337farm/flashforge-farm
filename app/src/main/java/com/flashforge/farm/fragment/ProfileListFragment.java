@@ -837,7 +837,9 @@ default: {
                     AlertDialog.Builder builder = new FarmAlertDialogBuilder(getContext())
                             .setTitle(Slic3rLocalization.getString(def.getFullLabel()));
                     
-                    if (def.type == ConfigOptionDef.ConfigOptionType.ENUM) {
+                    if (def.type == ConfigOptionDef.ConfigOptionType.ENUM
+                            && def.enumLabels != null && def.enumLabels.length > 0
+                            && def.enumValues != null) {
                         String[] labels;
                         String[] values;
                         if (Objects.equals("host_type", def.key)) {
@@ -857,6 +859,12 @@ default: {
                             updateConfigValueOnly(boundIndex);
                             dialog.dismiss();
                         });
+                    } else if (def.type == ConfigOptionDef.ConfigOptionType.ENUM) {
+                        // Engine reports an ENUM but bridged no choices: call
+                        // it out explicitly instead of free-text entry.
+                        android.util.Log.w("ProfileList", "ENUM without choices from engine defs: " + def.key);
+                        builder.setMessage("No options available for this setting in the current engine.")
+                                .setPositiveButton(android.R.string.ok, null);
                     } else {
                         String msg = Slic3rLocalization.getString(def.tooltip);
 

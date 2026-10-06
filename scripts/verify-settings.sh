@@ -76,6 +76,22 @@ check_crash() {
     return 0
 }
 
+# check_bridge_enum: the native bridge must report fuzzy_skin as ENUM (not
+# STRING). Best-effort: run-as may be denied on some builds (warn only then).
+check_bridge_enum() {
+    local log
+    log=$(adb_ shell "run-as $PKG cat files/farm_bridge.log" 2>/dev/null) || {
+        echo "WARN: farm_bridge.log unreadable, skipping bridge-type check" >&2
+        return 0
+    }
+    if echo "$log" | grep -q 'name=fuzzy_skin type=ENUM'; then
+        return 0
+    fi
+    echo "FAIL: bridge reports fuzzy_skin as non-ENUM (free-text symptom)" >&2
+    echo "$log" | grep "name=fuzzy_skin" | tail -2 >&2
+    return 1
+}
+
 echo "== focus app =="
 adb_ shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 sleep 6
@@ -92,6 +108,7 @@ echo "== Print / Strength =="
 tap_text quality "Strength" || { shot_on_fail quality; exit 1; }
 sleep 3; dump strength || exit 1
 assert_texts strength "Walls" "Top/bottom shells" || { FAIL=1; shot_on_fail strength; }
+check_bridge_enum || FAIL=1
 check_crash || { FAIL=1; shot_on_fail strength-crash; }
 
 if [ "$FAIL" = 0 ]; then echo "VERIFY-OK"; else echo "VERIFY-FAILED"; fi

@@ -469,6 +469,18 @@ extern "C" {
         });
     }
 
+    // type_info::operator== can fail across the JNI boundary when the
+    // engine archive and this TU carry duplicate typeinfo (hidden
+    // visibility / RTTI merge failure on Android): distinct objects with
+    // identical mangled names. The mangled-name fallback keeps enum (and
+    // other) detection working in that case. See on-device proof:
+    // farm_bridge.log showed type=STRING for EnumWrapper defs (fuzzy_skin).
+    // Non-template overload (named templates are illegal inside extern "C").
+    static bool type_matches(const std::type_info& t, const std::type_info& u) {
+        if (t == u) return true;
+        return std::strcmp(t.name(), u.name()) == 0;
+    }
+
     static const char* config_option_type(const Slic3r::Domain::ConfigItemDef& d) {
         // ConfigItemDef::type is a const std::type_info*; compare the pointee,
         // matching how the engine itself tests it (ConfigDef.cpp:442).
@@ -478,24 +490,24 @@ extern "C" {
         // d.choices to detect enums: only 8 defs populate that, while every
         // real enum (seam_position, ironing_type, arc_fitting, ...) carries
         // its values in EnumValueDefs attached to init_fn instead.
-        if (t == typeid(Domain::EnumWrapper) || t == typeid(Domain::EnumVectorWrapper)) return "ENUM";
+        if (type_matches(t, typeid(Domain::EnumWrapper)) || type_matches(t, typeid(Domain::EnumVectorWrapper))) return "ENUM";
         if (!d.choices.empty()) return "ENUM";
-        if (t == typeid(bool)) return "BOOL";
-        if (t == typeid(int)) return "INT";
-        if (t == typeid(double)) return "FLOAT";
-        if (t == typeid(std::string)) return "STRING";
-        if (t == typeid(std::vector<bool>)) return "BOOLS";
-        if (t == typeid(std::vector<int>)) return "INTS";
-        if (t == typeid(std::vector<double>)) return "FLOATS";
-        if (t == typeid(std::vector<std::string>)) return "STRINGS";
+        if (type_matches(t, typeid(bool))) return "BOOL";
+        if (type_matches(t, typeid(int))) return "INT";
+        if (type_matches(t, typeid(double))) return "FLOAT";
+        if (type_matches(t, typeid(std::string))) return "STRING";
+        if (type_matches(t, typeid(std::vector<bool>))) return "BOOLS";
+        if (type_matches(t, typeid(std::vector<int>))) return "INTS";
+        if (type_matches(t, typeid(std::vector<double>))) return "FLOATS";
+        if (type_matches(t, typeid(std::vector<std::string>))) return "STRINGS";
         // NOTE: Domain::Vec2d is an alias template (Advanced::Vec<double, 2>),
         // so typeid() on it does not name a complete type and fails to compile.
         // Upstream never typeid's it either -- it matches Vec2d through the
         // variant's alternatives instead. The only Vec2d options (points,
         // bed_shape) are both edited as text, so the STRING fallback below
         // handles them correctly.
-        if (t == typeid(Domain::FloatOrPercentage)) return "FLOAT";
-        if (t == typeid(Domain::Percentage)) return "PERCENT";
+        if (type_matches(t, typeid(Domain::FloatOrPercentage))) return "FLOAT";
+        if (type_matches(t, typeid(Domain::Percentage))) return "PERCENT";
         return "STRING";
     }
 

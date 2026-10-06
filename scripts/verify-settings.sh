@@ -28,7 +28,8 @@ dump() { # $1 = tag; writes $OUT/$1.xml; retries until UI idle
     return 1
 }
 
-# tap_text <dump-tag> <exact-text> : taps center of first node with text
+# tap_text <dump-tag> <substring> : taps center of first node whose text
+# contains the substring (tab labels carry an icon glyph prefix, e.g. "d Print")
 tap_text() {
     local tag="$1" want="$2"
     local bounds
@@ -36,10 +37,11 @@ tap_text() {
 import re, sys
 x = open(sys.argv[1], encoding='utf-8', errors='ignore').read()
 want = sys.argv[2]
-for m in re.finditer(r'<node[^>]*text="' + re.escape(want) + r'"[^>]*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]"', x):
-    x1, y1, x2, y2 = map(int, m.groups())
-    print((x1 + x2) // 2, (y1 + y2) // 2)
-    break
+for m in re.finditer(r'<node[^>]*text="([^"]*)"[^>]*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]"', x):
+    if want in m.group(1):
+        x1, y1, x2, y2 = map(int, m.groups()[1:])
+        print((x1 + x2) // 2, (y1 + y2) // 2)
+        break
 EOF
 )
     if [ -z "$bounds" ]; then echo "FAIL: text '$want' not on screen ($tag)" >&2; return 1; fi
@@ -75,8 +77,8 @@ check_crash() {
 }
 
 echo "== focus app =="
-adb_ shell am start -n "$PKG/.MainActivity" >/dev/null 2>&1
-sleep 5
+adb_ shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+sleep 6
 adb_ logcat -c
 dump launch || exit 1
 

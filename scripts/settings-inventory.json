@@ -1,0 +1,1367 @@
+{
+ "files": {
+  "app/src/main/java/com/flashforge/farm/fragment/ProfilePrintSettingsBuilder.java": {
+   "methods": [
+    {
+     "name": "build",
+     "line": 21
+    },
+    {
+     "name": "build",
+     "line": 25
+    },
+    {
+     "name": "buildCategory",
+     "line": 36
+    },
+    {
+     "name": "append",
+     "line": 44
+    },
+    {
+     "name": "addSection",
+     "line": 47
+    },
+    {
+     "name": "addOption",
+     "line": 60
+    },
+    {
+     "name": "buildQuality",
+     "line": 71
+    },
+    {
+     "name": "buildStrength",
+     "line": 89
+    },
+    {
+     "name": "buildSpeed",
+     "line": 102
+    },
+    {
+     "name": "buildSupport",
+     "line": 115
+    },
+    {
+     "name": "buildMultimaterial",
+     "line": 128
+    },
+    {
+     "name": "buildOthers",
+     "line": 141
+    }
+   ],
+   "sections": [
+    {
+     "line": 76,
+     "title": "Layer height",
+     "keys": [
+      "layer_height",
+      "first_layer_height",
+      "variable_layer_height"
+     ]
+    },
+    {
+     "line": 77,
+     "title": "Line width",
+     "keys": [
+      "extrusion_width",
+      "first_layer_extrusion_width",
+      "perimeter_extrusion_width",
+      "external_perimeter_extrusion_width",
+      "infill_extrusion_width",
+      "solid_infill_extrusion_width",
+      "top_infill_extrusion_width",
+      "support_material_extrusion_width"
+     ]
+    },
+    {
+     "line": 78,
+     "title": "Seam",
+     "keys": [
+      "seam_position",
+      "staggered_inner_seams"
+     ]
+    },
+    {
+     "line": 79,
+     "title": "Precision",
+     "keys": [
+      "slice_closing_radius",
+      "resolution",
+      "elefant_foot_compensation"
+     ]
+    },
+    {
+     "line": 80,
+     "title": "Ironing",
+     "keys": [
+      "ironing_type",
+      "ironing_flowrate",
+      "ironing_spacing"
+     ]
+    },
+    {
+     "line": 81,
+     "title": "Wall generator",
+     "keys": [
+      "perimeter_generator",
+      "wall_transition_angle",
+      "wall_transition_filter_deviation",
+      "wall_transition_length",
+      "wall_distribution_count",
+      "min_bead_width",
+      "min_feature_size"
+     ]
+    },
+    {
+     "line": 82,
+     "title": "Walls and surfaces",
+     "keys": [
+      "extra_perimeters_on_overhangs",
+      "ensure_vertical_shell_thickness",
+      "avoid_crossing_perimeters",
+      "avoid_crossing_perimeters_max_detour",
+      "thin_walls",
+      "top_one_perimeter_type",
+      "only_one_perimeter_first_layer",
+      "gap_fill_enabled",
+      "infill_first"
+     ]
+    },
+    {
+     "line": 83,
+     "title": "Overhangs",
+     "keys": [
+      "overhangs"
+     ]
+    },
+    {
+     "line": 84,
+     "title": "Bridging",
+     "keys": [
+      "thick_bridges",
+      "bridge_angle"
+     ]
+    },
+    {
+     "line": 94,
+     "title": "Walls",
+     "keys": [
+      "perimeters",
+      "extra_perimeters",
+      "thin_walls"
+     ]
+    },
+    {
+     "line": 95,
+     "title": "Top/bottom shells",
+     "keys": [
+      "top_solid_layers",
+      "top_solid_min_thickness",
+      "bottom_solid_layers",
+      "bottom_solid_min_thickness",
+      "top_fill_pattern",
+      "bottom_fill_pattern"
+     ]
+    },
+    {
+     "line": 96,
+     "title": "Infill",
+     "keys": [
+      "fill_density",
+      "fill_pattern",
+      "fill_angle",
+      "infill_anchor",
+      "infill_anchor_max",
+      "automatic_infill_combination",
+      "automatic_infill_combination_max_layer_height",
+      "solid_infill_below_area",
+      "infill_overlap",
+      "gap_fill_enabled",
+      "infill_first"
+     ]
+    },
+    {
+     "line": 97,
+     "title": "Advanced",
+     "keys": [
+      "bridge_flow_ratio",
+      "solid_infill_below_area"
+     ]
+    },
+    {
+     "line": 107,
+     "title": "Speed",
+     "keys": [
+      "perimeter_speed",
+      "small_perimeter_speed",
+      "external_perimeter_speed",
+      "infill_speed",
+      "solid_infill_speed",
+      "top_solid_infill_speed",
+      "support_material_speed",
+      "support_material_interface_speed",
+      "bridge_speed",
+      "gap_fill_speed",
+      "ironing_speed"
+     ]
+    },
+    {
+     "line": 108,
+     "title": "Acceleration",
+     "keys": [
+      "perimeter_acceleration",
+      "external_perimeter_acceleration",
+      "top_solid_infill_acceleration",
+      "solid_infill_acceleration",
+      "infill_acceleration",
+      "bridge_acceleration",
+      "first_layer_acceleration",
+      "travel_acceleration",
+      "default_acceleration"
+     ]
+    },
+    {
+     "line": 109,
+     "title": "Junction deviation",
+     "keys": [
+      "machine_max_junction_deviation"
+     ]
+    },
+    {
+     "line": 110,
+     "title": "Pressure advance",
+     "keys": [
+      "pressure_advance"
+     ]
+    },
+    {
+     "line": 120,
+     "title": "Support",
+     "keys": [
+      "support_material",
+      "support_material_style",
+      "support_material_threshold",
+      "support_material_enforce_layers",
+      "support_material_pattern",
+      "support_material_contact_distance",
+      "support_material_bottom_contact_distance",
+      "support_material_spacing",
+      "support_material_angle",
+      "support_material_buildplate_only",
+      "support_material_xy_spacing"
+     ]
+    },
+    {
+     "line": 121,
+     "title": "Raft",
+     "keys": [
+      "support_material_first_layer_density",
+      "support_material_first_layer_expansion",
+      "raft_layers",
+      "raft_contact_distance",
+      "raft_expansion"
+     ]
+    },
+    {
+     "line": 122,
+     "title": "Support filament",
+     "keys": [
+      "support_material_extruder",
+      "support_material_interface_extruder"
+     ]
+    },
+    {
+     "line": 123,
+     "title": "Advanced",
+     "keys": [
+      "support_material_interface_layers",
+      "support_material_bottom_interface_layers",
+      "support_material_interface_pattern",
+      "support_material_interface_spacing",
+      "support_material_interface_contact_loops",
+      "support_material_interface_speed"
+     ]
+    },
+    {
+     "line": 133,
+     "title": "Prime tower",
+     "keys": [
+      "wipe_tower",
+      "wipe_tower_bridging",
+      "wipe_tower_cone_angle",
+      "wipe_tower_extra_spacing",
+      "wipe_tower_extra_flow",
+      "wipe_tower_no_sparse_layers",
+      "single_extruder_multi_material_priming"
+     ]
+    },
+    {
+     "line": 134,
+     "title": "Filament for Features",
+     "keys": [
+      "perimeter_extruder",
+      "infill_extruder",
+      "solid_infill_extruder",
+      "support_material_extruder",
+      "support_material_interface_extruder",
+      "wipe_tower_extruder"
+     ]
+    },
+    {
+     "line": 135,
+     "title": "Ooze prevention",
+     "keys": [
+      "ooze_prevention",
+      "standby_temperature_delta"
+     ]
+    },
+    {
+     "line": 136,
+     "title": "Advanced",
+     "keys": [
+      "interface_shells",
+      "mmu_segmented_region_max_width",
+      "mmu_segmented_region_interlocking_depth"
+     ]
+    },
+    {
+     "line": 146,
+     "title": "Skirt",
+     "keys": [
+      "skirts",
+      "skirt_distance",
+      "skirt_height",
+      "draft_shield"
+     ]
+    },
+    {
+     "line": 147,
+     "title": "Brim",
+     "keys": [
+      "brim_type",
+      "brim_width"
+     ]
+    },
+    {
+     "line": 148,
+     "title": "Special mode",
+     "keys": [
+      "spiral_vase"
+     ]
+    },
+    {
+     "line": 149,
+     "title": "Fuzzy Skin",
+     "keys": [
+      "fuzzy_skin",
+      "fuzzy_skin_thickness",
+      "fuzzy_skin_point_dist"
+     ]
+    },
+    {
+     "line": 150,
+     "title": "G-code output",
+     "keys": [
+      "gcode_comments",
+      "gcode_label_objects"
+     ]
+    },
+    {
+     "line": 151,
+     "title": "Notes",
+     "keys": [
+      "notes"
+     ]
+    },
+    {
+     "line": 152,
+     "title": "Profile dependencies",
+     "keys": [
+      "compatible_printers",
+      "compatible_printers_condition"
+     ]
+    }
+   ],
+   "option_gets": [],
+   "enum_branches": [],
+   "log_ws": [
+    {
+     "line": 67,
+     "msg": "PrintSettingsBuilder"
+    }
+   ],
+   "key_count": 132,
+   "stale_keys": []
+  },
+  "app/src/main/java/com/flashforge/farm/fragment/FilamentConfigFragment.java": {
+   "methods": [
+    {
+     "name": "getProfileListType",
+     "line": 26
+    },
+    {
+     "name": "useTabs",
+     "line": 31
+    },
+    {
+     "name": "onCreate",
+     "line": 36
+    },
+    {
+     "name": "getItems",
+     "line": 42
+    },
+    {
+     "name": "getConfigItems",
+     "line": 80
+    },
+    {
+     "name": "cloneCurrentProfile",
+     "line": 233
+    },
+    {
+     "name": "deleteCurrentProfile",
+     "line": 249
+    },
+    {
+     "name": "onApplyConfig",
+     "line": 258
+    },
+    {
+     "name": "onResetConfig",
+     "line": 273
+    },
+    {
+     "name": "getCurrentConfig",
+     "line": 282
+    },
+    {
+     "name": "getTitle",
+     "line": 287
+    },
+    {
+     "name": "selectItem",
+     "line": 292
+    }
+   ],
+   "sections": [],
+   "option_gets": [
+    {
+     "line": 86,
+     "key": "filament_colour"
+    },
+    {
+     "line": 87,
+     "key": "filament_diameter"
+    },
+    {
+     "line": 88,
+     "key": "filament_density"
+    },
+    {
+     "line": 89,
+     "key": "filament_cost"
+    },
+    {
+     "line": 90,
+     "key": "filament_spool_weight"
+    },
+    {
+     "line": 94,
+     "key": "idle_temperature"
+    },
+    {
+     "line": 98,
+     "key": "first_layer_temperature"
+    },
+    {
+     "line": 99,
+     "key": "temperature"
+    },
+    {
+     "line": 103,
+     "key": "first_layer_bed_temperature"
+    },
+    {
+     "line": 104,
+     "key": "bed_temperature"
+    },
+    {
+     "line": 108,
+     "key": "chamber_temperature"
+    },
+    {
+     "line": 109,
+     "key": "chamber_minimal_temperature"
+    },
+    {
+     "line": 114,
+     "key": "cooling"
+    },
+    {
+     "line": 115,
+     "key": "fan_always_on"
+    },
+    {
+     "line": 119,
+     "key": "min_fan_speed"
+    },
+    {
+     "line": 120,
+     "key": "max_fan_speed"
+    },
+    {
+     "line": 123,
+     "key": "disable_fan_first_layers"
+    },
+    {
+     "line": 124,
+     "key": "full_fan_speed_layer"
+    },
+    {
+     "line": 128,
+     "key": "fan_below_layer_time"
+    },
+    {
+     "line": 132,
+     "key": "enable_dynamic_fan_speeds"
+    },
+    {
+     "line": 133,
+     "key": "overhang_fan_speed_0"
+    },
+    {
+     "line": 134,
+     "key": "overhang_fan_speed_1"
+    },
+    {
+     "line": 135,
+     "key": "overhang_fan_speed_2"
+    },
+    {
+     "line": 136,
+     "key": "overhang_fan_speed_3"
+    },
+    {
+     "line": 141,
+     "key": "filament_type"
+    },
+    {
+     "line": 142,
+     "key": "filament_soluble"
+    },
+    {
+     "line": 146,
+     "key": "pressure_advance"
+    },
+    {
+     "line": 150,
+     "key": "high_current_on_filament_swap"
+    },
+    {
+     "line": 154,
+     "key": "filament_max_volumetric_speed"
+    },
+    {
+     "line": 157,
+     "key": "filament_infill_max_speed"
+    },
+    {
+     "line": 158,
+     "key": "filament_infill_max_crossing_speed"
+    },
+    {
+     "line": 163,
+     "key": "filament_shrinkage_compensation_z"
+    },
+    {
+     "line": 167,
+     "key": "filament_minimal_purge_on_wipe_tower"
+    },
+    {
+     "line": 171,
+     "key": "filament_loading_speed_start"
+    },
+    {
+     "line": 172,
+     "key": "filament_loading_speed"
+    },
+    {
+     "line": 173,
+     "key": "filament_unloading_speed_start"
+    },
+    {
+     "line": 174,
+     "key": "filament_unloading_speed"
+    },
+    {
+     "line": 175,
+     "key": "filament_toolchange_delay"
+    },
+    {
+     "line": 176,
+     "key": "filament_cooling_moves"
+    },
+    {
+     "line": 177,
+     "key": "filament_cooling_initial_speed"
+    },
+    {
+     "line": 178,
+     "key": "filament_cooling_final_speed"
+    },
+    {
+     "line": 179,
+     "key": "filament_stamping_loading_speed"
+    },
+    {
+     "line": 180,
+     "key": "filament_stamping_distance"
+    },
+    {
+     "line": 181,
+     "key": "filament_purge_multiplier"
+    },
+    {
+     "line": 182,
+     "key": "filament_ramming_parameters"
+    },
+    {
+     "line": 186,
+     "key": "filament_multitool_ramming"
+    },
+    {
+     "line": 187,
+     "key": "filament_multitool_ramming_volume"
+    },
+    {
+     "line": 188,
+     "key": "filament_multitool_ramming_flow"
+    },
+    {
+     "line": 192,
+     "key": "retract_lift"
+    },
+    {
+     "line": 193,
+     "key": "retract_lift_above"
+    },
+    {
+     "line": 194,
+     "key": "retract_lift_below"
+    },
+    {
+     "line": 198,
+     "key": "retract_length"
+    },
+    {
+     "line": 199,
+     "key": "retract_speed"
+    },
+    {
+     "line": 200,
+     "key": "deretract_speed"
+    },
+    {
+     "line": 201,
+     "key": "retract_restart_extra"
+    },
+    {
+     "line": 202,
+     "key": "retract_layer_change"
+    },
+    {
+     "line": 203,
+     "key": "wipe"
+    },
+    {
+     "line": 204,
+     "key": "retract_before_wipe"
+    },
+    {
+     "line": 208,
+     "key": "retract_length_toolchange"
+    },
+    {
+     "line": 209,
+     "key": "retract_restart_extra_toolchange"
+    },
+    {
+     "line": 214,
+     "key": "start_filament_gcode"
+    },
+    {
+     "line": 218,
+     "key": "end_filament_gcode"
+    },
+    {
+     "line": 222,
+     "key": "filament_notes"
+    },
+    {
+     "line": 226,
+     "key": "compatible_printers_condition"
+    },
+    {
+     "line": 227,
+     "key": "compatible_prints"
+    },
+    {
+     "line": 228,
+     "key": "compatible_prints_condition"
+    }
+   ],
+   "enum_branches": [],
+   "log_ws": [],
+   "key_count": 66,
+   "stale_keys": []
+  },
+  "app/src/main/java/com/flashforge/farm/fragment/PrinterConfigFragment.java": {
+   "methods": [
+    {
+     "name": "getProfileListType",
+     "line": 18
+    },
+    {
+     "name": "useTabs",
+     "line": 23
+    },
+    {
+     "name": "onCreate",
+     "line": 28
+    },
+    {
+     "name": "getItems",
+     "line": 34
+    },
+    {
+     "name": "getConfigItems",
+     "line": 39
+    },
+    {
+     "name": "cloneCurrentProfile",
+     "line": 178
+    },
+    {
+     "name": "deleteCurrentProfile",
+     "line": 193
+    },
+    {
+     "name": "onApplyConfig",
+     "line": 200
+    },
+    {
+     "name": "onResetConfig",
+     "line": 214
+    },
+    {
+     "name": "getCurrentConfig",
+     "line": 223
+    },
+    {
+     "name": "getTitle",
+     "line": 228
+    },
+    {
+     "name": "selectItem",
+     "line": 233
+    }
+   ],
+   "sections": [],
+   "option_gets": [
+    {
+     "line": 45,
+     "key": "bed_shape"
+    },
+    {
+     "line": 48,
+     "key": "max_print_height"
+    },
+    {
+     "line": 49,
+     "key": "z_offset"
+    },
+    {
+     "line": 52,
+     "key": "single_extruder_multi_material"
+    },
+    {
+     "line": 56,
+     "key": "gcode_flavor"
+    },
+    {
+     "line": 57,
+     "key": "thumbnails"
+    },
+    {
+     "line": 58,
+     "key": "silent_mode"
+    },
+    {
+     "line": 59,
+     "key": "remaining_times"
+    },
+    {
+     "line": 60,
+     "key": "binary_gcode"
+    },
+    {
+     "line": 64,
+     "key": "use_relative_e_distances"
+    },
+    {
+     "line": 65,
+     "key": "use_firmware_retraction"
+    },
+    {
+     "line": 66,
+     "key": "use_volumetric_e"
+    },
+    {
+     "line": 67,
+     "key": "variable_layer_height"
+    },
+    {
+     "line": 68,
+     "key": "prefer_clockwise_movements"
+    },
+    {
+     "line": 73,
+     "key": "start_gcode"
+    },
+    {
+     "line": 74,
+     "key": "autoemit_temperature_commands"
+    },
+    {
+     "line": 77,
+     "key": "end_gcode"
+    },
+    {
+     "line": 80,
+     "key": "before_layer_gcode"
+    },
+    {
+     "line": 83,
+     "key": "layer_gcode"
+    },
+    {
+     "line": 86,
+     "key": "between_objects_gcode"
+    },
+    {
+     "line": 89,
+     "key": "color_change_gcode"
+    },
+    {
+     "line": 92,
+     "key": "pause_print_gcode"
+    },
+    {
+     "line": 95,
+     "key": "template_custom_gcode"
+    },
+    {
+     "line": 99,
+     "key": "machine_limits_usage"
+    },
+    {
+     "line": 103,
+     "key": "machine_max_acceleration_"
+    },
+    {
+     "line": 104,
+     "key": "machine_max_acceleration_extruding"
+    },
+    {
+     "line": 105,
+     "key": "machine_max_acceleration_retracting"
+    },
+    {
+     "line": 106,
+     "key": "machine_max_acceleration_travel"
+    },
+    {
+     "line": 110,
+     "key": "machine_max_feedrate_"
+    },
+    {
+     "line": 114,
+     "key": "machine_max_jerk_"
+    },
+    {
+     "line": 115,
+     "key": "machine_max_junction_deviation"
+    },
+    {
+     "line": 119,
+     "key": "machine_min_extruding_rate"
+    },
+    {
+     "line": 120,
+     "key": "machine_min_travel_rate"
+    },
+    {
+     "line": 129,
+     "key": "extruder_colour"
+    },
+    {
+     "line": 133,
+     "key": "min_layer_height"
+    },
+    {
+     "line": 134,
+     "key": "max_layer_height"
+    },
+    {
+     "line": 138,
+     "key": "extruder_offset"
+    },
+    {
+     "line": 142,
+     "key": "retract_lift"
+    },
+    {
+     "line": 143,
+     "key": "travel_ramping_lift"
+    },
+    {
+     "line": 144,
+     "key": "travel_max_lift"
+    },
+    {
+     "line": 145,
+     "key": "travel_slope"
+    },
+    {
+     "line": 146,
+     "key": "travel_lift_before_obstacle"
+    },
+    {
+     "line": 150,
+     "key": "retract_lift_above"
+    },
+    {
+     "line": 151,
+     "key": "retract_lift_below"
+    },
+    {
+     "line": 155,
+     "key": "retract_length"
+    },
+    {
+     "line": 156,
+     "key": "retract_speed"
+    },
+    {
+     "line": 157,
+     "key": "deretract_speed"
+    },
+    {
+     "line": 158,
+     "key": "retract_restart_extra"
+    },
+    {
+     "line": 159,
+     "key": "retract_layer_change"
+    },
+    {
+     "line": 160,
+     "key": "wipe"
+    },
+    {
+     "line": 161,
+     "key": "retract_before_wipe"
+    },
+    {
+     "line": 165,
+     "key": "retract_length_toolchange"
+    },
+    {
+     "line": 166,
+     "key": "retract_restart_extra_toolchange"
+    },
+    {
+     "line": 172,
+     "key": "printer_notes"
+    }
+   ],
+   "enum_branches": [],
+   "log_ws": [],
+   "key_count": 54,
+   "stale_keys": []
+  },
+  "app/src/main/java/com/flashforge/farm/fragment/ProfileListFragment.java": {
+   "methods": [
+    {
+     "name": "getProfileListType",
+     "line": 91
+    },
+    {
+     "name": "createBelowFilamentPaletteView",
+     "line": 107
+    },
+    {
+     "name": "useTabs",
+     "line": 112
+    },
+    {
+     "name": "showFilamentPalette",
+     "line": 117
+    },
+    {
+     "name": "onCreateView",
+     "line": 123
+    },
+    {
+     "name": "onDraw",
+     "line": 207
+    },
+    {
+     "name": "onApplyTheme",
+     "line": 267
+    },
+    {
+     "name": "onCreateViewHolder",
+     "line": 283
+    },
+    {
+     "name": "onBindViewHolder",
+     "line": 300
+    },
+    {
+     "name": "onBindViewHolder",
+     "line": 330
+    },
+    {
+     "name": "getItemViewType",
+     "line": 387
+    },
+    {
+     "name": "getItemCount",
+     "line": 408
+    },
+    {
+     "name": "bindSimpleItem",
+     "line": 413
+    },
+    {
+     "name": "beforeTextChanged",
+     "line": 476
+    },
+    {
+     "name": "onTextChanged",
+     "line": 479
+    },
+    {
+     "name": "afterTextChanged",
+     "line": 482
+    },
+    {
+     "name": "onCreate",
+     "line": 547
+    },
+    {
+     "name": "onDestroy",
+     "line": 555
+    },
+    {
+     "name": "isSectionHeader",
+     "line": 568
+    },
+    {
+     "name": "isCategoryHeader",
+     "line": 573
+    },
+    {
+     "name": "isRealOption",
+     "line": 577
+    },
+    {
+     "name": "pruneEmptySections",
+     "line": 583
+    },
+    {
+     "name": "setConfigItems",
+     "line": 600
+    },
+    {
+     "name": "buildTabs",
+     "line": 638
+    },
+    {
+     "name": "styleTabs",
+     "line": 657
+    },
+    {
+     "name": "selectTab",
+     "line": 669
+    },
+    {
+     "name": "onResume",
+     "line": 683
+    },
+    {
+     "name": "getSelectedItem",
+     "line": 691
+    },
+    {
+     "name": "opt",
+     "line": 700
+    },
+    {
+     "name": "opt",
+     "line": 704
+    },
+    {
+     "name": "updateConfigField",
+     "line": 718
+    },
+    {
+     "name": "updateConfigValueOnly",
+     "line": 748
+    },
+    {
+     "name": "onUpdateConfigItems",
+     "line": 757
+    },
+    {
+     "name": "cloneCurrentProfile",
+     "line": 762
+    },
+    {
+     "name": "deleteCurrentProfile",
+     "line": 763
+    },
+    {
+     "name": "onApplyConfig",
+     "line": 764
+    },
+    {
+     "name": "onResetConfig",
+     "line": 765
+    },
+    {
+     "name": "getCurrentConfig",
+     "line": 766
+    },
+    {
+     "name": "getTitle",
+     "line": 767
+    },
+    {
+     "name": "selectItem",
+     "line": 768
+    },
+    {
+     "name": "getItems",
+     "line": 769
+    },
+    {
+     "name": "getConfigItems",
+     "line": 770
+    },
+    {
+     "name": "getTitle",
+     "line": 773
+    },
+    {
+     "name": "isSelected",
+     "line": 774
+    },
+    {
+     "name": "onColorPicked",
+     "line": 823
+    },
+    {
+     "name": "onCancel",
+     "line": 830
+    },
+    {
+     "name": "beforeTextChanged",
+     "line": 907
+    },
+    {
+     "name": "onTextChanged",
+     "line": 910
+    },
+    {
+     "name": "validateFloat",
+     "line": 913
+    },
+    {
+     "name": "afterTextChanged",
+     "line": 923
+    },
+    {
+     "name": "setOnClick",
+     "line": 1036
+    },
+    {
+     "name": "setColor",
+     "line": 1041
+    },
+    {
+     "name": "onCreateView",
+     "line": 1055
+    },
+    {
+     "name": "onBindView",
+     "line": 1060
+    },
+    {
+     "name": "bind",
+     "line": 1081
+    },
+    {
+     "name": "onCreateView",
+     "line": 1095
+    },
+    {
+     "name": "onBindView",
+     "line": 1100
+    },
+    {
+     "name": "bind",
+     "line": 1121
+    },
+    {
+     "name": "hasSpecialType",
+     "line": 1150
+    },
+    {
+     "name": "onCreateView",
+     "line": 1154
+    },
+    {
+     "name": "onApplyTheme",
+     "line": 1193
+    }
+   ],
+   "sections": [],
+   "option_gets": [],
+   "enum_branches": [
+    {
+     "line": 802,
+     "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM && (def.enumLabels == null || def.enumValues == null)"
+    },
+    {
+     "line": 802,
+     "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM"
+    },
+    {
+     "line": 807,
+     "cond": "\"ENUM without choices from engine defs: \" + def.key"
+    },
+    {
+     "line": 840,
+     "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM && def.enumLabels != null && def.enumLabels.length > 0 && def.enumValues != null"
+    },
+    {
+     "line": 840,
+     "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM && def.enumLabels != null && def.enumLabels.length > 0"
+    },
+    {
+     "line": 840,
+     "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM && def.enumLabels != null"
+    },
+    {
+     "line": 840,
+     "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM"
+    },
+    {
+     "line": 862,
+     "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM"
+    },
+    {
+     "line": 865,
+     "cond": "\"ENUM without choices from engine defs: \" + def.key"
+    },
+    {
+     "line": 990,
+     "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM && def.enumLabels != null && def.enumValues != null"
+    },
+    {
+     "line": 990,
+     "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM && def.enumLabels != null"
+    },
+    {
+     "line": 990,
+     "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM"
+    }
+   ],
+   "log_ws": [
+    {
+     "line": 712,
+     "msg": "ProfileListFragment"
+    },
+    {
+     "line": 807,
+     "msg": "ProfileList"
+    },
+    {
+     "line": 865,
+     "msg": "ProfileList"
+    }
+   ],
+   "key_count": 0,
+   "stale_keys": []
+  },
+  "app/src/main/java/com/flashforge/farm/slic3r/EnumLabelResolver.java": {
+   "methods": [
+    {
+     "name": "indexOf",
+     "line": 22
+    },
+    {
+     "name": "indexOf",
+     "line": 37
+    },
+    {
+     "name": "orEmpty",
+     "line": 43
+    }
+   ],
+   "sections": [],
+   "option_gets": [],
+   "enum_branches": [],
+   "log_ws": [],
+   "key_count": 0,
+   "stale_keys": []
+  },
+  "app/src/main/java/com/flashforge/farm/slic3r/SectionPruner.java": {
+   "methods": [
+    {
+     "name": "prune",
+     "line": 35
+    }
+   ],
+   "sections": [],
+   "option_gets": [],
+   "enum_branches": [],
+   "log_ws": [],
+   "key_count": 0,
+   "stale_keys": []
+  },
+  "app/src/main/jni/farm/farm_native.cpp": {
+   "note": "C++ bridge: see farm_native.cpp audit below",
+   "type_mapping": [
+    "BOOL",
+    "BOOLS",
+    "ENUM",
+    "FLOAT",
+    "INT",
+    "NONE",
+    "PERCENT",
+    "STRING"
+   ],
+   "has_strcmp_fallback": true,
+   "logs_typename": true
+  }
+ },
+ "engine_fdm_defs": 371,
+ "total_stale": 0,
+ "stale": []
+}

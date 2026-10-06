@@ -694,9 +694,10 @@ jfieldID* slots[] = { &f.key, &f.type, &f.guiType, &f.label, &f.fullLabel, &f.ca
                 // SEGV_MAPERR on a null memcpy. Write progress per iteration
                 // so the crash dump's tail names the exact def that faults.
                 {
-                    char prog[350];
-                    int pn = snprintf(prog, sizeof(prog), "PROGRESS emitted=%zu name=%s\n",
-                                      emitted, d.name.c_str());
+                    char prog[420];
+                    int pn = snprintf(prog, sizeof(prog), "PROGRESS emitted=%zu name=%s type=%s choices=%d\n",
+                                      emitted, d.name.c_str(), config_option_type(d),
+                                      (int) d.choices.size());
                     int pfd = open("/data/data/com.flashforge.farm/files/farm_bridge.log",
                                    O_WRONLY | O_CREAT | O_APPEND, 0644);
                     if (pfd >= 0) {

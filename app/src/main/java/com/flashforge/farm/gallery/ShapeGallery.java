@@ -11,8 +11,13 @@ public final class ShapeGallery {
     private ShapeGallery() {
     }
 
-    private static final String PREVIEW_CACHE_PREFIX = "preview5_";
-    private static final String[] LEGACY_PREVIEW_CACHE_PREFIXES = {"preview_", "preview2_", "preview3_", "preview4_"};
+    private static final String PREVIEW_CACHE_PREFIX = "preview6_";
+    private static final String[] LEGACY_PREVIEW_CACHE_PREFIXES = {"preview_", "preview2_", "preview3_", "preview4_", "preview5_"};
+
+    /** Hot preview meshes: revisits must not re-read/re-parse every model. */
+    private static final PreviewMemoryCache MEMORY_CACHE = new PreviewMemoryCache(12);
+    /** Preview raster budget: stride-subsample above this (no retriangulation, see #272). */
+    static final int PREVIEW_MAX_TRIS = 30000;
 
     public static final int KIND_CUBE = 1;
     public static final int KIND_CYLINDER = 2;
@@ -98,13 +103,18 @@ public final class ShapeGallery {
     }
 
     public static GalleryMesh previewFor(Item item) throws IOException {
+        GalleryMesh cached = MEMORY_CACHE.get(item.id);
+        if (cached != null) return cached;
+
         File cacheDir = FarmApp.getModelCacheDir();
         File cacheFile = new File(cacheDir, PREVIEW_CACHE_PREFIX + item.id + ".bin");
 
         // Check if cached preview exists and is valid
         if (cacheFile.exists()) {
             try {
-                return GalleryMesh.readFromFile(cacheFile);
+                GalleryMesh disk = GalleryMesh.readFromFile(cacheFile);
+                MEMORY_CACHE.put(item.id, disk);
+                return disk;
             } catch (IOException e) {
                 // Cache corrupted, fall through to regenerate
                 cacheFile.delete();
@@ -117,7 +127,7 @@ public final class ShapeGallery {
         // turntable, so rotate once here (-90° about X maps +Z to screen-up
         // and model front to the camera). Cached below, so zero per-frame
         // cost. Sweep best-effort.
-        GalleryMesh display = mesh.rotatedX(-Math.PI / 2);
+        GalleryMesh display = mesh.rotatedX(-Math.PI / 2).decimated(PREVIEW_MAX_TRIS);
         try {
             File[] stale = cacheDir.listFiles();
             if (stale != null) {
@@ -143,8 +153,14 @@ public final class ShapeGallery {
         } catch (IOException ignored) {
             // Non-fatal, continue with in-memory mesh
         }
+        MEMORY_CACHE.put(item.id, display);
 
         return display;
+    }
+
+    /** Evict one preview (e.g. after its custom file is deleted). */
+    public static void evictPreview(String itemId) {
+        MEMORY_CACHE.invalidate(itemId);
     }
 
     public static File fileFor(Item item) throws IOException {

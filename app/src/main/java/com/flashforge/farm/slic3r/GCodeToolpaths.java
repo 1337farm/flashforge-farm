@@ -358,7 +358,11 @@ public final class GCodeToolpaths {
         // travels add no vertices, so a pair never spans a travel gap.
         // Decimation must therefore keep/drop whole pairs; dropping single
         // vertices would misalign pairing and draw zigzag artifacts.
+        // A layer may end mid-strip with one trailing unpaired index; it is
+        // carried over verbatim (as before) so index counts stay exact.
         int pairCount = idx.n / 2;
+        boolean hasTrailing = (idx.n % 2) == 1;
+        int trailIdx = hasTrailing ? idx.a[idx.n - 1] : -1;
         int stride = 1;
         if (maxVerticesPerLayer > 0 && pairCount * 2 > maxVerticesPerLayer) {
             int targetPairs = Math.max(1, maxVerticesPerLayer / 2);
@@ -367,13 +371,15 @@ public final class GCodeToolpaths {
         }
         int keptPairs = 0;
         for (int k = 0; k < pairCount; k += stride) keptPairs++;
-        // Always keep the final pair so strips terminate at the real endpoint.
+        // Always keep the final pair so strips terminate at the real endpoint
+        // (only relevant when decimating; stride 1 already keeps everything).
         int lastPair = pairCount - 1;
-        boolean keepLast = pairCount > 0 && (stride <= 1 || (lastPair % stride != 0));
+        boolean keepLast = pairCount > 0 && stride > 1 && (lastPair % stride != 0);
         if (keepLast) keptPairs++;
         // Output packs kept pairs densely, so indices are the identity.
-        float[] outVerts = new float[keptPairs * 2 * 3];
-        int[] outIdx = new int[keptPairs * 2];
+        // Room for one trailing unpaired index (see above).
+        float[] outVerts = new float[(keptPairs * 2 + (hasTrailing ? 1 : 0)) * 3];
+        int[] outIdx = new int[keptPairs * 2 + (hasTrailing ? 1 : 0)];
         int o = 0;
         for (int k = 0; k < pairCount; k += stride) {
             int a = idx.a[k * 2], b = idx.a[k * 2 + 1];
@@ -394,6 +400,11 @@ public final class GCodeToolpaths {
             outVerts[o++] = verts.a[b * 3 + 2];
         }
         for (int i = 0; i < outIdx.length; i++) outIdx[i] = i;
+        if (hasTrailing) {
+            outVerts[o++] = verts.a[trailIdx * 3];
+            outVerts[o++] = verts.a[trailIdx * 3 + 1];
+            outVerts[o++] = verts.a[trailIdx * 3 + 2];
+        }
         layerVertices.add(outVerts);
         layerIndices.add(outIdx);
         layerZ.add(z);

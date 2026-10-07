@@ -132,10 +132,11 @@ public class GCodeToolpathsTest {
         assertEquals(1, parsed.getLayersCount());
         int[] idx = parsed.layers.get(0).indices;
         float[] v = parsed.layers.get(0).vertices;
-        assertEquals(0, idx.length % 2);
         assertTrue(v.length / 3 <= 42);
-        // Every kept pair must be a forward step along +X (no zigzag).
-        for (int k = 0; k + 1 < idx.length; k += 2) {
+        // Every kept pair must be a forward step along +X (no zigzag). A
+        // trailing unpaired index (mid-strip layer end) is legitimate.
+        int pairsEnd = idx.length - (idx.length % 2);
+        for (int k = 0; k + 1 < pairsEnd; k += 2) {
             float x0 = v[idx[k] * 3];
             float x1 = v[idx[k + 1] * 3];
             assertTrue("pair " + k + " goes backwards: " + x0 + " -> " + x1, x1 >= x0);

@@ -100,6 +100,9 @@ public class GLRenderer implements GLSurfaceView.Renderer {
     private final List<GLModel> toolpathModels = new ArrayList<>();
     private long toolpathFrom = 0, toolpathTo = Long.MAX_VALUE;
     private boolean toolpathsDirty = true;
+    /** Ribbon width for toolpath quads (extrusion width is not carried per
+     * segment; this matches a 0.4 nozzle default). */
+    private static final float TOOLPATH_RIBBON_WIDTH_MM = 0.45f;
     /** Toolpath parsing runs here, never on the GL thread: a full-file
      * parse blocked every frame (black frozen screen) on big models. */
     private final java.util.concurrent.ExecutorService toolpathWorkers =
@@ -724,11 +727,16 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             to = Math.min(toolpathTo, parsed.getLayersCount() - 1);
         }
         if (from > to) return;
-        GLShaderProgram shader = shadersManager.get(GLShadersManager.SHADER_FLAT);
+        GLShaderProgram shader = shadersManager.get(GLShadersManager.SHADER_TOOLPATH_RIBBON);
         shader.startUsing();
         shader.setUniformMatrix4fv("view_model_matrix", viewMatrix);
         shader.setUniformMatrix4fv("projection_matrix", projectionMatrix);
-        glLineWidth(com.flashforge.farm.utils.ViewUtils.dp(1.5f));
+        // Ribbons are flat in the layer plane: winding is view-dependent,
+        // so culling stays off here (segments path enables it back after).
+        boolean wasCulled = glIsEnabled(GL_CULL_FACE);
+        if (wasCulled) glDisable(GL_CULL_FACE);
+        glEnable(GL_POLYGON_OFFSET_FILL);
+        glPolygonOffset(-1f, -1f);
         int layerIdx = 0;
         for (int li = (int) from; li <= (int) to; li++) {
             com.flashforge.farm.slic3r.GCodeToolpaths.Layer layer = parsed.layers.get(li);
@@ -737,7 +745,10 @@ public class GLRenderer implements GLSurfaceView.Renderer {
                 gm = toolpathModels.get(layerIdx);
             } else {
                 gm = new GLModel();
-                gm.initFromPath(layer.vertices, layer.indices, false);
+                com.flashforge.farm.slic3r.ToolpathRibbon.Mesh ribbon =
+                        com.flashforge.farm.slic3r.ToolpathRibbon.build(
+                                layer.vertices, layer.indices, TOOLPATH_RIBBON_WIDTH_MM);
+                gm.initFromRibbon(ribbon.xyz, ribbon.uv, ribbon.idx);
                 if (!gm.isInitialized() || gm.isEmpty()) {
                     gm.release();
                     layerIdx++;
@@ -745,7 +756,8 @@ public class GLRenderer implements GLSurfaceView.Renderer {
                 }
                 toolpathModels.add(gm);
             }
-            gm.setColor(com.flashforge.farm.theme.ThemesRepo.getColor(com.flashforge.farm.R.attr.modelHoverColor));
+            shader.setUniformColor("uniform_color",
+                    com.flashforge.farm.theme.ThemesRepo.getColor(com.flashforge.farm.R.attr.modelHoverColor));
             gm.render();
             layerIdx++;
         }
@@ -754,6 +766,9 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             GLModel stale = toolpathModels.remove(toolpathModels.size() - 1);
             stale.release();
         }
+        glPolygonOffset(0f, 0f);
+        glDisable(GL_POLYGON_OFFSET_FILL);
+        if (wasCulled) glEnable(GL_CULL_FACE);
         shader.stopUsing();
     }
 

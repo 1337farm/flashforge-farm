@@ -44,6 +44,11 @@ public class GLModel {
         return Native.glmodel_init_from_paint(pointer, paintSessionPtr, filamentIdx);
     }
 
+    /** Build indexed toolpath-ribbon triangles with per-vertex (u,v) for the soft-filament shader. */
+    public void initFromRibbon(float[] vertices, float[] uvs, int[] indices) {
+        Native.glmodel_init_from_ribbon(pointer, vertices, uvs, indices);
+    }
+
     public void setColor(int color) {
         Native.glmodel_set_color(pointer, Color.red(color) / (float) 0xFF, Color.green(color) / (float) 0xFF, Color.blue(color) / (float) 0xFF, Color.alpha(color) / (float) 0xFF);
     }

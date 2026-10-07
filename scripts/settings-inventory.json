@@ -32,23 +32,23 @@
     },
     {
      "name": "buildStrength",
-     "line": 89
+     "line": 90
     },
     {
      "name": "buildSpeed",
-     "line": 102
+     "line": 103
     },
     {
      "name": "buildSupport",
-     "line": 115
+     "line": 117
     },
     {
      "name": "buildMultimaterial",
-     "line": 128
+     "line": 130
     },
     {
      "name": "buildOthers",
-     "line": 141
+     "line": 143
     }
    ],
    "sections": [
@@ -85,6 +85,19 @@
     },
     {
      "line": 79,
+     "title": "Scarf joint seam",
+     "keys": [
+      "scarf_seam_placement",
+      "scarf_seam_entire_loop",
+      "scarf_seam_length",
+      "scarf_seam_max_segment_length",
+      "scarf_seam_on_inner_perimeters",
+      "scarf_seam_only_on_smooth",
+      "scarf_seam_start_height"
+     ]
+    },
+    {
+     "line": 80,
      "title": "Precision",
      "keys": [
       "slice_closing_radius",
@@ -93,7 +106,7 @@
      ]
     },
     {
-     "line": 80,
+     "line": 81,
      "title": "Ironing",
      "keys": [
       "ironing_type",
@@ -102,7 +115,7 @@
      ]
     },
     {
-     "line": 81,
+     "line": 82,
      "title": "Wall generator",
      "keys": [
       "perimeter_generator",
@@ -115,7 +128,7 @@
      ]
     },
     {
-     "line": 82,
+     "line": 83,
      "title": "Walls and surfaces",
      "keys": [
       "extra_perimeters_on_overhangs",
@@ -130,14 +143,14 @@
      ]
     },
     {
-     "line": 83,
+     "line": 84,
      "title": "Overhangs",
      "keys": [
       "overhangs"
      ]
     },
     {
-     "line": 84,
+     "line": 85,
      "title": "Bridging",
      "keys": [
       "thick_bridges",
@@ -145,7 +158,7 @@
      ]
     },
     {
-     "line": 94,
+     "line": 95,
      "title": "Walls",
      "keys": [
       "perimeters",
@@ -154,7 +167,7 @@
      ]
     },
     {
-     "line": 95,
+     "line": 96,
      "title": "Top/bottom shells",
      "keys": [
       "top_solid_layers",
@@ -166,7 +179,7 @@
      ]
     },
     {
-     "line": 96,
+     "line": 97,
      "title": "Infill",
      "keys": [
       "fill_density",
@@ -183,7 +196,7 @@
      ]
     },
     {
-     "line": 97,
+     "line": 98,
      "title": "Advanced",
      "keys": [
       "bridge_flow_ratio",
@@ -191,7 +204,7 @@
      ]
     },
     {
-     "line": 107,
+     "line": 108,
      "title": "Speed",
      "keys": [
       "perimeter_speed",
@@ -208,7 +221,18 @@
      ]
     },
     {
-     "line": 108,
+     "line": 109,
+     "title": "Overhang speed",
+     "keys": [
+      "enable_dynamic_overhang_speeds",
+      "overhang_speed_0",
+      "overhang_speed_1",
+      "overhang_speed_2",
+      "overhang_speed_3"
+     ]
+    },
+    {
+     "line": 110,
      "title": "Acceleration",
      "keys": [
       "perimeter_acceleration",
@@ -223,21 +247,21 @@
      ]
     },
     {
-     "line": 109,
+     "line": 111,
      "title": "Junction deviation",
      "keys": [
       "machine_max_junction_deviation"
      ]
     },
     {
-     "line": 110,
+     "line": 112,
      "title": "Pressure advance",
      "keys": [
       "pressure_advance"
      ]
     },
     {
-     "line": 120,
+     "line": 122,
      "title": "Support",
      "keys": [
       "support_material",
@@ -254,7 +278,7 @@
      ]
     },
     {
-     "line": 121,
+     "line": 123,
      "title": "Raft",
      "keys": [
       "support_material_first_layer_density",
@@ -265,7 +289,7 @@
      ]
     },
     {
-     "line": 122,
+     "line": 124,
      "title": "Support filament",
      "keys": [
       "support_material_extruder",
@@ -273,7 +297,7 @@
      ]
     },
     {
-     "line": 123,
+     "line": 125,
      "title": "Advanced",
      "keys": [
       "support_material_interface_layers",
@@ -285,7 +309,7 @@
      ]
     },
     {
-     "line": 133,
+     "line": 135,
      "title": "Prime tower",
      "keys": [
       "wipe_tower",
@@ -298,7 +322,7 @@
      ]
     },
     {
-     "line": 134,
+     "line": 136,
      "title": "Filament for Features",
      "keys": [
       "perimeter_extruder",
@@ -310,7 +334,7 @@
      ]
     },
     {
-     "line": 135,
+     "line": 137,
      "title": "Ooze prevention",
      "keys": [
       "ooze_prevention",
@@ -318,7 +342,7 @@
      ]
     },
     {
-     "line": 136,
+     "line": 138,
      "title": "Advanced",
      "keys": [
       "interface_shells",
@@ -327,7 +351,7 @@
      ]
     },
     {
-     "line": 146,
+     "line": 148,
      "title": "Skirt",
      "keys": [
       "skirts",
@@ -337,7 +361,7 @@
      ]
     },
     {
-     "line": 147,
+     "line": 149,
      "title": "Brim",
      "keys": [
       "brim_type",
@@ -345,14 +369,14 @@
      ]
     },
     {
-     "line": 148,
+     "line": 150,
      "title": "Special mode",
      "keys": [
       "spiral_vase"
      ]
     },
     {
-     "line": 149,
+     "line": 151,
      "title": "Fuzzy Skin",
      "keys": [
       "fuzzy_skin",
@@ -361,7 +385,7 @@
      ]
     },
     {
-     "line": 150,
+     "line": 152,
      "title": "G-code output",
      "keys": [
       "gcode_comments",
@@ -369,14 +393,14 @@
      ]
     },
     {
-     "line": 151,
+     "line": 153,
      "title": "Notes",
      "keys": [
       "notes"
      ]
     },
     {
-     "line": 152,
+     "line": 154,
      "title": "Profile dependencies",
      "keys": [
       "compatible_printers",
@@ -392,7 +416,7 @@
      "msg": "PrintSettingsBuilder"
     }
    ],
-   "key_count": 132,
+   "key_count": 144,
    "stale_keys": []
   },
   "app/src/main/java/com/flashforge/farm/fragment/FilamentConfigFragment.java": {
@@ -1001,308 +1025,356 @@
     },
     {
      "name": "createBelowFilamentPaletteView",
-     "line": 107
+     "line": 113
     },
     {
      "name": "useTabs",
-     "line": 112
+     "line": 118
     },
     {
      "name": "showFilamentPalette",
-     "line": 117
-    },
-    {
-     "name": "onCreateView",
      "line": 123
     },
     {
+     "name": "onCreateView",
+     "line": 129
+    },
+    {
+     "name": "beforeTextChanged",
+     "line": 154
+    },
+    {
+     "name": "onTextChanged",
+     "line": 156
+    },
+    {
+     "name": "afterTextChanged",
+     "line": 158
+    },
+    {
      "name": "onDraw",
-     "line": 207
+     "line": 203
     },
     {
      "name": "onApplyTheme",
-     "line": 267
+     "line": 263
     },
     {
      "name": "onCreateViewHolder",
-     "line": 283
+     "line": 279
     },
     {
      "name": "onBindViewHolder",
-     "line": 300
+     "line": 296
     },
     {
      "name": "onBindViewHolder",
-     "line": 330
+     "line": 326
     },
     {
      "name": "getItemViewType",
-     "line": 387
+     "line": 383
     },
     {
      "name": "getItemCount",
-     "line": 408
+     "line": 404
     },
     {
      "name": "bindSimpleItem",
-     "line": 413
+     "line": 409
     },
     {
      "name": "beforeTextChanged",
-     "line": 476
+     "line": 472
     },
     {
      "name": "onTextChanged",
-     "line": 479
+     "line": 475
     },
     {
      "name": "afterTextChanged",
-     "line": 482
+     "line": 478
     },
     {
      "name": "onCreate",
-     "line": 547
+     "line": 543
     },
     {
      "name": "onDestroy",
-     "line": 555
+     "line": 551
     },
     {
      "name": "isSectionHeader",
-     "line": 568
+     "line": 564
     },
     {
      "name": "isCategoryHeader",
-     "line": 573
+     "line": 569
     },
     {
      "name": "isRealOption",
-     "line": 577
+     "line": 573
     },
     {
      "name": "pruneEmptySections",
-     "line": 583
+     "line": 579
     },
     {
-     "name": "setConfigItems",
-     "line": 600
+     "name": "showPresetDialog",
+     "line": 596
     },
     {
-     "name": "buildTabs",
-     "line": 638
-    },
-    {
-     "name": "styleTabs",
-     "line": 657
-    },
-    {
-     "name": "selectTab",
-     "line": 669
-    },
-    {
-     "name": "onResume",
-     "line": 683
-    },
-    {
-     "name": "getSelectedItem",
-     "line": 691
-    },
-    {
-     "name": "opt",
-     "line": 700
-    },
-    {
-     "name": "opt",
-     "line": 704
-    },
-    {
-     "name": "updateConfigField",
-     "line": 718
-    },
-    {
-     "name": "updateConfigValueOnly",
-     "line": 748
-    },
-    {
-     "name": "onUpdateConfigItems",
-     "line": 757
-    },
-    {
-     "name": "cloneCurrentProfile",
-     "line": 762
-    },
-    {
-     "name": "deleteCurrentProfile",
-     "line": 763
-    },
-    {
-     "name": "onApplyConfig",
-     "line": 764
-    },
-    {
-     "name": "onResetConfig",
-     "line": 765
-    },
-    {
-     "name": "getCurrentConfig",
-     "line": 766
-    },
-    {
-     "name": "getTitle",
-     "line": 767
-    },
-    {
-     "name": "selectItem",
-     "line": 768
-    },
-    {
-     "name": "getItems",
-     "line": 769
-    },
-    {
-     "name": "getConfigItems",
-     "line": 770
-    },
-    {
-     "name": "getTitle",
-     "line": 773
-    },
-    {
-     "name": "isSelected",
-     "line": 774
-    },
-    {
-     "name": "onColorPicked",
-     "line": 823
-    },
-    {
-     "name": "onCancel",
-     "line": 830
+     "name": "run",
+     "line": 627
     },
     {
      "name": "beforeTextChanged",
-     "line": 907
+     "line": 654
     },
     {
      "name": "onTextChanged",
-     "line": 910
-    },
-    {
-     "name": "validateFloat",
-     "line": 913
+     "line": 656
     },
     {
      "name": "afterTextChanged",
-     "line": 923
+     "line": 658
+    },
+    {
+     "name": "setConfigItems",
+     "line": 680
+    },
+    {
+     "name": "wrapperSearchText",
+     "line": 713
+    },
+    {
+     "name": "isSectionHeaderWrapper",
+     "line": 720
+    },
+    {
+     "name": "isTabTitleWrapper",
+     "line": 725
+    },
+    {
+     "name": "applySearch",
+     "line": 734
+    },
+    {
+     "name": "buildTabs",
+     "line": 812
+    },
+    {
+     "name": "styleTabs",
+     "line": 831
+    },
+    {
+     "name": "selectTab",
+     "line": 843
+    },
+    {
+     "name": "onResume",
+     "line": 862
+    },
+    {
+     "name": "getSelectedItem",
+     "line": 870
+    },
+    {
+     "name": "opt",
+     "line": 879
+    },
+    {
+     "name": "opt",
+     "line": 883
+    },
+    {
+     "name": "updateConfigField",
+     "line": 897
+    },
+    {
+     "name": "updateConfigValueOnly",
+     "line": 927
+    },
+    {
+     "name": "onUpdateConfigItems",
+     "line": 936
+    },
+    {
+     "name": "cloneCurrentProfile",
+     "line": 941
+    },
+    {
+     "name": "deleteCurrentProfile",
+     "line": 942
+    },
+    {
+     "name": "onApplyConfig",
+     "line": 943
+    },
+    {
+     "name": "onResetConfig",
+     "line": 944
+    },
+    {
+     "name": "getCurrentConfig",
+     "line": 945
+    },
+    {
+     "name": "getTitle",
+     "line": 946
+    },
+    {
+     "name": "selectItem",
+     "line": 947
+    },
+    {
+     "name": "getItems",
+     "line": 948
+    },
+    {
+     "name": "getConfigItems",
+     "line": 949
+    },
+    {
+     "name": "getTitle",
+     "line": 952
+    },
+    {
+     "name": "isSelected",
+     "line": 953
+    },
+    {
+     "name": "onColorPicked",
+     "line": 1007
+    },
+    {
+     "name": "onCancel",
+     "line": 1014
+    },
+    {
+     "name": "beforeTextChanged",
+     "line": 1091
+    },
+    {
+     "name": "onTextChanged",
+     "line": 1094
+    },
+    {
+     "name": "validateFloat",
+     "line": 1097
+    },
+    {
+     "name": "afterTextChanged",
+     "line": 1107
     },
     {
      "name": "setOnClick",
-     "line": 1036
+     "line": 1224
     },
     {
      "name": "setColor",
-     "line": 1041
+     "line": 1229
     },
     {
      "name": "onCreateView",
-     "line": 1055
+     "line": 1243
     },
     {
      "name": "onBindView",
-     "line": 1060
+     "line": 1248
     },
     {
      "name": "bind",
-     "line": 1081
+     "line": 1269
     },
     {
      "name": "onCreateView",
-     "line": 1095
+     "line": 1283
     },
     {
      "name": "onBindView",
-     "line": 1100
+     "line": 1288
     },
     {
      "name": "bind",
-     "line": 1121
+     "line": 1309
     },
     {
      "name": "hasSpecialType",
-     "line": 1150
+     "line": 1338
     },
     {
      "name": "onCreateView",
-     "line": 1154
+     "line": 1342
     },
     {
      "name": "onApplyTheme",
-     "line": 1193
+     "line": 1381
     }
    ],
    "sections": [],
    "option_gets": [],
    "enum_branches": [
     {
-     "line": 802,
+     "line": 986,
      "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM && (def.enumLabels == null || def.enumValues == null)"
     },
     {
-     "line": 802,
+     "line": 986,
      "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM"
     },
     {
-     "line": 807,
+     "line": 991,
      "cond": "\"ENUM without choices from engine defs: \" + def.key"
     },
     {
-     "line": 840,
+     "line": 1024,
      "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM && def.enumLabels != null && def.enumLabels.length > 0 && def.enumValues != null"
     },
     {
-     "line": 840,
+     "line": 1024,
      "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM && def.enumLabels != null && def.enumLabels.length > 0"
     },
     {
-     "line": 840,
+     "line": 1024,
      "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM && def.enumLabels != null"
     },
     {
-     "line": 840,
+     "line": 1024,
      "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM"
     },
     {
-     "line": 862,
+     "line": 1046,
      "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM"
     },
     {
-     "line": 865,
+     "line": 1049,
      "cond": "\"ENUM without choices from engine defs: \" + def.key"
     },
     {
-     "line": 990,
+     "line": 1174,
      "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM && def.enumLabels != null && def.enumValues != null"
     },
     {
-     "line": 990,
+     "line": 1174,
      "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM && def.enumLabels != null"
     },
     {
-     "line": 990,
+     "line": 1174,
      "cond": "def.type == ConfigOptionDef.ConfigOptionType.ENUM"
     }
    ],
    "log_ws": [
     {
-     "line": 712,
+     "line": 891,
      "msg": "ProfileListFragment"
     },
     {
-     "line": 807,
+     "line": 991,
      "msg": "ProfileList"
     },
     {
-     "line": 865,
+     "line": 1049,
      "msg": "ProfileList"
     }
    ],

@@ -1832,6 +1832,8 @@ namespace {
         ref->model.reset();
         ref->model.init_from(std::move(g));
     }
+
+    JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1textured_1quad(JNIEnv* env, jclass, jlong ptr, jfloatArray xyzArr, jfloatArray uvArr) {
         GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
         if (ref == nullptr || xyzArr == nullptr || uvArr == nullptr) return;
         if (env->GetArrayLength(xyzArr) != 12 || env->GetArrayLength(uvArr) != 8) return;

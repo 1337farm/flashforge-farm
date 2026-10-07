@@ -138,6 +138,40 @@ public class BedFragment extends Fragment {
 
     private int totalPlates = 1; // used for importing
     private File currentProjectFile;
+    /** Identity of the file backing the live models: reloads of an
+     * unchanged file reuse what's already in memory instead of re-parsing
+     * through the sandbox (multi-MB STLs freeze the UI otherwise). */
+    private volatile String loadedFileKey;
+    private volatile long loadedFileLength = -1;
+    private volatile long loadedFileModified = -1;
+
+    private static String fileKey(File f) {
+        try {
+            return f.getCanonicalPath();
+        } catch (Exception e) {
+            return f.getAbsolutePath();
+        }
+    }
+
+    private void noteFileLoaded(File f) {
+        loadedFileKey = fileKey(f);
+        loadedFileLength = f.length();
+        loadedFileModified = f.lastModified();
+    }
+
+    private void forgetLoadedFile() {
+        loadedFileKey = null;
+        loadedFileLength = -1;
+        loadedFileModified = -1;
+    }
+
+    /** True when {@code f} is unchanged since it was loaded and live models exist. */
+    private boolean isSameFileLoaded(File f) {
+        String key = loadedFileKey;
+        return key != null && key.equals(fileKey(f))
+                && f.length() == loadedFileLength
+                && f.lastModified() == loadedFileModified;
+    }
 
     public Model getCurrentModel() {
         if (platesModels.isEmpty()) return null;
@@ -512,6 +546,7 @@ public class BedFragment extends Fragment {
                 if (m != null) m.release();
             }
             platesModels.clear();
+            forgetLoadedFile();
             if (gCodeResult != null) {
                 gCodeResult.release();
                 gCodeResult = null;
@@ -981,6 +1016,7 @@ public class BedFragment extends Fragment {
         Model m = platesModels.get(currentPlateIndex);
         platesModels.remove(currentPlateIndex);
         totalPlates = platesModels.size();
+        forgetLoadedFile();
         
         // Use false so we don't try to save the deleted model back into the array
         switchPlate(Math.max(0, currentPlateIndex - 1), false);
@@ -1194,11 +1230,31 @@ public class BedFragment extends Fragment {
     public void loadModel(File f, boolean preserveProjectLayout, int plateCount, ModelLoadCallback callback) throws Slic3rRuntimeError {
         this.currentProjectFile = f;
         this.totalPlates = plateCount;
-        
+
+        if (plateCount <= 1 && isSameFileLoaded(f)) {
+            Model current = getCurrentModel();
+            int count = 0;
+            try {
+                count = current != null ? current.getObjectsCount() : 0;
+            } catch (Exception e) {
+                count = 0;
+            }
+            if (count > 0) {
+                // Already in memory and unchanged: reuse, don't re-parse.
+                if (callback != null) {
+                    int added = count;
+                    glView.queueEvent(() -> callback.onLoaded(current, 0, added));
+                }
+                glView.requestRender();
+                return;
+            }
+            forgetLoadedFile();
+        }
         if (plateCount > 1) {
             // Re-initialize for new 3MF project
             java.util.List<com.flashforge.farm.slic3r.Model> oldModels = new java.util.ArrayList<>(platesModels);
             platesModels.clear();
+            forgetLoadedFile();
             glView.queueEvent(() -> {
                 glView.getRenderer().setModel(null);
                 glView.getRenderer().resetGlModels();
@@ -1276,7 +1332,13 @@ public class BedFragment extends Fragment {
         // Wait, if it's a 3mf project, it already passed plate count, so currentPlateIndex is correct.
         Model m = SandboxSlice.openModel(f, currentPlateIndex + 1); // 1-based in JNI for specific plate, or 0 for default
         Model currentModel = getCurrentModel();
+        if (currentModel == null || currentModel.getObjectsCount() == 0) {
+            // Fresh replace: the live models will be exactly this file.
+            noteFileLoaded(f);
+        }
         if (currentModel != null && currentModel.getObjectsCount() > 0) {
+            // Merging into a live model: content is now mixed, forget file identity.
+            forgetLoadedFile();
             glView.queueEvent(new Runnable() {
                 @Override
                 public void run() {

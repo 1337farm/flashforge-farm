@@ -19,12 +19,28 @@ dump() { # $1 = tag; writes $OUT/$1.xml; retries until UI idle
     local tag="$1" tries=0
     while [ $tries -lt 10 ]; do
         if adb_ shell uiautomator dump "/sdcard/vs-$tag.xml" >/dev/null 2>&1 \
-            && adb_ pull "/sdcard/vs-$tag.xml" "$OUT/$tag.xml" >/dev/null 2>&1; then
+            && adb_ pull "/sdcard/vs-$tag.xml" "$OUT/$tag.xml" >/dev/null 2>&1 \
+            && grep -q "$PKG" "$OUT/$tag.xml"; then
             return 0
         fi
         tries=$((tries + 1)); sleep 2
     done
     echo "FAIL: ui dump '$tag' never became idle" >&2
+    return 1
+}
+
+# Abort instead of tapping when our app is not in front (never fight the
+# user or tap into another app).
+require_focus() {
+    local tries=0
+    while [ $tries -lt 5 ]; do
+        if adb_ shell "dumpsys activity activities" 2>/dev/null \
+            | grep -q "mFocusedApp=.*$PKG"; then
+            return 0
+        fi
+        tries=$((tries + 1)); sleep 2
+    done
+    echo "FAIL: $PKG not in foreground, aborting (not tapping blindly)" >&2
     return 1
 }
 
@@ -93,18 +109,20 @@ check_bridge_enum() {
 }
 
 echo "== focus app =="
-adb_ shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
-sleep 6
+adb_ shell am start -n "$PKG/.MainActivity" >/dev/null 2>&1
+require_focus || exit 2
 adb_ logcat -c
 dump launch || exit 1
 
 echo "== Print / Quality =="
+require_focus || exit 2
 tap_text launch "Print" || { shot_on_fail launch; exit 1; }
 sleep 3; dump quality || exit 1
 assert_texts quality "Layer height" "Line width" || { FAIL=1; shot_on_fail quality; }
 check_crash || { FAIL=1; shot_on_fail quality-crash; }
 
 echo "== Print / Strength =="
+require_focus || exit 2
 tap_text quality "Strength" || { shot_on_fail quality; exit 1; }
 sleep 3; dump strength || exit 1
 assert_texts strength "Walls" "Top/bottom shells" || { FAIL=1; shot_on_fail strength; }

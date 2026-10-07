@@ -115,9 +115,42 @@ public class ShapeGalleryMenu extends UnfoldMenu {
     private void reload() {        new Thread(() -> {
             final List<SimpleRecyclerItem> rows = buildRows();
             ViewUtils.postOnMainThread(() -> {
-                if (adapter != null) adapter.setItems(rows);
+                if (adapter != null) {
+                    adapter.setItems(rows);
+                    fillCustomPreviews(rows);
+                }
             });
         }, "gallery-load").start();
+    }
+
+    /** Fill custom-model tiles lazily: rows appear instantly with a
+     * placeholder and swap in real previews as background loads finish,
+     * instead of blocking the whole list on the slowest STL. */
+    private void fillCustomPreviews(final List<SimpleRecyclerItem> rows) {
+        int workers = Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors()));
+        ExecutorService pool = Executors.newFixedThreadPool(workers);
+        for (SimpleRecyclerItem row : rows) {
+            if (!(row instanceof GalleryRowItem)) continue;
+            final GalleryRowItem grow = (GalleryRowItem) row;
+            if (grow.getItem().kind != ShapeGallery.KIND_CUSTOM) continue;
+            pool.submit(() -> {
+                GalleryMesh preview = null;
+                try {
+                    preview = ShapeGallery.previewFor(grow.getItem());
+                } catch (Exception e) {
+                    android.util.Log.e("ShapeGalleryMenu", "preview failed for " + grow.getItem().title, e);
+                }
+                if (preview == null) return;
+                final GalleryMesh done = preview;
+                ViewUtils.postOnMainThread(() -> {
+                    if (adapter == null) return;
+                    grow.updatePreview(done);
+                    int pos = adapter.getItems().indexOf(grow);
+                    if (pos >= 0) adapter.notifyItemChanged(pos);
+                });
+            });
+        }
+        pool.shutdown();
     }
 
     private List<SimpleRecyclerItem> buildRows() {
@@ -163,17 +196,17 @@ public class ShapeGalleryMenu extends UnfoldMenu {
     }
 
     private SimpleRecyclerItem buildRow(final ShapeGallery.Item item) {
-        GalleryMesh preview = null;
-        try {
-            preview = ShapeGallery.previewFor(item);
-        } catch (Exception e) {
-            android.util.Log.e("ShapeGalleryMenu", "preview failed for " + item.title, e);
-        }
-        if (preview == null && item.kind == ShapeGallery.KIND_CUSTOM) {
-            // Never leave a custom row's tile blank: show a neutral placeholder
-            // so the entry is still visible/tappable. The load path reports the
-            // real mesh error if the user picks it.
+        GalleryMesh preview;
+        if (item.kind == ShapeGallery.KIND_CUSTOM) {
+            // Loaded lazily by fillCustomPreviews; never block row creation.
             preview = ShapeGallery.placeholderCube();
+        } else {
+            try {
+                preview = ShapeGallery.previewFor(item);
+            } catch (Exception e) {
+                android.util.Log.e("ShapeGalleryMenu", "preview failed for " + item.title, e);
+                preview = ShapeGallery.placeholderCube();
+            }
         }
         GalleryRowItem row = new GalleryRowItem(item, preview);
         row.setOnClickListener(v -> loadItem(item, true));
@@ -247,6 +280,7 @@ public class ShapeGalleryMenu extends UnfoldMenu {
                 .setPositiveButton(android.R.string.ok, (d, w) -> {
                     new Thread(() -> {
                         GalleryStore.deleteCustom(item.file);
+                        ShapeGallery.evictPreview(item);
                         ViewUtils.postOnMainThread(() -> {
                             Toast.makeText(FarmApp.INSTANCE, R.string.MenuFileShapeGalleryDeleted, Toast.LENGTH_SHORT).show();
                             reload();

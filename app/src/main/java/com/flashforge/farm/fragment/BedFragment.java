@@ -744,20 +744,30 @@ public class BedFragment extends Fragment {
                                 gCodeResult = new GCodeProcessorResult(gcode);
                             }
                             ViewUtils.postOnMainThread(()-> {
+                                // Parse here on the farm-slice worker (shared cache: instant
+                                // if the renderer already parsed this file), so the GL
+                                // thread only seeds ranges and uploads.
+                                final com.flashforge.farm.slic3r.GCodeToolpaths.Parsed parsed;
+                                final String parsedPath;
+                                try {
+                                    java.io.File parsedFile = getTempGCodePath();
+                                    parsedPath = parsedFile != null ? parsedFile.getAbsolutePath() : "null";
+                                    parsed = parsedFile != null
+                                            ? com.flashforge.farm.slic3r.GCodeToolpaths.parseCached(parsedFile, 4096)
+                                            : null;
+                                    android.util.Log.i("BedFragment",
+                                            "toolpath parse ok: file=" + (parsedFile != null ? parsedFile.getAbsolutePath() : "null")
+                                                    + " bytes=" + (parsedFile != null ? parsedFile.length() : -1)
+                                                    + " layers=" + (parsed != null ? parsed.getLayersCount() : -1));
+                                } catch (Exception e) {
+                                    android.util.Log.w("BedFragment", "toolpath parse failed", e);
+                                    glView.requestRender();
+                                    return;
+                                }
                                 glView.queueEvent(()->{
                                     glView.getRenderer().setGCodeViewer(gCodeResult);
-                                    // Parse the sliced file on the GL thread (line uploads need the
-                                    // GL context) and seed the layers tab + viewer ranges with the
-                                    // real layer count.
                                     try {
-                                        java.io.File parsedFile = getTempGCodePath();
-                                        com.flashforge.farm.slic3r.GCodeToolpaths.Parsed parsed =
-                                                com.flashforge.farm.slic3r.GCodeToolpaths.parse(parsedFile, 4096);
-                                        long count = parsed.getLayersCount();
-                                        android.util.Log.i("BedFragment",
-                                                "toolpath parse ok: file=" + (parsedFile != null ? parsedFile.getAbsolutePath() : "null")
-                                                        + " bytes=" + (parsedFile != null ? parsedFile.length() : -1)
-                                                        + " layers=" + count);
+                                        long count = parsed != null ? parsed.getLayersCount() : 0;
                                         if (count > 0) {
                                             com.flashforge.farm.slic3r.GCodeViewer v =
                                                     glView.getRenderer().getViewer();
@@ -774,8 +784,7 @@ public class BedFragment extends Fragment {
                                             glView.getRenderer().setToolpathRange(0, count - 1);
                                         } else {
                                             android.util.Log.w("BedFragment",
-                                                    "toolpath parse yielded 0 layers: file="
-                                                            + (parsedFile != null ? parsedFile.getAbsolutePath() : "null"));
+                                                    "toolpath parse yielded 0 layers: file=" + parsedPath);
                                         }
                                     } catch (Exception e) {
                                         java.io.File parsedFile = null;

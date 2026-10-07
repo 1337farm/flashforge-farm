@@ -100,6 +100,16 @@ public class GLRenderer implements GLSurfaceView.Renderer {
     private final List<GLModel> toolpathModels = new ArrayList<>();
     private long toolpathFrom = 0, toolpathTo = Long.MAX_VALUE;
     private boolean toolpathsDirty = true;
+    /** Toolpath parsing runs here, never on the GL thread: a full-file
+     * parse blocked every frame (black frozen screen) on big models. */
+    private final java.util.concurrent.ExecutorService toolpathWorkers =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "toolpath-parse");
+                t.setDaemon(true);
+                t.setPriority(Thread.MIN_PRIORITY);
+                return t;
+            });
+    private volatile boolean toolpathParseInFlight = false;
 
     // Plate name tag painted flat on the build plate (front-right corner):
     // a textured quad fixed in bed coordinates. It never rotates or tracks
@@ -565,36 +575,40 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             }
             return;
         }
-        java.io.File gcode = com.flashforge.farm.fragment.BedFragment.getTempGCodePath();
-        if (gcode == null || !gcode.isFile() || !gcode.canRead()) {
-            android.util.Log.w("GLRenderer",
-                    "toolpath preview skipped, gcode file unreadable: path="
-                            + (gcode != null ? gcode.getAbsolutePath() : "null")
-                            + " isFile=" + (gcode != null && gcode.isFile())
-                            + " canRead=" + (gcode != null && gcode.canRead()));
-            return;
-        }
-        com.flashforge.farm.slic3r.GCodeToolpaths.Parsed fresh;
-        try {
-            // 4k verts/layer keeps a 300-layer print under ~5M floats worst case; decimated by stride.
-            fresh = com.flashforge.farm.slic3r.GCodeToolpaths.parse(gcode, 4096);
-            android.util.Log.i("GLRenderer",
-                    "toolpath parse ok: file=" + gcode.getAbsolutePath()
-                            + " bytes=" + gcode.length()
-                            + " layers=" + fresh.getLayersCount());
-        } catch (Exception e) {
-            android.util.Log.w("GLRenderer",
-                    "toolpath parse failed: file=" + gcode.getAbsolutePath()
-                            + " bytes=" + gcode.length(), e);
-            return;
-        }
-        synchronized (this) {
-            toolpaths = fresh;
-            toolpathsDirty = false;
-            if (fresh.getLayersCount() > 0 && toolpathTo == Long.MAX_VALUE) {
-                toolpathTo = fresh.getLayersCount() - 1;
+        if (toolpathParseInFlight) return;
+        toolpathParseInFlight = true;
+        toolpathWorkers.execute(() -> {
+            com.flashforge.farm.slic3r.GCodeToolpaths.Parsed fresh = null;
+            try {
+                java.io.File gcode = com.flashforge.farm.fragment.BedFragment.getTempGCodePath();
+                if (gcode != null && gcode.isFile() && gcode.canRead()) {
+                    // 4k verts/layer keeps a 300-layer print under ~5M floats worst case; decimated by stride.
+                    fresh = com.flashforge.farm.slic3r.GCodeToolpaths.parseCached(gcode, 4096);
+                    android.util.Log.i("GLRenderer",
+                            "toolpath parse ok: file=" + gcode.getAbsolutePath()
+                                    + " bytes=" + gcode.length()
+                                    + " layers=" + fresh.getLayersCount());
+                } else {
+                    android.util.Log.w("GLRenderer",
+                            "toolpath preview skipped, gcode file unreadable: path="
+                                    + (gcode != null ? gcode.getAbsolutePath() : "null"));
+                }
+            } catch (Exception e) {
+                android.util.Log.w("GLRenderer", "toolpath parse failed", e);
             }
-        }
+            final com.flashforge.farm.slic3r.GCodeToolpaths.Parsed done = fresh;
+            synchronized (GLRenderer.this) {
+                if (done != null) {
+                    toolpaths = done;
+                    if (done.getLayersCount() > 0 && toolpathTo == Long.MAX_VALUE) {
+                        toolpathTo = done.getLayersCount() - 1;
+                    }
+                }
+                toolpathsDirty = false;
+                toolpathParseInFlight = false;
+            }
+            if (glView != null) glView.requestRender();
+        });
     }
 
     private void clearToolpathModelsOnly() {

@@ -35,9 +35,12 @@ public final class GalleryStore {
         for (File f : files) {
             if (f.isFile() && isSupported(f.getName())) out.add(f);
         }
+        // Newest imports first: a freshly added model lands on top.
         Collections.sort(out, new Comparator<File>() {
             @Override
             public int compare(File a, File b) {
+                int c = Long.compare(b.lastModified(), a.lastModified());
+                if (c != 0) return c;
                 return a.getName().compareToIgnoreCase(b.getName());
             }
         });
@@ -47,10 +50,15 @@ public final class GalleryStore {
     public static File importStream(InputStream in, String displayName) throws IOException {
         if (!isSupported(displayName)) throw new IOException("unsupported model format");
         String safe = sanitize(displayName);
-        File dest = unique(new File(dir(), safe));
+        File dest = new File(dir(), safe);
+        // Re-adding the exact same file reuses what's already there instead
+        // of stacking "name_2" duplicates. Stream to a temp file first so a
+        // multi-hundred-MB import never sits fully in memory.
+        File tmp = new File(dir(), safe + ".importing");
+        tmp.delete();
         OutputStream out = null;
         try {
-            out = new FileOutputStream(dest);
+            out = new FileOutputStream(tmp);
             byte[] buf = new byte[10240];
             int n;
             long total = 0;
@@ -60,7 +68,7 @@ public final class GalleryStore {
                 out.write(buf, 0, n);
             }
         } catch (IOException e) {
-            dest.delete();
+            tmp.delete();
             throw e;
         } finally {
             if (out != null) {
@@ -70,11 +78,58 @@ public final class GalleryStore {
                 }
             }
         }
-        if (dest.length() == 0) {
-            dest.delete();
+        if (tmp.length() == 0) {
+            tmp.delete();
             throw new IOException("empty file");
         }
+        if (dest.exists() && dest.length() == tmp.length() && contentEquals(dest, tmp)) {
+            tmp.delete();
+            return dest;
+        }
+        dest = unique(dest);
+        if (!tmp.renameTo(dest)) {
+            tmp.delete();
+            throw new IOException("import failed");
+        }
         return dest;
+    }
+
+    private static boolean contentEquals(File a, File b) {
+        if (a.length() != b.length()) return false;
+        java.io.FileInputStream fa = null, fb = null;
+        try {
+            fa = new java.io.FileInputStream(a);
+            fb = new java.io.FileInputStream(b);
+            byte[] ba = new byte[10240], bb = new byte[10240];
+            while (true) {
+                int na = fa.read(ba);
+                if (na < 0) return fb.read() < 0;
+                int off = 0;
+                while (off < na) {
+                    int nb = fb.read(bb, off, na - off);
+                    if (nb < 0) return false;
+                    off += nb;
+                }
+                for (int i = 0; i < na; i++) {
+                    if (ba[i] != bb[i]) return false;
+                }
+            }
+        } catch (IOException e) {
+            return false;
+        } finally {
+            if (fa != null) {
+                try {
+                    fa.close();
+                } catch (IOException ignored) {
+                }
+            }
+            if (fb != null) {
+                try {
+                    fb.close();
+                } catch (IOException ignored) {
+                }
+            }
+        }
     }
 
     public static boolean deleteCustom(File f) {

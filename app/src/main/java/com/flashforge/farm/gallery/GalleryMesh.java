@@ -14,6 +14,9 @@ public final class GalleryMesh {
     public final int triCount;
     public final float[] normals;
 
+    /** Lazily computed bounds; filled once (usually off the UI thread). */
+    private volatile float[] cachedBounds;
+
     public GalleryMesh(float[] xyz) {
         this(xyz, computeNormals(xyz));
     }
@@ -51,6 +54,16 @@ public final class GalleryMesh {
     }
 
     public void bounds(float[] out) {
+        float[] cached = cachedBounds;
+        if (cached != null) {
+            System.arraycopy(cached, 0, out, 0, 6);
+            return;
+        }
+        computeBoundsInto(xyz, out);
+        cachedBounds = new float[]{out[0], out[1], out[2], out[3], out[4], out[5]};
+    }
+
+    private static void computeBoundsInto(float[] xyz, float[] out) {
         float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE, minZ = Float.MAX_VALUE;
         float maxX = -Float.MAX_VALUE, maxY = -Float.MAX_VALUE, maxZ = -Float.MAX_VALUE;
         for (int i = 0; i < xyz.length; i += 3) {
@@ -70,8 +83,33 @@ public final class GalleryMesh {
         out[5] = maxZ;
     }
 
-    public static GalleryMesh concat(GalleryMesh... parts) {
-        int total = 0;
+    /**
+     * Stride-subsampled copy capped at maxTris triangles (every Nth triangle,
+     * order preserved). Unlike retriangulation (removed in #272 for causing
+     * artifacts), this never invents geometry: thumbnails of huge models stay
+     * recognizable and cheap. Returns {@code this} when already small enough.
+     */
+    public GalleryMesh decimated(int maxTris) {
+        if (triCount <= maxTris || maxTris <= 0) return this;
+        int stride = (triCount + maxTris - 1) / maxTris;
+        int kept = (triCount + stride - 1) / stride;
+        float[] outXyz = new float[kept * 9];
+        float[] outNormals = new float[kept * 9];
+        int o = 0;
+        for (int t = 0; t < triCount; t += stride) {
+            System.arraycopy(xyz, t * 9, outXyz, o, 9);
+            // Face normals are stored one-per-tri at stride 3 (see computeNormals).
+            if (t * 3 + 2 < normals.length) {
+                outNormals[o / 3] = normals[t * 3];
+                outNormals[o / 3 + 1] = normals[t * 3 + 1];
+                outNormals[o / 3 + 2] = normals[t * 3 + 2];
+            }
+            o += 9;
+        }
+        return new GalleryMesh(outXyz, outNormals);
+    }
+
+    public static GalleryMesh concat(GalleryMesh... parts) {        int total = 0;
         for (GalleryMesh p : parts) total += p.xyz.length;
         float[] outXyz = new float[total];
         float[] outNormals = new float[total];

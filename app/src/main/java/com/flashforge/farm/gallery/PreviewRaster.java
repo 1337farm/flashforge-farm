@@ -9,10 +9,14 @@ package com.flashforge.farm.gallery;
  *
  * Camera model: pinhole at rotated view-space Z {@code -fl} looking toward
  * +Z, so nearer fragments have SMALLER rotated Z and win the depth test
- * ({@code z < depth}, buffer init {@code +MAX_VALUE}). Toward-camera faces
- * project CCW in screen space ({@code area > 0}; verified numerically over
- * 288 outward-face poses against rotated normals with the exact projection,
- * including per-vertex perspective — grazing/edge-on slivers excepted), so
+ * ({@code z < depth}, buffer init {@code +MAX_VALUE}). A viewer at -Z looking
+ * along +Z with up +Y has their right hand toward -X (right = forward x up),
+ * so +X must project screen-LEFT: {@code sx = c - x*k*p}. Mapping +X to the
+ * right mirrors the model (PLA text read backwards, dragon flipped vs the
+ * plate). Toward-camera faces therefore project CW in screen space
+ * ({@code area < 0}; verified numerically over 288 outward-face poses
+ * against rotated normals with the exact projection, including per-vertex
+ * perspective — grazing/edge-on slivers excepted), so
  * {@link #keepTriangle(float)} culls the rest. This mirrors the build-plate
  * path, where GL culls non-CCW-front faces of the same outward soup.
  * Sub-pixel front faces are KEPT (epsilon band only): culling them by screen
@@ -54,7 +58,7 @@ public final class PreviewRaster {
         float y2 = py * cosT - z1 * sinT;
         float z2 = py * sinT + z1 * cosT;
         float p = fl / (fl + z2);
-        out[0] = size / 2f + x1 * k * p;
+        out[0] = size / 2f - x1 * k * p;
         out[1] = size / 2f - y2 * k * p;
         out[2] = z2;
     }
@@ -76,12 +80,12 @@ public final class PreviewRaster {
     }
 
     /**
-     * Keep iff the triangle faces the camera: {@code area} strictly positive
-     * past a degenerate epsilon. Backfaces ({@code area <= 0} modulo epsilon)
+     * Keep iff the triangle faces the camera: {@code area} strictly negative
+     * past a degenerate epsilon. Backfaces ({@code area >= 0} modulo epsilon)
      * are culled; sub-pixel front faces splat and depth-test normally.
      */
     public static boolean keepTriangle(float area) {
-        return area >= MIN_AREA;
+        return area <= -MIN_AREA;
     }
 
     /** Flat-shaded ARGB color for a clamped Lambert term. */

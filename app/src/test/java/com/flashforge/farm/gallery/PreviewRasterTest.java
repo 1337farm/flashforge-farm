@@ -10,9 +10,12 @@ import static org.junit.Assert.*;
  * 1. Inverted depth test (nearer fragments must win). The preview camera
  *    sits on the -Z side, so nearer means SMALLER rotated view-space Z.
  * 2. Inverted facing cull (toward-camera faces must be kept). Toward faces
- *    project CCW (screen-space area &gt; 0) — verified numerically over 288
+ *    project CW (screen-space area &lt; 0) — verified numerically over 288
  *    outward-face poses with the exact projection before this test was
  *    written; grazing/edge-on slivers excepted.
+ * 3. Mirrored projection (model +X must appear screen-LEFT: a viewer at -Z
+ *    looking along +Z with up +Y has their right hand toward -X, so mapping
+ *    +X to screen-right mirrors text and flips models vs the plate).
  *
  * All tests drive PreviewRaster, the exact production code path used by
  * SpinningPreviewView (no android.* here, so plain JVM JUnit suffices).
@@ -77,14 +80,31 @@ public class PreviewRasterTest {
     @Test
     public void keepTriangle_towardFacesKeptAwayFacesCulled() {
         // Hand-verified at identity rotation: the -Z (camera-side) box face
-        // projects CCW (area > 0), the +Z face CW (area < 0).
-        assertTrue(PreviewRaster.keepTriangle(400f));
-        assertFalse(PreviewRaster.keepTriangle(-400f));
+        // projects CW (area < 0), the +Z face CCW (area > 0).
+        assertTrue(PreviewRaster.keepTriangle(-400f));
+        assertFalse(PreviewRaster.keepTriangle(400f));
         // Only truly degenerate tris are dropped; sub-pixel front faces must
         // splat (dense models lost ~25% coverage to the old 0.25 band).
-        assertTrue(PreviewRaster.keepTriangle(0.1f));
-        assertFalse(PreviewRaster.keepTriangle(-0.1f));
+        assertTrue(PreviewRaster.keepTriangle(-0.1f));
+        assertFalse(PreviewRaster.keepTriangle(0.1f));
         assertFalse(PreviewRaster.keepTriangle(0f));
+    }
+
+    @Test
+    public void modelPlusXAppearsScreenLeft() {
+        // Regression for the mirrored-gallery bug: a viewer at -Z looking
+        // along +Z (up +Y) has their right hand toward -X, so model +X must
+        // land screen-LEFT of model -X. Mapping +X to the right mirrors
+        // text (PLA tag read backwards) and flips models vs the plate.
+        float[] f = frame(YAW, PITCH, 64, 10f);
+        float[] pPlus = new float[3];
+        float[] pMinus = new float[3];
+        PreviewRaster.projectVertex(10f, 0f, 0f, 0, 0, 0,
+                f[0], f[1], f[2], f[3], 64, f[4], f[5], pPlus);
+        PreviewRaster.projectVertex(-10f, 0f, 0f, 0, 0, 0,
+                f[0], f[1], f[2], f[3], 64, f[4], f[5], pMinus);
+        assertTrue("+X must project left of -X: " + pPlus[0] + " vs " + pMinus[0],
+                pPlus[0] < pMinus[0]);
     }
 
     @Test
@@ -150,7 +170,7 @@ public class PreviewRasterTest {
 
     @Test
     public void facingRuleHoldsAcrossRotations() {
-        // toward (rotated nz < 0) ⟺ CCW (area > 0), over the preview's yaw
+        // toward (rotated nz < 0) ⟺ CW (area < 0), over the preview's yaw
         // range and tilt limits, skipping grazing faces (|nz| < 0.2) whose
         // area sign is numerically sensitive slivers.
         float[] box = Primitives.cube(20).xyz;
@@ -192,7 +212,7 @@ public class PreviewRasterTest {
                     if (Math.abs(area) < 0.25f) continue;
                     checked++;
                     assertEquals("face nz2=" + nr[2] + " yaw=" + yaw + " pitch=" + pitch,
-                            nr[2] < 0, area > 0);
+                            nr[2] < 0, area < 0);
                 }
             }
         }

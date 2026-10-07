@@ -96,6 +96,12 @@ import com.flashforge.farm.view.ProfileDropdownView;
     private SparseArray<List<OptionWrapper>> categoryElements = new SparseArray<>();
     private SparseBooleanArray unfolded = new SparseBooleanArray();
 
+    /** Universal settings search: text query; empty means no filtering. */
+    private String searchQuery = "";
+    private EditText searchBox;
+    /** Full unfiltered wrappers, so clearing search restores title rows too. */
+    private List<OptionWrapper> unfilteredList = Collections.emptyList();
+
     // Desktop-style horizontal category tabs (Quality | Strength | Speed | ...). When enabled, each
     // category becomes its own page instead of a vertical collapsible section.
     private HorizontalScrollView tabScroll;
@@ -129,43 +135,33 @@ import com.flashforge.farm.view.ProfileDropdownView;
         ProfileListItem selectedItem = getSelectedItem();
         dropdownView.setTitle(selectedItem != null ? selectedItem.getTitle() : null);
         dropdownView.setOnClickListener(v -> {
-            List<ProfileListItem> items = getItems(true);
-            String[] titles = new String[items.size()];
-            int selected = -1;
-            for (int i = 0; i < items.size(); i++) {
-                ProfileListItem item = items.get(i);
-                titles[i] = item.getTitle();
-                if (item.isSelected()) {
-                    selected = i;
-                }
-            }
-
-            AlertDialog.Builder builder = new FarmAlertDialogBuilder(getContext())
-                    .setTitle(getTitle())
-                    .setSingleChoiceItems(titles, selected, (dialog, which) -> {
-                        dropdownView.setTitle(items.get(which).getTitle());
-                        // Switching presets discards unsaved edits, which belonged to the previous one.
-                        diffObject.values.clear();
-                        selectItem(items.get(which));
-                        onUpdateConfigItems();
-                        dialog.dismiss();
-                    });
-            if (items.size() > 1) {
-                builder.setNegativeButton(R.string.SettingsDeleteProfile, (dialog, which) -> {
-                    deleteCurrentProfile();
-                    onUpdateConfigItems();
-                });
-            }
-            builder.setPositiveButton(R.string.SettingsCloneProfile, (dialog, which) -> {
-                cloneCurrentProfile();
-                onUpdateConfigItems();
-            });
-            builder.show();
+            showPresetDialog(getItems(true));
         });
         DisplayMetrics dm = getContext().getResources().getDisplayMetrics();
         boolean portrait = dm.widthPixels < dm.heightPixels;
         ll.addView(dropdownView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(48)) {{
             topMargin = portrait ? 0 : ViewUtils.dp(12);
+            leftMargin = rightMargin = ViewUtils.dp(12);
+            bottomMargin = ViewUtils.dp(8);
+        }});
+
+        searchBox = new EditText(ctx);
+        searchBox.setHint(Slic3rLocalization.getString("Search settings"));
+        searchBox.setSingleLine(true);
+        searchBox.setTextColor(ThemesRepo.getColor(android.R.attr.textColorPrimary));
+        searchBox.setHintTextColor(ThemesRepo.getColor(android.R.attr.textColorSecondary));
+        searchBox.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override
+            public void afterTextChanged(Editable s) {
+                searchQuery = s.toString();
+                applySearch();
+            }
+        });
+        ll.addView(searchBox, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(48)) {{
             leftMargin = rightMargin = ViewUtils.dp(12);
             bottomMargin = ViewUtils.dp(8);
         }});
@@ -598,7 +594,90 @@ default: {
     }
 
     @SuppressLint("NotifyDataSetChanged")
-    protected void setConfigItems(List<OptionElement> items) {
+    /**
+     * Preset picker with a filter field: type to narrow printers/filaments/
+     * profiles by name. Behaves like the old single-choice dialog when the
+     * filter is empty.
+     */
+    private void showPresetDialog(List<ProfileListItem> items) {
+        Context ctx = getContext();
+        LinearLayout ll = new LinearLayout(ctx);
+        ll.setOrientation(LinearLayout.VERTICAL);
+        EditText filter = new EditText(ctx);
+        filter.setHint(Slic3rLocalization.getString("Search settings"));
+        filter.setSingleLine(true);
+        filter.setTextColor(ThemesRepo.getColor(android.R.attr.textColorPrimary));
+        filter.setHintTextColor(ThemesRepo.getColor(android.R.attr.textColorSecondary));
+        ll.addView(filter, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(52)) {{
+            leftMargin = rightMargin = ViewUtils.dp(12);
+            bottomMargin = ViewUtils.dp(4);
+        }});
+        android.widget.ListView listView = new android.widget.ListView(ctx);
+        ll.addView(listView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewUtils.dp(320)));
+        AtomicReference<AlertDialog> ref = new AtomicReference<>();
+        java.util.function.IntConsumer pick = which -> {
+            dropdownView.setTitle(items.get(which).getTitle());
+            // Switching presets discards unsaved edits, which belonged to the previous one.
+            diffObject.values.clear();
+            selectItem(items.get(which));
+            onUpdateConfigItems();
+            if (ref.get() != null) ref.get().dismiss();
+        };
+        Runnable refresh = new Runnable() {
+            @Override
+            public void run() {
+                String q = filter.getText().toString();
+                List<Integer> idx = new ArrayList<>();
+                List<String> titles = new ArrayList<>();
+                int checked = -1;
+                for (int i = 0; i < items.size(); i++) {
+                    ProfileListItem item = items.get(i);
+                    String title = item.getTitle();
+                    if (com.flashforge.farm.slic3r.SettingsSearch.matches(q, title != null ? title : "")) {
+                        if (item.isSelected()) checked = titles.size();
+                        idx.add(i);
+                        titles.add(title);
+                    }
+                }
+                final int checkedPos = checked;
+                final List<Integer> positions = idx;
+                android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<>(
+                        ctx, android.R.layout.select_dialog_singlechoice,
+                        titles.toArray(new String[0]));
+                listView.setAdapter(adapter);
+                listView.setChoiceMode(android.widget.ListView.CHOICE_MODE_SINGLE);
+                listView.setItemChecked(checkedPos, true);
+                listView.setOnItemClickListener((parent, view, position, id) -> pick.accept(positions.get(position)));
+            }
+        };
+        filter.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override
+            public void afterTextChanged(Editable s) {
+                refresh.run();
+            }
+        });
+        refresh.run();
+        AlertDialog.Builder builder = new FarmAlertDialogBuilder(getContext())
+                .setTitle(getTitle())
+                .setView(ll);
+        if (items.size() > 1) {
+            builder.setNegativeButton(R.string.SettingsDeleteProfile, (dialog, which) -> {
+                deleteCurrentProfile();
+                onUpdateConfigItems();
+            });
+        }
+        builder.setPositiveButton(R.string.SettingsCloneProfile, (dialog, which) -> {
+            cloneCurrentProfile();
+            onUpdateConfigItems();
+        });
+        ref.set(builder.show());
+    }
+
+        protected void setConfigItems(List<OptionElement> items) {
         items = pruneEmptySections(items);
         List<OptionWrapper> list = new ArrayList<>();
         int j = 0;
@@ -626,12 +705,107 @@ default: {
             tabTitles.addAll(list);
             if (selectedTab >= tabTitles.size()) selectedTab = 0;
             buildTabs();
-            currentList = tabTitles.isEmpty() ? new ArrayList<>() : new ArrayList<>(categoryElements.get(selectedTab));
+        }
+        unfilteredList = list;
+        applySearch();
+    }
+
+    private static String wrapperSearchText(OptionWrapper w) {
+        if (w == null) return "";
+        if (w.title != null) return w.title;
+        if (w.optionEl != null && w.optionEl.searchText != null) return w.optionEl.searchText;
+        return "";
+    }
+
+    private static boolean isSectionHeaderWrapper(OptionWrapper w) {
+        return w != null && w.title == null && w.optionEl != null
+                && w.optionEl.simpleItem instanceof SubHeader;
+    }
+
+    private static boolean isTabTitleWrapper(OptionWrapper w) {
+        return w != null && w.title != null;
+    }
+
+    /**
+     * Universal settings search. With an empty query the current tab (or the
+     * full list on non-tabbed screens) is shown; otherwise a flat list of
+     * matching rows grouped under their section headers, tabs hidden.
+     */
+    @SuppressLint("NotifyDataSetChanged")
+    protected void applySearch() {
+        if (recyclerView == null || recyclerView.getAdapter() == null) return;
+        if (searchQuery.trim().isEmpty()) {
+            if (tabScroll != null) tabScroll.setVisibility(View.VISIBLE);
+            if (useTabs()) {
+                if (selectedTab >= tabTitles.size()) selectedTab = 0;
+                buildTabs();
+                currentList = tabTitles.isEmpty() ? new ArrayList<>() : new ArrayList<>(categoryElements.get(selectedTab));
+            } else {
+                currentList = new ArrayList<>(unfilteredList);
+            }
             recyclerView.getAdapter().notifyDataSetChanged();
             return;
         }
-
-        currentList = list;
+        if (tabScroll != null) tabScroll.setVisibility(View.GONE);
+        List<OptionWrapper> out = new ArrayList<>();
+        for (int t = 0; t < categoryElements.size(); t++) {
+            List<OptionWrapper> seg = categoryElements.get(t);
+            if (seg == null) continue;
+            // Split the tab segment into header-led spans first.
+            List<OptionWrapper> spanHeader = new ArrayList<>();
+            List<List<OptionWrapper>> spanRows = new ArrayList<>();
+            OptionWrapper pending = null;
+            List<OptionWrapper> rows = new ArrayList<>();
+            for (OptionWrapper w : seg) {
+                if (w == null) continue;
+                if (isSectionHeaderWrapper(w)) {
+                    if (pending != null || !rows.isEmpty()) {
+                        spanHeader.add(pending);
+                        spanRows.add(rows);
+                    }
+                    pending = w;
+                    rows = new ArrayList<>();
+                } else if (isTabTitleWrapper(w)) {
+                    if (pending != null || !rows.isEmpty()) {
+                        spanHeader.add(pending);
+                        spanRows.add(rows);
+                        pending = null;
+                        rows = new ArrayList<>();
+                    }
+                } else {
+                    rows.add(w);
+                }
+            }
+            if (pending != null || !rows.isEmpty()) {
+                spanHeader.add(pending);
+                spanRows.add(rows);
+            }
+            for (int s = 0; s < spanRows.size(); s++) {
+                OptionWrapper header = spanHeader.get(s);
+                List<OptionWrapper> span = spanRows.get(s);
+                boolean headerMatch = header != null
+                        && com.flashforge.farm.slic3r.SettingsSearch.matches(
+                                searchQuery, wrapperSearchText(header));
+                boolean anyRow = false;
+                for (OptionWrapper w : span) {
+                    if (com.flashforge.farm.slic3r.SettingsSearch.matches(
+                            searchQuery, wrapperSearchText(w))) {
+                        anyRow = true;
+                        break;
+                    }
+                }
+                if (headerMatch || anyRow) {
+                    if (header != null) out.add(header);
+                    for (OptionWrapper w : span) {
+                        if (headerMatch || com.flashforge.farm.slic3r.SettingsSearch.matches(
+                                searchQuery, wrapperSearchText(w))) {
+                            out.add(w);
+                        }
+                    }
+                }
+            }
+        }
+        currentList = out;
         recyclerView.getAdapter().notifyDataSetChanged();
     }
 
@@ -669,6 +843,11 @@ default: {
     @SuppressLint("NotifyDataSetChanged")
     private void selectTab(int index) {
         if (index < 0 || index >= tabTitles.size()) return;
+        if (!searchQuery.trim().isEmpty()) {
+            // Switching tabs exits search mode; the watcher restores the list.
+            searchQuery = "";
+            if (searchBox != null) searchBox.setText("");
+        }
         selectedTab = index;
         styleTabs();
         currentList = new ArrayList<>(categoryElements.get(index));
@@ -787,6 +966,9 @@ default: {
         private Runnable onClick;
         private int boundIndex;
 
+        /** Engine-key + label text used by the universal settings search. */
+        public String searchText = "";
+
         public OptionElement(ConfigOptionDef def) {
             this(def, -1);
         }
@@ -799,6 +981,8 @@ default: {
                 simpleItem = new SpaceItem(0, 0);
                 return;
             }
+            searchText = com.flashforge.farm.slic3r.SettingsSearch.optionText(
+                    def.key, def.label, def.fullLabel, def.tooltip);
             if (def.type == ConfigOptionDef.ConfigOptionType.ENUM
                     && (def.enumLabels == null || def.enumValues == null)) {
                 // Engine-driven visibility: an ENUM without bridged choices
@@ -1027,10 +1211,14 @@ default: {
         public OptionElement(int icon, String title) {
             this.icon = icon;
             this.title = title;
+            this.searchText = title != null ? title : "";
         }
 
         public OptionElement(SimpleRecyclerItem item) {
             simpleItem = item;
+            if (item instanceof SubHeader) {
+                searchText = ((SubHeader) item).title;
+            }
         }
 
         public OptionElement setOnClick(Runnable onClick) {

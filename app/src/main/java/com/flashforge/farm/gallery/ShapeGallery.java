@@ -102,12 +102,22 @@ public final class ShapeGallery {
         }
     }
 
+    /** Cache identity: customs include size+mtime so re-imported content
+     * under the same name cannot serve a stale thumbnail. */
+    static String cacheKey(Item item) {
+        if (item.kind == KIND_CUSTOM && item.file != null) {
+            return item.id + "_" + item.file.length() + "_" + item.file.lastModified();
+        }
+        return item.id;
+    }
+
     public static GalleryMesh previewFor(Item item) throws IOException {
-        GalleryMesh cached = MEMORY_CACHE.get(item.id);
+        String key = cacheKey(item);
+        GalleryMesh cached = MEMORY_CACHE.get(key);
         if (cached != null) return cached;
 
         File cacheDir = FarmApp.getModelCacheDir();
-        File cacheFile = new File(cacheDir, PREVIEW_CACHE_PREFIX + item.id + ".bin");
+        File cacheFile = new File(cacheDir, PREVIEW_CACHE_PREFIX + key + ".bin");
 
         // Check if cached preview exists and is valid
         if (cacheFile.exists()) {
@@ -153,14 +163,25 @@ public final class ShapeGallery {
         } catch (IOException ignored) {
             // Non-fatal, continue with in-memory mesh
         }
-        MEMORY_CACHE.put(item.id, display);
+        MEMORY_CACHE.put(key, display);
 
         return display;
     }
 
     /** Evict one preview (e.g. after its custom file is deleted). */
-    public static void evictPreview(String itemId) {
-        MEMORY_CACHE.invalidate(itemId);
+    public static void evictPreview(Item item) {
+        MEMORY_CACHE.invalidate(cacheKey(item));
+        try {
+            File cacheDir = FarmApp.getModelCacheDir();
+            File[] stale = cacheDir.listFiles();
+            if (stale != null) {
+                String prefix = PREVIEW_CACHE_PREFIX + item.id;
+                for (File f : stale) {
+                    if (f.getName().startsWith(prefix)) f.delete();
+                }
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     public static File fileFor(Item item) throws IOException {

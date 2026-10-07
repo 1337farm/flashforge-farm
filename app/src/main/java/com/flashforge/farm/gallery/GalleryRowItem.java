@@ -19,13 +19,22 @@ import com.flashforge.farm.utils.ViewUtils;
 
 public class GalleryRowItem extends SimpleRecyclerItem<GalleryRowItem.RowView> {
     private final ShapeGallery.Item item;
-    private final GalleryMesh preview;
+    private GalleryMesh preview;
     private View.OnClickListener onClickListener;
     private View.OnLongClickListener onLongClickListener;
 
     public GalleryRowItem(ShapeGallery.Item item, GalleryMesh preview) {
         this.item = item;
         this.preview = preview;
+    }
+
+    /** Swap in a lazily loaded preview (row rebinds on notifyItemChanged). */
+    public void updatePreview(GalleryMesh preview) {
+        this.preview = preview;
+    }
+
+    public ShapeGallery.Item getItem() {
+        return item;
     }
 
     public GalleryRowItem setOnClickListener(View.OnClickListener l) {

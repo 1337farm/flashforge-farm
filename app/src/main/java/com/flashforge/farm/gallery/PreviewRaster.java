@@ -31,13 +31,16 @@ public final class PreviewRaster {
     public static final float FOCAL_RADII = 2.5f;
     /** Degenerate-triangle screen-area epsilon (px^2): only truly collapsed tris are dropped. */
     public static final float MIN_AREA = 1e-6f;
-    /** Flat-shade ramp: base + diffuse * clamped Lambert term. */
-    public static final float BASE_SHADE = 0.38f;
-    public static final float DIFF_SHADE = 0.62f;
+    /** Flat-shade ramp: hemisphere ambient (sky above, ground below) plus a
+     * front-top-left key light, so camera-facing surfaces are lit instead of
+     * base-dark (the old behind-model key lit only tops). */
+    public static final float BASE_SHADE = 0.40f;
+    public static final float HEMI_SHADE = 0.12f;
+    public static final float DIFF_SHADE = 0.55f;
     /** Preview key-light direction (normalized by the caller). */
-    public static final float LIGHT_X = -0.42f;
-    public static final float LIGHT_Y = 0.78f;
-    public static final float LIGHT_Z = 0.46f;
+    public static final float LIGHT_X = -0.25f;
+    public static final float LIGHT_Y = 0.60f;
+    public static final float LIGHT_Z = -0.75f;
     /** Shade channel scales (slightly cool gray). */
     public static final int SHADE_R = 186;
     public static final int SHADE_G = 191;
@@ -88,10 +91,10 @@ public final class PreviewRaster {
         return area <= -MIN_AREA;
     }
 
-    /** Flat-shaded ARGB color for a clamped Lambert term. */
-    public static int shadeColor(float diff) {
+    /** Flat-shaded ARGB color for a clamped Lambert term plus hemisphere ambient. */
+    public static int shadeColor(float diff, float ny) {
         if (diff < 0) diff = 0;
-        float shade = BASE_SHADE + DIFF_SHADE * diff;
+        float shade = BASE_SHADE + HEMI_SHADE * ny + DIFF_SHADE * diff;
         int r = (int) (SHADE_R * shade);
         int g = (int) (SHADE_G * shade);
         int b = (int) (SHADE_B * shade);
@@ -134,7 +137,7 @@ public final class PreviewRaster {
         rotateNormal(n[tri * 3], n[tri * 3 + 1], n[tri * 3 + 2],
                 cosA, sinA, cosT, sinT, tmp);
         float diff = tmp[0] * lx + tmp[1] * ly + tmp[2] * lz;
-        int color = shadeColor(diff);
+        int color = shadeColor(diff, tmp[1]);
         int x0 = (int) Math.max(0, Math.floor(min3(xs[0], xs[1], xs[2])));
         int x1 = (int) Math.min(size - 1, Math.ceil(max3(xs[0], xs[1], xs[2])));
         int y0 = (int) Math.max(0, Math.floor(min3(ys[0], ys[1], ys[2])));

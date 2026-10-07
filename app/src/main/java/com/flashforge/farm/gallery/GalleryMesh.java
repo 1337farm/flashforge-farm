@@ -108,16 +108,58 @@ public final class GalleryMesh {
         }
         return new GalleryMesh(outXyz, outNormals);
     }
+    /**
+     * Copy with outward-facing winding, or {@code this} if already outward.
+     * Loaded files (STL/OBJ/3MF) do not all follow the CCW-outward
+     * convention: an inward-wound mesh renders fully dark (normals point
+     * inside, Lambert term ~0 everywhere) and breaks backface culling.
+     * Signed soup volume is negative for inward winding; such meshes get
+     * their triangles flipped (normals recomputed). Open/non-manifold soup
+     * has ~zero volume and is returned unchanged.
+     */
+    public GalleryMesh withOutwardWinding() {
+        double vol = 0;
+        for (int t = 0; t < triCount; t++) {
+            int o = t * 9;
+            double ax = xyz[o], ay = xyz[o + 1], az = xyz[o + 2];
+            double bx = xyz[o + 3], by = xyz[o + 4], bz = xyz[o + 5];
+            double cx = xyz[o + 6], cy = xyz[o + 7], cz = xyz[o + 8];
+            // dot(a, cross(b, c)) / 6 summed over the soup.
+            vol += ax * (by * cz - bz * cy)
+                 + ay * (bz * cx - bx * cz)
+                 + az * (bx * cy - by * cx);
+        }
+        if (vol >= 0) return this;
+        float[] out = xyz.clone();
+        for (int t = 0; t < triCount; t++) {
+            int o = t * 9;
+            for (int k = 0; k < 3; k++) {
+                float tmp = out[o + 3 + k];
+                out[o + 3 + k] = out[o + 6 + k];
+                out[o + 6 + k] = tmp;
+            }
+        }
+        return new GalleryMesh(out);
+    }
 
-    public static GalleryMesh concat(GalleryMesh... parts) {        int total = 0;
-        for (GalleryMesh p : parts) total += p.xyz.length;
-        float[] outXyz = new float[total];
-        float[] outNormals = new float[total];
-        int o = 0;
+    public static GalleryMesh concat(GalleryMesh... parts) {
+        int totalXyz = 0, totalNrm = 0;
         for (GalleryMesh p : parts) {
-            System.arraycopy(p.xyz, 0, outXyz, o, p.xyz.length);
-            System.arraycopy(p.normals, 0, outNormals, o, p.normals.length);
-            o += p.xyz.length;
+            totalXyz += p.xyz.length;
+            totalNrm += p.triCount * 3;
+        }
+        float[] outXyz = new float[totalXyz];
+        float[] outNormals = new float[totalXyz];
+        int ox = 0, on = 0;
+        for (GalleryMesh p : parts) {
+            System.arraycopy(p.xyz, 0, outXyz, ox, p.xyz.length);
+            // Normals are packed one-per-tri at stride 3 (see
+            // computeNormals), NOT at the xyz stride: copying at the xyz
+            // offset zeroed every part after the first (dark glyphs).
+            int nn = p.triCount * 3;
+            System.arraycopy(p.normals, 0, outNormals, on, nn);
+            ox += p.xyz.length;
+            on += nn;
         }
         return new GalleryMesh(outXyz, outNormals);
     }

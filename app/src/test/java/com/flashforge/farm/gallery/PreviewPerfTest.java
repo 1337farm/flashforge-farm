@@ -64,6 +64,54 @@ public class PreviewPerfTest {
     }
 
     @Test
+    public void testConcatPreservesLaterPartNormals() {
+        // Regression: concat copied normals at the xyz stride (9) while
+        // they are packed at stride 3, zeroing every part after the first
+        // (tag glyphs rendered black).
+        GalleryMesh a = Primitives.cube(20);
+        GalleryMesh b = Primitives.cube(20).translated(100, 0, 0);
+        GalleryMesh c = GalleryMesh.concat(a, b);
+        assertEquals(24, c.triCount);
+        // Second box tri0 (+X face) must carry (1,0,0), not zeros.
+        assertEquals(1f, c.normals[12 * 3], 1e-6f);
+        assertEquals(0f, c.normals[12 * 3 + 1], 1e-6f);
+        assertEquals(0f, c.normals[12 * 3 + 2], 1e-6f);
+        // And its +Y top must be up.
+        assertEquals(1f, c.normals[16 * 3 + 1], 1e-6f);
+    }
+
+    @Test
+    public void testInwardMeshFlippedOutward() {
+        // Mirror bit-for-bit like an inward-wound STL: swap v1/v2 per tri.
+        GalleryMesh cube = Primitives.cube(20);
+        float[] out = cube.xyz.clone();
+        for (int t = 0; t < cube.triCount; t++) {
+            int o = t * 9;
+            for (int k = 0; k < 3; k++) {
+                float tmp = out[o + 3 + k];
+                out[o + 3 + k] = out[o + 6 + k];
+                out[o + 6 + k] = tmp;
+            }
+        }
+        GalleryMesh fixed = new GalleryMesh(out).withOutwardWinding();
+        assertEquals(cube.triCount, fixed.triCount);
+        for (int t = 0; t < fixed.triCount; t++) {
+            int o = t * 9;
+            float nx = fixed.normals[t * 3], ny = fixed.normals[t * 3 + 1], nz = fixed.normals[t * 3 + 2];
+            float cx = (fixed.xyz[o] + fixed.xyz[o + 3] + fixed.xyz[o + 6]) / 3;
+            float cy = (fixed.xyz[o + 1] + fixed.xyz[o + 4] + fixed.xyz[o + 7]) / 3;
+            float cz = (fixed.xyz[o + 2] + fixed.xyz[o + 5] + fixed.xyz[o + 8]) / 3;
+            assertTrue("still inward on tri " + t, nx * cx + ny * cy + nz * cz > 0);
+        }
+    }
+
+    @Test
+    public void testOutwardMeshUnchanged() {
+        GalleryMesh cube = Primitives.cube(20);
+        assertSame(cube, cube.withOutwardWinding());
+    }
+
+    @Test
     public void testMemoryCacheEvictsOldest() {
         PreviewMemoryCache cache = new PreviewMemoryCache(2);
         GalleryMesh a = quad(1), b = quad(1), c = quad(1);

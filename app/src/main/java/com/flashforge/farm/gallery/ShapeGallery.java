@@ -11,8 +11,8 @@ public final class ShapeGallery {
     private ShapeGallery() {
     }
 
-    private static final String PREVIEW_CACHE_PREFIX = "preview6_";
-    private static final String[] LEGACY_PREVIEW_CACHE_PREFIXES = {"preview_", "preview2_", "preview3_", "preview4_", "preview5_"};
+    private static final String PREVIEW_CACHE_PREFIX = "preview7_";
+    private static final String[] LEGACY_PREVIEW_CACHE_PREFIXES = {"preview_", "preview2_", "preview3_", "preview4_", "preview5_", "preview6_"};
 
     /** Hot preview meshes: revisits must not re-read/re-parse every model. */
     private static final PreviewMemoryCache MEMORY_CACHE = new PreviewMemoryCache(12);

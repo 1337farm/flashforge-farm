@@ -78,7 +78,7 @@ public final class MeshLoader {
             bb.position(b + 12);
             for (int k = 0; k < 9; k++) out[o++] = bb.getFloat();
         }
-        return new GalleryMesh(out);
+        return new GalleryMesh(out).withOutwardWinding();
     }
 
     private static GalleryMesh parseAsciiStl(byte[] data) throws IOException {
@@ -105,7 +105,7 @@ public final class MeshLoader {
         if (list.size() % 9 != 0 || list.isEmpty()) throw new IOException("bad ascii stl");
         float[] out = new float[list.size()];
         for (int i = 0; i < out.length; i++) out[i] = list.get(i);
-        return new GalleryMesh(out);
+        return new GalleryMesh(out).withOutwardWinding();
     }
 
     private static GalleryMesh loadObj(File f) throws IOException {
@@ -157,7 +157,7 @@ public final class MeshLoader {
             out[o++] = verts.get(vi + 1);
             out[o++] = verts.get(vi + 2);
         }
-        return new GalleryMesh(out);
+        return new GalleryMesh(out).withOutwardWinding();
     }
 
     private static GalleryMesh load3mf(File f) throws IOException {
@@ -227,7 +227,7 @@ public final class MeshLoader {
             if (tris.isEmpty()) throw new IOException("empty 3mf mesh");
             float[] out = new float[tris.size()];
             for (int i = 0; i < out.length; i++) out[i] = tris.get(i);
-            return new GalleryMesh(out);
+            return new GalleryMesh(out).withOutwardWinding();
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {

@@ -74,7 +74,7 @@ public class PreviewRasterTest {
         float nz2 = ny * sinT + nz1 * cosT;
         float[] li = light();
         float diff = nx1 * li[0] + ny2 * li[1] + nz2 * li[2];
-        return PreviewRaster.shadeColor(diff);
+        return PreviewRaster.shadeColor(diff, ny2);
     }
 
     @Test

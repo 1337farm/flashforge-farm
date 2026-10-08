@@ -28,6 +28,7 @@ public class GLShadersManager {
             SHADER_MM_GOURAUD = "mm_gouraud",
             SHADER_PRINTBED = "printbed",
             SHADER_TOOLPATHS_COG = "toolpaths_cog",
+            SHADER_TOOLPATH_RIBBON = "toolpath_ribbon",
             SHADER_VARIABLE_LAYER_HEIGHT = "variable_layer_height",
             SHADER_WIREFRAME = "wireframe";
 
@@ -45,6 +46,7 @@ public class GLShadersManager {
             SHADER_MM_GOURAUD,
             SHADER_PRINTBED,
             SHADER_TOOLPATHS_COG,
+            SHADER_TOOLPATH_RIBBON,
             SHADER_VARIABLE_LAYER_HEIGHT,
             SHADER_WIREFRAME
     })

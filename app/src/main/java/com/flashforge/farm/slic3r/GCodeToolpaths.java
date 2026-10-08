@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * App-side G-code toolpath parser for the per-layer slice preview.
@@ -55,7 +54,53 @@ public final class GCodeToolpaths {
     }
 
     /**
+     * Single-entry parsed-file cache: the slice screen and the renderer both
+     * need the same parse, and re-slicing replaces the file (length/mtime
+     * key prevents stale hits). Soft reference so a huge dragon parse can
+     * still be reclaimed under memory pressure.
+     */
+    private static String cachedKey;
+    private static long cachedLen = -1;
+    private static long cachedModified = -1;
+    private static int cachedCap = Integer.MIN_VALUE;
+    private static java.lang.ref.SoftReference<Parsed> cachedParsed;
+
+    public static synchronized Parsed parseCached(File f, int maxVerticesPerLayer) throws IOException {
+        String key;
+        try {
+            key = f.getCanonicalPath();
+        } catch (IOException e) {
+            key = f.getAbsolutePath();
+        }
+        long len = f.length();
+        long mod = f.lastModified();
+        Parsed p = cachedParsed != null ? cachedParsed.get() : null;
+        if (p != null && key.equals(cachedKey) && len == cachedLen && mod == cachedModified
+                && maxVerticesPerLayer == cachedCap) {
+            return p;
+        }
+        p = parse(f, maxVerticesPerLayer);
+        cachedKey = key;
+        cachedLen = len;
+        cachedModified = mod;
+        cachedCap = maxVerticesPerLayer;
+        cachedParsed = new java.lang.ref.SoftReference<>(p);
+        return p;
+    }
+
+    public static synchronized void invalidateCache() {
+        cachedParsed = null;
+        cachedKey = null;
+    }
+
+    /**
      * Parse extrusion toolpaths from a sliced .gcode file.
+     *
+     * <p>Hot-loop discipline (large dragon prints are millions of lines —
+     * the old boxed/regex implementation froze the UI for ~a minute):
+     * no per-line regex splits, no {@code toUpperCase} copies, no boxed
+     * {@code Float}/{@code Integer} accumulators, manual float parsing
+     * straight from the line buffer into growable primitive arrays.
      *
      * @param f sliced gcode file (must exist)
      * @param maxVerticesPerLayer cap on vertices kept per layer (decimates long layers
@@ -74,88 +119,101 @@ public final class GCodeToolpaths {
         boolean hasPos = false;
         boolean extrudingSegment = false;
 
-        List<Float> verts = new ArrayList<>();
-        List<Integer> idx = new ArrayList<>();
+        FloatList verts = new FloatList();
+        IntList idx = new IntList();
         float layerStartZ = 0;
         boolean layerHasExtrusion = false;
 
         try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f), "UTF-8"), 65536)) {
             String line;
             while ((line = br.readLine()) != null) {
-                line = line.trim();
-                if (line.isEmpty()) continue;
-                if (line.startsWith(";")) {
-                    String upper = line.toUpperCase(Locale.US);
-                    if (upper.startsWith(";LAYER_CHANGE")) {
+                int len = line.length();
+                int p = 0;
+                while (p < len && line.charAt(p) <= ' ') p++;
+                if (p >= len) continue;
+                char c0 = line.charAt(p);
+                if (c0 == ';') {
+                    if (regionMatchesIgnoreCase(line, p + 1, "LAYER_CHANGE")) {
                         // New layer boundary: flush the previous layer if it has content.
                         if (!verts.isEmpty() && layerHasExtrusion) {
-                            flushLayer(layerVertices, layerIndices, layerZ, verts, idx, layerStartZ,
-                                    maxVerticesPerLayer);
+                            flushLayer(layerVertices, layerIndices, layerZ, verts, idx,
+                                    layerStartZ, maxVerticesPerLayer);
                         }
-                        verts = new ArrayList<>();
-                        idx = new ArrayList<>();
+                        verts.clear();
+                        idx.clear();
                         layerHasExtrusion = false;
                         layerStartZ = z;
                         extrudingSegment = false;
-                    } else if (upper.startsWith("M82")) {
-                        // Absolute mode commands can also appear as comments in some exports; handled below too.
                     }
                     continue;
                 }
-                String[] parts = line.split("\\s+");
-                if (parts.length == 0) continue;
-                String cmd = parts[0].toUpperCase(Locale.US);
-                if (cmd.equals("M82")) {
-                    absoluteE = true;
+                // Command token: up to 3 chars (G0/G1/G00/G01/M82/M83), case-insensitive.
+                int e0 = p;
+                while (e0 < len && line.charAt(e0) > ' ') e0++;
+                int cmdLen = e0 - p;
+                if (cmdLen < 2 || cmdLen > 3) continue;
+                char a = Character.toUpperCase(line.charAt(p));
+                char b = cmdLen > 1 ? Character.toUpperCase(line.charAt(p + 1)) : 0;
+                char c = cmdLen > 2 ? Character.toUpperCase(line.charAt(p + 2)) : 0;
+                boolean isMove = (a == 'G' && b == '0' && (cmdLen == 2 || c == '0'))
+                        || (a == 'G' && b == '1' && (cmdLen == 2 || c == '1'));
+                if (!isMove) {
+                    if (a == 'M' && b == '8' && cmdLen == 3 && (c == '2' || c == '3')) {
+                        absoluteE = (c == '2');
+                    }
                     continue;
                 }
-                if (cmd.equals("M83")) {
-                    absoluteE = false;
-                    continue;
-                }
-                if (!cmd.equals("G0") && !cmd.equals("G1") && !cmd.equals("G00") && !cmd.equals("G01")) {
-                    continue;
-                }
-                Float nx = null, ny = null, nz = null, ne = null;
-                for (int i = 1; i < parts.length; i++) {
-                    String p = parts[i];
-                    if (p.length() < 2) continue;
-                    char axis = Character.toUpperCase(p.charAt(0));
-                    try {
-                        float v = Float.parseFloat(p.substring(1));
-                        switch (axis) {
-                            case 'X': nx = v; break;
-                            case 'Y': ny = v; break;
-                            case 'Z': nz = v; break;
-                            case 'E': ne = v; break;
-                            default: break;
+                boolean isExtrudeMove = (a == 'G' && b == '1');
+                float nx = Float.NaN, ny = Float.NaN, nz = Float.NaN, ne = Float.NaN;
+                int q = e0;
+                while (q < len) {
+                    while (q < len && line.charAt(q) <= ' ') q++;
+                    if (q >= len) break;
+                    char axis = Character.toUpperCase(line.charAt(q));
+                    int v0 = q + 1;
+                    int v1 = v0;
+                    while (v1 < len && line.charAt(v1) > ' ') v1++;
+                    // Comment tail starts a new statement; stop scanning params.
+                    if (axis == ';') break;
+                    if (v1 > v0) {
+                        float v = parseFloat(line, v0, v1);
+                        if (!Float.isNaN(v)) {
+                            switch (axis) {
+                                case 'X': nx = v; break;
+                                case 'Y': ny = v; break;
+                                case 'Z': nz = v; break;
+                                case 'E': ne = v; break;
+                                default: break;
+                            }
                         }
-                    } catch (NumberFormatException ignored) {
                     }
+                    q = v1;
                 }
                 float px = x, py = y, pz = z, pe = e;
-                if (nx != null) x = nx;
-                if (ny != null) y = ny;
-                if (nz != null) z = nz;
-                if (ne != null) e = ne;
-                if (cmd.equals("G1") || cmd.equals("G01")) {
-                    boolean extruding = absoluteE ? (e > pe + 1e-9f) : (ne != null && ne > 1e-9f);
+                if (!Float.isNaN(nx)) x = nx;
+                if (!Float.isNaN(ny)) y = ny;
+                if (!Float.isNaN(nz)) z = nz;
+                if (!Float.isNaN(ne)) e = ne;
+                if (isExtrudeMove) {
+                    boolean extruding = absoluteE ? (e > pe + 1e-9f) : (!Float.isNaN(ne) && ne > 1e-9f);
                     if (extruding) {
                         if (!layerHasExtrusion) {
                             layerStartZ = pz;
                             layerHasExtrusion = true;
                         }
-                        if (!hasPos) {
-                            // First extrusion point: seed the vertex list with the start point.
-                            verts.add(px); verts.add(py); verts.add(pz);
-                            idx.add(verts.size() / 3 - 1);
-                        } else if (!extrudingSegment) {
-                            // Resume after a travel: duplicate the seam vertex so the strip breaks cleanly.
-                            verts.add(px); verts.add(py); verts.add(pz);
-                            idx.add(verts.size() / 3 - 1);
+                        if (!hasPos || !extrudingSegment) {
+                            // Seed the vertex list with the start point (first
+                            // point ever, or resume after a travel so the strip
+                            // breaks cleanly with a duplicated seam vertex).
+                            verts.add(px);
+                            verts.add(py);
+                            verts.add(pz);
+                            idx.add(verts.n / 3 - 1);
                         }
-                        verts.add(x); verts.add(y); verts.add(z);
-                        idx.add(verts.size() / 3 - 1);
+                        verts.add(x);
+                        verts.add(y);
+                        verts.add(z);
+                        idx.add(verts.n / 3 - 1);
                         extrudingSegment = true;
                         hasPos = true;
                         minX = Math.min(minX, Math.min(px, x));
@@ -166,16 +224,17 @@ public final class GCodeToolpaths {
                         maxZ = Math.max(maxZ, Math.max(pz, z));
                     } else {
                         extrudingSegment = false;
-                        if (nx != null || ny != null || nz != null) hasPos = true;
+                        if (!Float.isNaN(nx) || !Float.isNaN(ny) || !Float.isNaN(nz)) hasPos = true;
                     }
                 } else {
                     extrudingSegment = false;
-                    if (nx != null || ny != null || nz != null) hasPos = true;
+                    if (!Float.isNaN(nx) || !Float.isNaN(ny) || !Float.isNaN(nz)) hasPos = true;
                 }
             }
         }
         if (!verts.isEmpty() && layerHasExtrusion) {
-            flushLayer(layerVertices, layerIndices, layerZ, verts, idx, layerStartZ, maxVerticesPerLayer);
+            flushLayer(layerVertices, layerIndices, layerZ, verts, idx,
+                    layerStartZ, maxVerticesPerLayer);
         }
         List<Layer> layers = new ArrayList<>(layerVertices.size());
         for (int i = 0; i < layerVertices.size(); i++) {
@@ -190,44 +249,161 @@ public final class GCodeToolpaths {
                 new float[]{maxX, maxY, maxZ});
     }
 
+    private static boolean regionMatchesIgnoreCase(String line, int start, String word) {
+        if (start + word.length() > line.length()) return false;
+        for (int i = 0; i < word.length(); i++) {
+            if (Character.toUpperCase(line.charAt(start + i)) != word.charAt(i)) return false;
+        }
+        return true;
+    }
+
+    /** Manual float parse over {@code s[start, end)}; NaN when not a number. Zero garbage. */
+    static float parseFloat(CharSequence s, int start, int end) {
+        int p = start;
+        while (p < end && s.charAt(p) <= ' ') p++;
+        boolean neg = false;
+        if (p < end && (s.charAt(p) == '-' || s.charAt(p) == '+')) {
+            neg = s.charAt(p) == '-';
+            p++;
+        }
+        long intPart = 0;
+        boolean hasDigits = false;
+        while (p < end) {
+            char c = s.charAt(p);
+            if (c < '0' || c > '9') break;
+            hasDigits = true;
+            intPart = intPart * 10 + (c - '0');
+            if (intPart > 999999999999L) return Float.NaN;
+            p++;
+        }
+        double v = intPart;
+        if (p < end && s.charAt(p) == '.') {
+            p++;
+            double frac = 0, base = 1;
+            while (p < end) {
+                char c = s.charAt(p);
+                if (c < '0' || c > '9') break;
+                hasDigits = true;
+                frac = frac * 10 + (c - '0');
+                base *= 10;
+                p++;
+            }
+            v += frac / base;
+        }
+        if (p < end && (s.charAt(p) == 'e' || s.charAt(p) == 'E')) {
+            p++;
+            boolean expNeg = false;
+            if (p < end && (s.charAt(p) == '-' || s.charAt(p) == '+')) {
+                expNeg = s.charAt(p) == '-';
+                p++;
+            }
+            int exp = 0;
+            boolean hasExp = false;
+            while (p < end) {
+                char c = s.charAt(p);
+                if (c < '0' || c > '9') break;
+                hasExp = true;
+                exp = exp * 10 + (c - '0');
+                p++;
+            }
+            if (!hasExp) return Float.NaN;
+            v *= Math.pow(10, expNeg ? -exp : exp);
+        }
+        while (p < end && s.charAt(p) <= ' ') p++;
+        if (!hasDigits || p != end) return Float.NaN;
+        return (float) (neg ? -v : v);
+    }
+
+    /** Growable primitive float buffer (replaces boxed ArrayList<Float> in the hot loop). */
+    static final class FloatList {
+        float[] a = new float[256];
+        int n = 0;
+
+        void add(float v) {
+            if (n == a.length) a = java.util.Arrays.copyOf(a, a.length * 2);
+            a[n++] = v;
+        }
+
+        boolean isEmpty() {
+            return n == 0;
+        }
+
+        void clear() {
+            n = 0;
+        }
+    }
+
+    /** Growable primitive int buffer (replaces boxed ArrayList<Integer> in the hot loop). */
+    static final class IntList {
+        int[] a = new int[256];
+        int n = 0;
+
+        void add(int v) {
+            if (n == a.length) a = java.util.Arrays.copyOf(a, a.length * 2);
+            a[n++] = v;
+        }
+
+        boolean isEmpty() {
+            return n == 0;
+        }
+
+        void clear() {
+            n = 0;
+        }
+    }
+
     private static void flushLayer(List<float[]> layerVertices, List<int[]> layerIndices, List<Float> layerZ,
-                                   List<Float> verts, List<Integer> idx, float z, int maxVerticesPerLayer) {
-        int vertexCount = verts.size() / 3;
-        int[] outIdx;
-        float[] outVerts;
-        if (maxVerticesPerLayer > 0 && vertexCount > maxVerticesPerLayer) {
-            // Decimate by stride, preserving index runs via remap.
-            int stride = (vertexCount + maxVerticesPerLayer - 1) / maxVerticesPerLayer;
-            int[] remap = new int[vertexCount];
-            int kept = 0;
-            for (int i = 0; i < vertexCount; i++) {
-                if (i % stride == 0 || i == vertexCount - 1) {
-                    remap[i] = kept++;
-                } else {
-                    remap[i] = -1;
-                }
-            }
-            outVerts = new float[kept * 3];
-            int o = 0;
-            for (int i = 0; i < vertexCount; i++) {
-                if (remap[i] >= 0) {
-                    outVerts[o++] = verts.get(i * 3);
-                    outVerts[o++] = verts.get(i * 3 + 1);
-                    outVerts[o++] = verts.get(i * 3 + 2);
-                }
-            }
-            List<Integer> keptIdx = new ArrayList<>(idx.size());
-            for (int id : idx) {
-                int r = remap[id];
-                if (r >= 0) keptIdx.add(r);
-            }
-            outIdx = new int[keptIdx.size()];
-            for (int i = 0; i < keptIdx.size(); i++) outIdx[i] = keptIdx.get(i);
-        } else {
-            outVerts = new float[verts.size()];
-            for (int i = 0; i < verts.size(); i++) outVerts[i] = verts.get(i);
-            outIdx = new int[idx.size()];
-            for (int i = 0; i < idx.size(); i++) outIdx[i] = idx.get(i);
+                                   FloatList verts, IntList idx, float z, int maxVerticesPerLayer) {
+        // Index pairs (2k, 2k+1) are always genuine extrusion segments:
+        // travels add no vertices, so a pair never spans a travel gap.
+        // Decimation must therefore keep/drop whole pairs; dropping single
+        // vertices would misalign pairing and draw zigzag artifacts.
+        // A layer may end mid-strip with one trailing unpaired index; it is
+        // carried over verbatim (as before) so index counts stay exact.
+        int pairCount = idx.n / 2;
+        boolean hasTrailing = (idx.n % 2) == 1;
+        int trailIdx = hasTrailing ? idx.a[idx.n - 1] : -1;
+        int stride = 1;
+        if (maxVerticesPerLayer > 0 && pairCount * 2 > maxVerticesPerLayer) {
+            int targetPairs = Math.max(1, maxVerticesPerLayer / 2);
+            stride = (pairCount + targetPairs - 1) / targetPairs;
+            if (stride < 1) stride = 1;
+        }
+        int keptPairs = 0;
+        for (int k = 0; k < pairCount; k += stride) keptPairs++;
+        // Always keep the final pair so strips terminate at the real endpoint
+        // (only relevant when decimating; stride 1 already keeps everything).
+        int lastPair = pairCount - 1;
+        boolean keepLast = pairCount > 0 && stride > 1 && (lastPair % stride != 0);
+        if (keepLast) keptPairs++;
+        // Output packs kept pairs densely, so indices are the identity.
+        // Room for one trailing unpaired index (see above).
+        float[] outVerts = new float[(keptPairs * 2 + (hasTrailing ? 1 : 0)) * 3];
+        int[] outIdx = new int[keptPairs * 2 + (hasTrailing ? 1 : 0)];
+        int o = 0;
+        for (int k = 0; k < pairCount; k += stride) {
+            int a = idx.a[k * 2], b = idx.a[k * 2 + 1];
+            outVerts[o++] = verts.a[a * 3];
+            outVerts[o++] = verts.a[a * 3 + 1];
+            outVerts[o++] = verts.a[a * 3 + 2];
+            outVerts[o++] = verts.a[b * 3];
+            outVerts[o++] = verts.a[b * 3 + 1];
+            outVerts[o++] = verts.a[b * 3 + 2];
+        }
+        if (keepLast) {
+            int a = idx.a[lastPair * 2], b = idx.a[lastPair * 2 + 1];
+            outVerts[o++] = verts.a[a * 3];
+            outVerts[o++] = verts.a[a * 3 + 1];
+            outVerts[o++] = verts.a[a * 3 + 2];
+            outVerts[o++] = verts.a[b * 3];
+            outVerts[o++] = verts.a[b * 3 + 1];
+            outVerts[o++] = verts.a[b * 3 + 2];
+        }
+        for (int i = 0; i < outIdx.length; i++) outIdx[i] = i;
+        if (hasTrailing) {
+            outVerts[o++] = verts.a[trailIdx * 3];
+            outVerts[o++] = verts.a[trailIdx * 3 + 1];
+            outVerts[o++] = verts.a[trailIdx * 3 + 2];
         }
         layerVertices.add(outVerts);
         layerIndices.add(outIdx);

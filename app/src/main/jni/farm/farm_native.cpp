@@ -1789,6 +1789,50 @@ namespace {
         ref->model.init_from(std::move(g));
     }
 
+    JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1from_1ribbon(JNIEnv* env, jclass, jlong ptr, jfloatArray verticesArr, jfloatArray uvsArr, jintArray indicesArr) {
+        // Toolpath ribbons: indexed triangles with per-vertex (u,v); u runs
+        // 0..1 across the ribbon for the soft-filament fragment profile.
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        if (ref == nullptr || verticesArr == nullptr || uvsArr == nullptr || indicesArr == nullptr) return;
+        const jsize vertexCount = env->GetArrayLength(verticesArr);
+        const jsize uvCount = env->GetArrayLength(uvsArr);
+        const jsize indexCount = env->GetArrayLength(indicesArr);
+        if (vertexCount % 3 != 0 || vertexCount <= 0 || uvCount != vertexCount / 3 * 2 || indexCount <= 0) return;
+        jfloat* vertices = env->GetFloatArrayElements(verticesArr, nullptr);
+        jfloat* uvs = env->GetFloatArrayElements(uvsArr, nullptr);
+        jint* indices = env->GetIntArrayElements(indicesArr, nullptr);
+        if (vertices == nullptr || uvs == nullptr || indices == nullptr) {
+            if (vertices != nullptr) env->ReleaseFloatArrayElements(verticesArr, vertices, JNI_ABORT);
+            if (uvs != nullptr) env->ReleaseFloatArrayElements(uvsArr, uvs, JNI_ABORT);
+            if (indices != nullptr) env->ReleaseIntArrayElements(indicesArr, indices, JNI_ABORT);
+            return;
+        }
+        Slic3r::GUI::GLModel::Geometry g;
+        g.format = {Slic3r::GUI::GLModel::Geometry::EPrimitiveType::Triangles,
+                    Slic3r::GUI::GLModel::Geometry::EVertexLayout::P3T2};
+        g.reserve_vertices((size_t) (vertexCount / 3));
+        g.reserve_indices((size_t) indexCount);
+        for (jsize i = 0; i < vertexCount; i += 3) {
+            g.add_vertex(Domain::Vec3f(vertices[i], vertices[i + 1], vertices[i + 2]),
+                         Domain::Vec2f(uvs[i / 3 * 2], uvs[i / 3 * 2 + 1]));
+        }
+        for (jsize i = 0; i < indexCount; ++i) {
+            const jint id = indices[i];
+            if (id < 0 || id * 3 + 2 >= vertexCount) {
+                env->ReleaseFloatArrayElements(verticesArr, vertices, JNI_ABORT);
+                env->ReleaseFloatArrayElements(uvsArr, uvs, JNI_ABORT);
+                env->ReleaseIntArrayElements(indicesArr, indices, JNI_ABORT);
+                return;
+            }
+            g.add_index((unsigned int) id);
+        }
+        env->ReleaseFloatArrayElements(verticesArr, vertices, JNI_ABORT);
+        env->ReleaseFloatArrayElements(uvsArr, uvs, JNI_ABORT);
+        env->ReleaseIntArrayElements(indicesArr, indices, JNI_ABORT);
+        ref->model.reset();
+        ref->model.init_from(std::move(g));
+    }
+
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1textured_1quad(JNIEnv* env, jclass, jlong ptr, jfloatArray xyzArr, jfloatArray uvArr) {
         GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
         if (ref == nullptr || xyzArr == nullptr || uvArr == nullptr) return;

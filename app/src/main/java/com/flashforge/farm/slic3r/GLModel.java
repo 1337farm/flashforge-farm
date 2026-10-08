@@ -39,6 +39,11 @@ public class GLModel {
         Native.glmodel_init_from_model_object(pointer, model.pointer, i);
     }
 
+    /** Display-only decimated mesh (stride = keep every Nth triangle). */
+    public void initFromLod(Model model, int i, int stride) {
+        Native.glmodel_init_from_model_lod(pointer, model.pointer, i, stride);
+    }
+
     /** Build this model from facets painted with the given filament in a paint session (mesh-local coords). */
     public int initFromPaint(long paintSessionPtr, int filamentIdx) {
         return Native.glmodel_init_from_paint(pointer, paintSessionPtr, filamentIdx);

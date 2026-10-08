@@ -1231,6 +1231,12 @@ public class BedFragment extends Fragment {
         this.currentProjectFile = f;
         this.totalPlates = plateCount;
 
+        // Display LOD: stride-subsampled render meshes keep million-triangle
+        // models interactive on mobile GPUs (raycast/paint/slice keep full res).
+        if (glView != null && glView.getRenderer() != null && f != null) {
+            long estTris = Math.max(1, f.length() / 50);
+            glView.getRenderer().setDisplayStride((int) Math.max(1, (estTris + 249999) / 250000));
+        }
         if (plateCount <= 1 && isSameFileLoaded(f)) {
             Model current = getCurrentModel();
             int count = 0;

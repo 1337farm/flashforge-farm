@@ -60,6 +60,24 @@ public class GLRenderer implements GLSurfaceView.Renderer {
     private double[] modelMatrix = new double[16];
     private double[] normalMatrix = new double[12];
     private double[] outModelMatrix = new double[16];
+    private final double[] frustumVP = new double[16];
+    private final Vec3d cullMin = new Vec3d();
+    private final Vec3d cullMax = new Vec3d();
+    /** Display-mesh stride (keep every Nth triangle) for huge models; 1 = full. */
+    private int displayStride = 1;
+
+    /** Cap display triangles for multi-hundred-K meshes that stall mobile GPUs. */
+    public void setDisplayStride(int stride) {
+        displayStride = Math.max(1, stride);
+    }
+
+    private void initDisplayModel(GLModel glModel, com.flashforge.farm.slic3r.Model model, int i) {
+        if (displayStride > 1) {
+            glModel.initFromLod(model, i, displayStride);
+        } else {
+            glModel.initFrom(model, i);
+        }
+    }
     private double[] cutPlaneModelMatrix = new double[16];
     private double[] cutPlaneOutModelMatrix = new double[16];
 
@@ -926,7 +944,7 @@ public class GLRenderer implements GLSurfaceView.Renderer {
         if (i < glModels.size()) {
             GLModel glModel = glModels.get(i);
             glModel.reset();
-            glModel.initFrom(model, i);
+            initDisplayModel(glModel, model, i);
         }
         invalidateCommittedOverlays(i);
     }
@@ -945,7 +963,7 @@ public class GLRenderer implements GLSurfaceView.Renderer {
 
             GLModel glModel = glModels.get(i);
             glModel.reset();
-            glModel.initFrom(model, i);
+            initDisplayModel(glModel, model, i);
         }
     }
 
@@ -1101,7 +1119,11 @@ public class GLRenderer implements GLSurfaceView.Renderer {
                     shader.setUniform("volume_mirrored", left);
                     while (list.size() <= i) {
                         GLModel gm = new GLModel();
-                        gm.initFrom(m, list.size());
+                        if (displayStride > 1) {
+                            gm.initFromLod(m, list.size(), displayStride);
+                        } else {
+                            gm.initFrom(m, list.size());
+                        }
                         list.add(gm);
                     }
                     GLModel gm = list.get(i);
@@ -1119,8 +1141,25 @@ public class GLRenderer implements GLSurfaceView.Renderer {
             int color = cachedAccentColor;
             int hoverColor = cachedHoverColor;
             if (!paintMode) paintPalette = Prefs.getFilamentPalette(); // keep persisted paint colors current
+            DoubleMatrix.multiplyMM(frustumVP, 0, projectionMatrix, 0, viewMatrix, 0);
+            double[][] frustum = com.flashforge.farm.render.FrustumCuller.planes(frustumVP);
 
             for (int i = 0; i < model.getObjectsCount(); i++) {
+                // Selected objects carry live gizmo deltas outside the baked
+                // bbox: never cull them.
+                if (!selectedObjects.contains(i)) {
+                    try {
+                        model.getBoundingBoxExact(i, cullMin, cullMax);
+                        double[] s = com.flashforge.farm.render.FrustumCuller.sphere(
+                                cullMin.x, cullMin.y, cullMin.z, cullMax.x, cullMax.y, cullMax.z);
+                        if (!com.flashforge.farm.render.FrustumCuller.sphereVisible(
+                                frustum, s[0], s[1], s[2], s[3])) {
+                            continue;
+                        }
+                    } catch (Exception ignored) {
+                        // Fail open: any doubt renders the object.
+                    }
+                }
                 boolean left = model.isLeftHanded(i);
                 if (left) {
                     glFrontFace(GL_CW);
@@ -1159,7 +1198,7 @@ public class GLRenderer implements GLSurfaceView.Renderer {
 
                 if (glModels.size() < i + 1) {
                     GLModel glModel = new GLModel();
-                    glModel.initFrom(model, i);
+                    initDisplayModel(glModel, model, i);
                     glModels.add(glModel);
                 }
                 GLModel glModel = glModels.get(i);

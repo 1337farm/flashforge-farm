@@ -1736,6 +1736,30 @@ namespace {
         ref->model.init_from(ref->mesh.its);
     }
 
+    JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1from_1model_1lod(JNIEnv *env, jclass, jlong ptr, jlong model, jint i, jint stride) {
+        // Display-only decimated mesh: stride-subsampled triangles for
+        // million-triangle models that stall mobile GPUs at full res.
+        // Raycast/paint/slice paths keep using the full mesh; no topology
+        // is invented (unlike retriangulation), so silhouettes stay true.
+        (void) env;
+        GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
+        ModelRef* mRef = (ModelRef*) (intptr_t) model;
+        if (ref == nullptr || mRef == nullptr) return;
+        Domain::ModelObject* obj = check_object(mRef, i);
+        if (obj == nullptr) return;
+        ref->mesh = BizAlgo::ModelObject::mesh(*obj);
+        const size_t n = ref->mesh.its.indices.size();
+        if (stride <= 1 || n <= (size_t) stride) {
+            ref->model.init_from(ref->mesh.its);
+            return;
+        }
+        ::indexed_triangle_set sub;
+        sub.vertices = ref->mesh.its.vertices;
+        for (size_t t = 0; t < n; t += (size_t) stride)
+            sub.indices.push_back(ref->mesh.its.indices[t]);
+        ref->model.init_from(sub);
+    }
+
     JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1set_1color(JNIEnv* env, jclass, jlong ptr, jfloat red, jfloat green, jfloat blue, jfloat alpha) {
         (void) env;
         GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;

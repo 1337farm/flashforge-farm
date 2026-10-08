@@ -148,7 +148,7 @@ public final class ProfilePrintSettingsBuilder {
                     addSection(items, "Skirt", "skirts", "skirt_distance", "skirt_height", "draft_shield");
                     addSection(items, "Brim", "brim_type", "brim_width");
                     addSection(items, "Special mode", "spiral_vase");
-                    addSection(items, "Fuzzy Skin", "fuzzy_skin", "fuzzy_skin_thickness", "fuzzy_skin_point_dist");
+                    addSection(items, "Fuzzy Skin", "fuzzy_skin", "fuzzy_skin_thickness", "fuzzy_skin_point_dist", "fuzzy_skin_noise_type", "fuzzy_skin_scale", "fuzzy_skin_octaves", "fuzzy_skin_persistence", "fuzzy_skin_first_layer");
                     addSection(items, "G-code output", "gcode_comments", "gcode_label_objects");
                     addSection(items, "Notes", "notes");
                     addSection(items, "Profile dependencies", "compatible_printers", "compatible_printers_condition");

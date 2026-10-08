@@ -1,0 +1,342 @@
+# 0014: fuzzy skin advanced options (Orca parity).
+# Adds fuzzy_skin_noise_type (classic/fractal), fuzzy_skin_scale, fuzzy_skin_octaves,
+# fuzzy_skin_persistence, fuzzy_skin_first_layer defs plus the fractal-noise
+# displacement path and first-layer gate in the FuzzySkin feature. Defaults
+# preserve classic behavior exactly (classic noise, scale 1, first layer off).
+#
+diff --git a/src/libslic3r/src/libslic3r/Feature/FuzzySkin/FuzzySkin.cpp b/src/libslic3r/src/libslic3r/Feature/FuzzySkin/FuzzySkin.cpp
+index 598b8a2cec..b56dc10d38 100644
+--- a/src/libslic3r/src/libslic3r/Feature/FuzzySkin/FuzzySkin.cpp
++++ b/src/libslic3r/src/libslic3r/Feature/FuzzySkin/FuzzySkin.cpp
+@@ -1,3 +1,5 @@
++#include <cmath>
++#include <cstdint>
+ #include <random>
+ 
+ #include "libslic3r/Algorithm/LineSegmentation/LineSegmentation.hpp"
+@@ -25,11 +27,68 @@ static double random_value()
+     return dist(gen);
+ }
+ 
++// Deterministic 1D value noise in [0, 1] (splitmix-style lattice hash +
++// smoothstep interpolation). Deterministic across runs so the same model
++// slices to identical gcode every time (unlike random_value above).
++static uint64_t fuzzy_hash(uint64_t x)
++{
++    x ^= x >> 30; x *= 0xbf58476d1ce4e5b9ULL;
++    x ^= x >> 27; x *= 0x94d049bb133111ebULL;
++    x ^= x >> 31; return x;
++}
++
++static double fuzzy_value_noise(double s, uint64_t seed)
++{
++    const int64_t i = (int64_t)std::floor(s);
++    const double  f = s - (double)i;
++    const double  u = f * f * (3.0 - 2.0 * f);
++    const double  a = (double)(fuzzy_hash((uint64_t)(i * 2 + 1) ^ (seed * 2 + 1)) >> 11)
++        * (1.0 / 9007199254740992.0);
++    const double  b = (double)(fuzzy_hash((uint64_t)(i * 2 + 3) ^ (seed * 2 + 1)) >> 11)
++        * (1.0 / 9007199254740992.0);
++    return a + (b - a) * u;
++}
++
++static double fuzzy_fbm(double s, int octaves, double persistence, uint64_t seed)
++{
++    if (octaves < 1) octaves = 1;
++    if (octaves > 8) octaves = 8;
++    if (persistence < 0.) persistence = 0.;
++    if (persistence > 1.) persistence = 1.;
++    double sum = 0., amp = 1., norm = 0., freq = 1.;
++    for (int o = 0; o < octaves; ++o) {
++        sum += amp * fuzzy_value_noise(s * freq, seed + (uint64_t)o * 7919ULL);
++        norm += amp;
++        amp *= persistence;
++        freq *= 2.0;
++    }
++    return norm > 0. ? sum / norm : 0.5;
++}
++
++static double fuzzy_offset(const FuzzySkinParams &params, double arclen)
++{
++    const double amp = params.thickness * (params.scale < 0. ? 0. : params.scale);
++    if (!params.fractal)
++        return random_value() * (amp * 2.) - amp;
++    const double pd = params.point_dist > 0. ? params.point_dist : 1.;
++    const double n  = fuzzy_fbm(arclen / pd, params.octaves, params.persistence, params.seed);
++    return (n * 2.0 - 1.0) * amp;
++}
++
+ void fuzzy_polyline(Points &poly, const bool closed, const double fuzzy_skin_thickness, const double fuzzy_skin_point_distance)
+ {
+-    const double min_dist_between_points = fuzzy_skin_point_distance * 3. / 4.; // hardcoded: the point distance may vary between 3/4 and 5/4 the supplied value
+-    const double range_random_point_dist = fuzzy_skin_point_distance / 2.;
++    FuzzySkinParams params;
++    params.thickness  = fuzzy_skin_thickness;
++    params.point_dist = fuzzy_skin_point_distance;
++    fuzzy_polyline(poly, closed, params);
++}
++
++void fuzzy_polyline(Points &poly, const bool closed, const FuzzySkinParams &params)
++{
++    const double min_dist_between_points = params.point_dist * 3. / 4.; // hardcoded: the point distance may vary between 3/4 and 5/4 the supplied value
++    const double range_random_point_dist = params.point_dist / 2.;
+     double       dist_left_over          = random_value() * (min_dist_between_points / 2.); // the distance to be traversed on the line before making the first new point
++    double       arclen                  = (double)(params.seed % 1000000); // decorrelate fractal phase per perimeter
+ 
+     Points out;
+     out.reserve(poly.size());
+@@ -44,11 +103,12 @@ void fuzzy_polyline(Points &poly, const bool closed, const double fuzzy_skin_thi
+         double p0p1_size = p0p1.norm();
+         double p0pa_dist = dist_left_over;
+         for (; p0pa_dist < p0p1_size; p0pa_dist += min_dist_between_points + random_value() * range_random_point_dist) {
+-            double r = random_value() * (fuzzy_skin_thickness * 2.) - fuzzy_skin_thickness;
++            double r = fuzzy_offset(params, arclen + p0pa_dist);
+             out.emplace_back(*p0 + (p0p1 * (p0pa_dist / p0p1_size) + perp(p0p1).cast<double>().normalized() * r).cast<coord_t>());
+         }
+ 
+         dist_left_over = p0pa_dist - p0p1_size;
++        arclen += p0p1_size;
+         p0             = &p1;
+     }
+ 
+@@ -74,9 +134,18 @@ void fuzzy_polygon(Polygon &polygon, double fuzzy_skin_thickness, double fuzzy_s
+ 
+ void fuzzy_extrusion_line(Arachne::ExtrusionLine &ext_lines, const double fuzzy_skin_thickness, const double fuzzy_skin_point_distance)
+ {
+-    const double min_dist_between_points = fuzzy_skin_point_distance * 3. / 4.; // hardcoded: the point distance may vary between 3/4 and 5/4 the supplied value
+-    const double range_random_point_dist = fuzzy_skin_point_distance / 2.;
++    FuzzySkinParams params;
++    params.thickness  = fuzzy_skin_thickness;
++    params.point_dist = fuzzy_skin_point_distance;
++    fuzzy_extrusion_line(ext_lines, params);
++}
++
++void fuzzy_extrusion_line(Arachne::ExtrusionLine &ext_lines, const FuzzySkinParams &params)
++{
++    const double min_dist_between_points = params.point_dist * 3. / 4.; // hardcoded: the point distance may vary between 3/4 and 5/4 the supplied value
++    const double range_random_point_dist = params.point_dist / 2.;
+     double       dist_left_over          = random_value() * (min_dist_between_points / 2.); // the distance to be traversed on the line before making the first new point
++    double       arclen                  = (double)(params.seed % 1000000); // decorrelate fractal phase per perimeter
+ 
+     Arachne::ExtrusionJunction *p0 = &ext_lines.front();
+     Arachne::ExtrusionJunctions out;
+@@ -93,11 +162,12 @@ void fuzzy_extrusion_line(Arachne::ExtrusionLine &ext_lines, const double fuzzy_
+         double p0p1_size = p0p1.norm();
+         double p0pa_dist = dist_left_over;
+         for (; p0pa_dist < p0p1_size; p0pa_dist += min_dist_between_points + random_value() * range_random_point_dist) {
+-            double r = random_value() * (fuzzy_skin_thickness * 2.) - fuzzy_skin_thickness;
++            double r = fuzzy_offset(params, arclen + p0pa_dist);
+             out.emplace_back(p0->p + (p0p1 * (p0pa_dist / p0p1_size) + perp(p0p1).cast<double>().normalized() * r).cast<coord_t>(), p1.w, p1.perimeter_index);
+         }
+ 
+         dist_left_over = p0pa_dist - p0p1_size;
++        arclen += p0p1_size;
+         p0             = &p1;
+     }
+ 
+@@ -125,9 +195,10 @@ bool should_fuzzify(const PrintRegionConfigView &config, const size_t layer_idx,
+ {
+     const Domain::FuzzySkinType fuzzy_skin_type = config.get<Domain::FuzzySkinType>("fuzzy_skin");
+ 
+-    if (fuzzy_skin_type == Domain::FuzzySkinType::None || layer_idx <= 0) {
++    if (fuzzy_skin_type == Domain::FuzzySkinType::None)
++        return false;
++    if (layer_idx == 0 && !config.get<bool>("fuzzy_skin_first_layer"))
+         return false;
+-    }
+ 
+     const bool fuzzify_contours = perimeter_idx == 0;
+     const bool fuzzify_holes    = fuzzify_contours && fuzzy_skin_type == Domain::FuzzySkinType::All;
+@@ -135,6 +206,20 @@ bool should_fuzzify(const PrintRegionConfigView &config, const size_t layer_idx,
+     return is_contour ? fuzzify_contours : fuzzify_holes;
+ }
+ 
++FuzzySkinParams make_fuzzy_params(const PrintRegionConfigView &config, size_t layer_idx, size_t perimeter_idx)
++{
++    FuzzySkinParams params;
++    params.thickness  = scaled<double>(config.get<double>("fuzzy_skin_thickness"));
++    params.point_dist = scaled<double>(config.get<double>("fuzzy_skin_point_dist"));
++    params.scale      = config.get<double>("fuzzy_skin_scale");
++    params.fractal    = config.get<Domain::FuzzySkinNoiseType>("fuzzy_skin_noise_type")
++        == Domain::FuzzySkinNoiseType::Fractal;
++    params.octaves     = config.get<int>("fuzzy_skin_octaves");
++    params.persistence = config.get<double>("fuzzy_skin_persistence");
++    params.seed        = (uint64_t)layer_idx * 1000003ULL + (uint64_t)perimeter_idx * 9176ULL + 12345ULL;
++    return params;
++}
++
+ Polygon apply_fuzzy_skin(const Polygon &polygon, const PrintRegionConfigView &base_config, const PerimeterRegions &perimeter_regions, const size_t layer_idx, const size_t perimeter_idx, const bool is_contour)
+ {
+     using namespace Slic3r::Algorithm::LineSegmentation;
+@@ -142,7 +227,7 @@ Polygon apply_fuzzy_skin(const Polygon &polygon, const PrintRegionConfigView &ba
+     auto apply_fuzzy_skin_on_polygon = [&layer_idx, &perimeter_idx, &is_contour](const Polygon &polygon, const PrintRegionConfigView &config) -> Polygon {
+         if (should_fuzzify(config, layer_idx, perimeter_idx, is_contour)) {
+             Polygon fuzzified_polygon = polygon;
+-            fuzzy_polygon(fuzzified_polygon, scaled<double>(config.get<double>("fuzzy_skin_thickness")), scaled<double>(config.get<double>("fuzzy_skin_point_dist")));
++            fuzzy_polyline(fuzzified_polygon.points, true, make_fuzzy_params(config, layer_idx, perimeter_idx));
+ 
+             return fuzzified_polygon;
+         } else {
+@@ -164,7 +249,7 @@ Polygon apply_fuzzy_skin(const Polygon &polygon, const PrintRegionConfigView &ba
+     for (PolylineRegionSegment &segment : segments) {
+         const PrintRegionConfigView &config = segment.config;
+         if (should_fuzzify(config, layer_idx, perimeter_idx, is_contour)) {
+-            fuzzy_polyline(segment.polyline.points, false, scaled<double>(config.get<double>("fuzzy_skin_thickness")), scaled<double>(config.get<double>("fuzzy_skin_point_dist")));
++            fuzzy_polyline(segment.polyline.points, false, make_fuzzy_params(config, layer_idx, perimeter_idx));
+         }
+ 
+         assert(!segment.polyline.empty());
+@@ -195,7 +280,7 @@ Arachne::ExtrusionLine apply_fuzzy_skin(const Arachne::ExtrusionLine &extrusion,
+     if (perimeter_regions.empty()) {
+         if (should_fuzzify(base_config, layer_idx, perimeter_idx, is_contour)) {
+             ExtrusionLine fuzzified_extrusion = extrusion;
+-            fuzzy_extrusion_line(fuzzified_extrusion, scaled<double>(base_config.get<double>("fuzzy_skin_thickness")), scaled<double>(base_config.get<double>("fuzzy_skin_point_dist")));
++            fuzzy_extrusion_line(fuzzified_extrusion, make_fuzzy_params(base_config, layer_idx, perimeter_idx));
+ 
+             return fuzzified_extrusion;
+         } else {
+@@ -209,7 +294,7 @@ Arachne::ExtrusionLine apply_fuzzy_skin(const Arachne::ExtrusionLine &extrusion,
+     for (ExtrusionRegionSegment &segment : segments) {
+         const PrintRegionConfigView &config = segment.config;
+         if (should_fuzzify(config, layer_idx, perimeter_idx, is_contour)) {
+-            fuzzy_extrusion_line(segment.extrusion, scaled<double>(config.get<double>("fuzzy_skin_thickness")), scaled<double>(config.get<double>("fuzzy_skin_point_dist")));
++            fuzzy_extrusion_line(segment.extrusion, make_fuzzy_params(config, layer_idx, perimeter_idx));
+         }
+ 
+         assert(!segment.extrusion.empty());
+diff --git a/src/libslic3r/src/libslic3r/Feature/FuzzySkin/FuzzySkin.hpp b/src/libslic3r/src/libslic3r/Feature/FuzzySkin/FuzzySkin.hpp
+index 6f3064bc7b..ca0a651f4a 100644
+--- a/src/libslic3r/src/libslic3r/Feature/FuzzySkin/FuzzySkin.hpp
++++ b/src/libslic3r/src/libslic3r/Feature/FuzzySkin/FuzzySkin.hpp
+@@ -1,6 +1,9 @@
+ #ifndef libslic3r_FuzzySkin_hpp_
+ #define libslic3r_FuzzySkin_hpp_
+ 
++#include "libslic3r/ConfigViews.hpp"
++#include "Slic3r/Domain/ConfigDefsFDM.hpp"
++
+ namespace Slic3r::Arachne {
+ struct ExtrusionLine;
+ } // namespace Slic3r::Arachne
+@@ -11,9 +14,25 @@ struct Parameters;
+ 
+ namespace Slic3r::Feature::FuzzySkin {
+ 
++struct FuzzySkinParams {
++    double   thickness   = 0.;
++    double   point_dist  = 1.;
++    double   scale       = 1.;
++    bool     fractal     = false;
++    int      octaves     = 4;
++    double   persistence = 0.5;
++    uint64_t seed        = 0;
++};
++
++// Reads the fuzzy skin options from a region config (with safe fallbacks
++// when a key is absent, e.g. legacy profiles predating an option).
++FuzzySkinParams make_fuzzy_params(const PrintRegionConfigView &config, size_t layer_idx, size_t perimeter_idx);
++
+ void fuzzy_polygon(Polygon &polygon, double fuzzy_skin_thickness, double fuzzy_skin_point_distance);
++void fuzzy_polyline(Points &poly, bool closed, const FuzzySkinParams &params);
+ 
+ void fuzzy_extrusion_line(Arachne::ExtrusionLine &ext_lines, double fuzzy_skin_thickness, double fuzzy_skin_point_dist);
++void fuzzy_extrusion_line(Arachne::ExtrusionLine &ext_lines, const FuzzySkinParams &params);
+ 
+ bool should_fuzzify(const PrintRegionConfigView &config, size_t layer_idx, size_t perimeter_idx, bool is_contour);
+ 
+diff --git a/src/slic3r-domain/include/Slic3r/Domain/ConfigDefsFDM.hpp b/src/slic3r-domain/include/Slic3r/Domain/ConfigDefsFDM.hpp
+index a2fe29e3f8..8788fa9b43 100644
+--- a/src/slic3r-domain/include/Slic3r/Domain/ConfigDefsFDM.hpp
++++ b/src/slic3r-domain/include/Slic3r/Domain/ConfigDefsFDM.hpp
+@@ -47,6 +47,11 @@ enum class FuzzySkinType {
+     All,
+ };
+ 
++enum class FuzzySkinNoiseType {
++    Classic,
++    Fractal,
++};
++
+ enum class LabelObjectsStyle {
+     Disabled, Octoprint, Firmware
+ };
+diff --git a/src/slic3r-domain/src/Slic3r/Domain/ConfigDefsFDM.cpp b/src/slic3r-domain/src/Slic3r/Domain/ConfigDefsFDM.cpp
+index 8cc588b1e1..cb47894feb 100644
+--- a/src/slic3r-domain/src/Slic3r/Domain/ConfigDefsFDM.cpp
++++ b/src/slic3r-domain/src/Slic3r/Domain/ConfigDefsFDM.cpp
+@@ -1931,6 +1931,75 @@ void fdm_config_init_fn(ConfigDefinitions& defs)
+     def->min = 0;
+     def->init_fn = init_with(0.8);
+ 
++    def = defs.add("fuzzy_skin_noise_type", typeid(EnumWrapper));
++    def->location = Print;
++    def->overrides_in = Locations{ Object, Volume };
++    def->label = L("Fuzzy skin noise type");
++    def->option_group = ConfigItemDef::OptionGroup::Print_WallsPerimeters_FuzzySkin;
++    def->category = ConfigItemDef::Category::Print_WallsPerimeters;
++    def->order = 3;
++    def->gui_type = ConfigItemDef::GUIType::combobox;
++    def->tooltip = L("Classic places each offset point randomly. Fractal drives the "
++                     "offsets with smooth fractal noise (see scale, octaves and "
++                     "persistence) for a more organic, less uniform texture.");
++    def->init_fn = init_with(
++        FuzzySkinNoiseType::Classic,
++        {{int(FuzzySkinNoiseType::Classic), "classic", L("Classic random")},
++         {int(FuzzySkinNoiseType::Fractal), "fractal", L("Fractal noise")}}
++    );
++
++    def = defs.add("fuzzy_skin_scale", typeid(double));
++    def->location = Print;
++    def->overrides_in = Locations{ Object, Volume };
++    def->label = L("Fuzzy skin scale");
++    def->option_group = ConfigItemDef::OptionGroup::Print_WallsPerimeters_FuzzySkin;
++    def->gui_type = ConfigItemDef::GUIType::textfield;
++    def->category = ConfigItemDef::Category::Print_WallsPerimeters;
++    def->order = 4;
++    def->tooltip = L("Multiplies the fuzzy skin displacement amplitude. "
++                     "1 keeps the classic thickness behavior.");
++    def->units = {L("x")};
++    def->min = 0;
++    def->init_fn = init_with(1.);
++
++    def = defs.add("fuzzy_skin_octaves", typeid(int));
++    def->location = Print;
++    def->overrides_in = Locations{ Object, Volume };
++    def->label = L("Fuzzy skin octaves");
++    def->option_group = ConfigItemDef::OptionGroup::Print_WallsPerimeters_FuzzySkin;
++    def->gui_type = ConfigItemDef::GUIType::i_enum_open;
++    def->category = ConfigItemDef::Category::Print_WallsPerimeters;
++    def->order = 5;
++    def->tooltip = L("Number of fractal noise octaves used when the noise type "
++                     "is fractal. More octaves add finer detail.");
++    def->min = 1;
++    def->init_fn = init_with(4);
++
++    def = defs.add("fuzzy_skin_persistence", typeid(double));
++    def->location = Print;
++    def->overrides_in = Locations{ Object, Volume };
++    def->label = L("Fuzzy skin persistence");
++    def->option_group = ConfigItemDef::OptionGroup::Print_WallsPerimeters_FuzzySkin;
++    def->gui_type = ConfigItemDef::GUIType::textfield;
++    def->category = ConfigItemDef::Category::Print_WallsPerimeters;
++    def->order = 6;
++    def->tooltip = L("Fractal amplitude falloff per octave (0 = smooth, "
++                     "1 = rough). Only used with fractal noise.");
++    def->min = 0;
++    def->init_fn = init_with(0.5);
++
++    def = defs.add("fuzzy_skin_first_layer", typeid(bool));
++    def->location = Print;
++    def->overrides_in = Locations{ Object, Volume };
++    def->label = L("Fuzzy skin first layer");
++    def->option_group = ConfigItemDef::OptionGroup::Print_WallsPerimeters_FuzzySkin;
++    def->gui_type = ConfigItemDef::GUIType::checkbox;
++    def->category = ConfigItemDef::Category::Print_WallsPerimeters;
++    def->order = 7;
++    def->tooltip = L("Also apply fuzzy skin to the first layer. Off by "
++                     "default to protect bed adhesion.");
++    def->init_fn = init_with(false);
++
+     def = defs.add("gap_fill_enabled", typeid(bool));
+     def->location = Print;
+     def->overrides_in = Locations{ Tool, Object, Volume };

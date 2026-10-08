@@ -381,7 +381,12 @@
      "keys": [
       "fuzzy_skin",
       "fuzzy_skin_thickness",
-      "fuzzy_skin_point_dist"
+      "fuzzy_skin_point_dist",
+      "fuzzy_skin_noise_type",
+      "fuzzy_skin_scale",
+      "fuzzy_skin_octaves",
+      "fuzzy_skin_persistence",
+      "fuzzy_skin_first_layer"
      ]
     },
     {
@@ -416,7 +421,7 @@
      "msg": "PrintSettingsBuilder"
     }
    ],
-   "key_count": 144,
+   "key_count": 149,
    "stale_keys": []
   },
   "app/src/main/java/com/flashforge/farm/fragment/FilamentConfigFragment.java": {
@@ -1433,7 +1438,7 @@
    "logs_typename": true
   }
  },
- "engine_fdm_defs": 371,
+ "engine_fdm_defs": 376,
  "total_stale": 0,
  "stale": []
 }

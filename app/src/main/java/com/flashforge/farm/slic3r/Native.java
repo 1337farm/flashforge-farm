@@ -230,14 +230,14 @@ public class Native {
     static native long glmodel_create();
     static native void glmodel_init_from_model(long ptr, long model);
     static native void glmodel_init_from_model_object(long ptr, long model, int i);
+    static native void glmodel_init_from_model_lod(long ptr, long model, int i, int stride);
     static native void glmodel_init_raycast_data(long ptr);
     static native void glmodel_set_color(long ptr, float red, float green, float blue, float alpha);
     static native void glmodel_render(long ptr);
     static native void glmodel_stilized_arrow(long ptr, float tipRadius, float tipLength, float stemRadius, float stemLength);
     static native void glmodel_init_background_triangles(long ptr);
     static native void glmodel_init_from_path(long ptr, float[] vertices, int[] indices, boolean lineStrip);
-    static native void glmodel_init_from_ribbon(long ptr, float[] vertices, float[] uvs, int[] indices);
-    static native void glmodel_init_textured_quad(long ptr, float[] xyz, float[] uv);
+    static native void glmodel_init_from_ribbon(long ptr, float[] vertices, float[] uvs, int[] indices);    static native void glmodel_init_textured_quad(long ptr, float[] xyz, float[] uv);
     static native void glmodel_init_box(long ptr, float width, float depth, float height);
     static native void glmodel_init_bounding_box(long ptr, long modelPtr, int i);
     static native boolean glmodel_is_initialized(long ptr);

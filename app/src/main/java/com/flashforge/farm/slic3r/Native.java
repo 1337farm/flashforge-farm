@@ -230,7 +230,7 @@ public class Native {
     static native long glmodel_create();
     static native void glmodel_init_from_model(long ptr, long model);
     static native void glmodel_init_from_model_object(long ptr, long model, int i);
-    static native void glmodel_init_from_model_lod(long ptr, long model, int i, int stride);
+    static native void glmodel_init_from_model_lod(long ptr, long model, int i, int maxTris);
     static native void glmodel_init_raycast_data(long ptr);
     static native void glmodel_set_color(long ptr, float red, float green, float blue, float alpha);
     static native void glmodel_render(long ptr);

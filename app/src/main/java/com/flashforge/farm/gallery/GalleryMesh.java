@@ -84,29 +84,100 @@ public final class GalleryMesh {
     }
 
     /**
-     * Stride-subsampled copy capped at maxTris triangles (every Nth triangle,
-     * order preserved). Unlike retriangulation (removed in #272 for causing
-     * artifacts), this never invents geometry: thumbnails of huge models stay
-     * recognizable and cheap. Returns {@code this} when already small enough.
+     * Coverage-preserving decimation capped at maxTris triangles via vertex
+     * clustering: vertices falling into the same grid cell are welded and
+     * sub-cell (degenerate) triangles dropped. Unlike stride-subsampling
+     * (removed: keeping every Nth triangle deleted (N-1)/N of the surface and
+     * rendered million-triangle models as see-through holey shells), this
+     * never punches holes — kept triangles still tile the whole surface,
+     * just coarser where cells merged. Returns {@code this} when already
+     * small enough.
      */
     public GalleryMesh decimated(int maxTris) {
         if (triCount <= maxTris || maxTris <= 0) return this;
-        int stride = (triCount + maxTris - 1) / maxTris;
-        int kept = (triCount + stride - 1) / stride;
-        float[] outXyz = new float[kept * 9];
-        float[] outNormals = new float[kept * 9];
-        int o = 0;
-        for (int t = 0; t < triCount; t += stride) {
-            System.arraycopy(xyz, t * 9, outXyz, o, 9);
-            // Face normals are stored one-per-tri at stride 3 (see computeNormals).
-            if (t * 3 + 2 < normals.length) {
-                outNormals[o / 3] = normals[t * 3];
-                outNormals[o / 3 + 1] = normals[t * 3 + 1];
-                outNormals[o / 3 + 2] = normals[t * 3 + 2];
+        // Total area in one pass: cells covering the surface ~ area/cell^2;
+        // aim for ~maxTris/2 cells so output lands near the budget.
+        double area = 0;
+        float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE, minZ = Float.MAX_VALUE;
+        for (int t = 0; t < triCount; t++) {
+            int o = t * 9;
+            float ax = xyz[o], ay = xyz[o + 1], az = xyz[o + 2];
+            float ux = xyz[o + 3] - ax, uy = xyz[o + 4] - ay, uz = xyz[o + 5] - az;
+            float wx = xyz[o + 6] - ax, wy = xyz[o + 7] - ay, wz = xyz[o + 8] - az;
+            float cx = uy * wz - uz * wy, cy = uz * wx - ux * wz, cz = ux * wy - uy * wx;
+            area += 0.5 * Math.sqrt(cx * cx + cy * cy + cz * cz);
+            for (int k = 0; k < 3; k++) {
+                float x = xyz[o + k * 3], y = xyz[o + k * 3 + 1], z = xyz[o + k * 3 + 2];
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (z < minZ) minZ = z;
             }
-            o += 9;
         }
-        return new GalleryMesh(outXyz, outNormals);
+        if (!(area > 0)) return this;
+        double cell = Math.sqrt(2.0 * area / maxTris);
+        if (!(cell > 0)) return this;
+        // Weld passes with growing cells until the output fits the budget
+        // (or stops shrinking: disjoint coarse soup cannot merge further).
+        // Coverage is the invariant; the budget is a target.
+        java.util.ArrayList<Integer> kept = new java.util.ArrayList<>(maxTris * 3);
+        java.util.ArrayList<Float> verts = new java.util.ArrayList<>();
+        int lastKept = Integer.MAX_VALUE;
+        for (int pass = 0; pass < 8; pass++) {
+            kept.clear();
+            verts.clear();
+            weld(cell, minX, minY, minZ, verts, kept);
+            int n = kept.size() / 3;
+            if (n <= maxTris || n >= lastKept) break;
+            lastKept = n;
+            cell *= 1.5;
+        }
+        if (kept.isEmpty()) return this; // pathological: keep full mesh
+        float[] outXyz = new float[kept.size() * 3];
+        for (int i = 0; i < kept.size(); i++) {
+            int v = kept.get(i);
+            outXyz[i * 3] = verts.get(v * 3);
+            outXyz[i * 3 + 1] = verts.get(v * 3 + 1);
+            outXyz[i * 3 + 2] = verts.get(v * 3 + 2);
+        }
+        return new GalleryMesh(outXyz);
+    }
+
+    /** One weld pass at the given cell size: fills verts + kept index triplets. */
+    private void weld(double cell, float minX, float minY, float minZ,
+                      java.util.ArrayList<Float> verts, java.util.ArrayList<Integer> kept) {
+        // Weld: first-seen vertex per cell wins (no invented positions, no
+        // shrinkage). Keys pack 21 bits per axis; clamped defensively.
+        java.util.HashMap<Long, Integer> cellToVert =
+                new java.util.HashMap<>(Math.min(triCount * 3, 1 << 16));
+        int[] remap = new int[triCount * 3];
+        for (int i = 0; i < triCount * 3; i++) {
+            long ix = clamp21((long) Math.floor((xyz[i * 3] - minX) / cell));
+            long iy = clamp21((long) Math.floor((xyz[i * 3 + 1] - minY) / cell));
+            long iz = clamp21((long) Math.floor((xyz[i * 3 + 2] - minZ) / cell));
+            long key = (ix << 42) | (iy << 21) | iz;
+            Integer known = cellToVert.get(key);
+            if (known != null) {
+                remap[i] = known;
+            } else {
+                int idx = verts.size() / 3;
+                verts.add(xyz[i * 3]);
+                verts.add(xyz[i * 3 + 1]);
+                verts.add(xyz[i * 3 + 2]);
+                cellToVert.put(key, idx);
+                remap[i] = idx;
+            }
+        }
+        for (int t = 0; t < triCount; t++) {
+            int a = remap[t * 3], b = remap[t * 3 + 1], c = remap[t * 3 + 2];
+            if (a == b || b == c || a == c) continue; // collapsed sub-cell tri
+            kept.add(a);
+            kept.add(b);
+            kept.add(c);
+        }
+    }
+
+    private static long clamp21(long v) {
+        return v < 0 ? 0 : Math.min(v, (1L << 21) - 1);
     }
     /**
      * Copy with outward-facing winding, or {@code this} if already outward.

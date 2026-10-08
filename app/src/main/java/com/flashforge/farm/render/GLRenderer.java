@@ -63,20 +63,15 @@ public class GLRenderer implements GLSurfaceView.Renderer {
     private final double[] frustumVP = new double[16];
     private final Vec3d cullMin = new Vec3d();
     private final Vec3d cullMax = new Vec3d();
-    /** Display-mesh stride (keep every Nth triangle) for huge models; 1 = full. */
-    private int displayStride = 1;
-
-    /** Cap display triangles for multi-hundred-K meshes that stall mobile GPUs. */
-    public void setDisplayStride(int stride) {
-        displayStride = Math.max(1, stride);
-    }
+    /** Per-object display budget: vertex-cluster weld keeps huge models
+     * interactive (raycast/paint/slice keep full res). Per-object on purpose:
+     * the old global stride was last-write-wins from the latest added file,
+     * so adding a small cube silently switched everything to full-res (and a
+     * big model downgraded everything) — the "cube fixes the dragon" bug. */
+    public static final int DISPLAY_MAX_TRIS = 250000;
 
     private void initDisplayModel(GLModel glModel, com.flashforge.farm.slic3r.Model model, int i) {
-        if (displayStride > 1) {
-            glModel.initFromLod(model, i, displayStride);
-        } else {
-            glModel.initFrom(model, i);
-        }
+        glModel.initFromLod(model, i, DISPLAY_MAX_TRIS);
     }
     private double[] cutPlaneModelMatrix = new double[16];
     private double[] cutPlaneOutModelMatrix = new double[16];
@@ -1119,11 +1114,7 @@ public class GLRenderer implements GLSurfaceView.Renderer {
                     shader.setUniform("volume_mirrored", left);
                     while (list.size() <= i) {
                         GLModel gm = new GLModel();
-                        if (displayStride > 1) {
-                            gm.initFromLod(m, list.size(), displayStride);
-                        } else {
-                            gm.initFrom(m, list.size());
-                        }
+                        gm.initFromLod(m, list.size(), DISPLAY_MAX_TRIS);
                         list.add(gm);
                     }
                     GLModel gm = list.get(i);

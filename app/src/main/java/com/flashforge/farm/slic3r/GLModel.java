@@ -39,9 +39,9 @@ public class GLModel {
         Native.glmodel_init_from_model_object(pointer, model.pointer, i);
     }
 
-    /** Display-only decimated mesh (stride = keep every Nth triangle). */
-    public void initFromLod(Model model, int i, int stride) {
-        Native.glmodel_init_from_model_lod(pointer, model.pointer, i, stride);
+    /** Display-only decimated mesh (vertex-cluster weld, capped at maxTris). */
+    public void initFromLod(Model model, int i, int maxTris) {
+        Native.glmodel_init_from_model_lod(pointer, model.pointer, i, maxTris);
     }
 
     /** Build this model from facets painted with the given filament in a paint session (mesh-local coords). */

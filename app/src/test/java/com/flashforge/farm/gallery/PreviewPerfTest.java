@@ -28,12 +28,21 @@ public class PreviewPerfTest {
 
     @Test
     public void testDecimatedCapsTriangles() {
-        GalleryMesh m = quad(100);
-        GalleryMesh d = m.decimated(30);
-        assertTrue(d.triCount <= 30);
+        // Dense weldable soup: clustering lands under budget with coverage.
+        GalleryMesh m = Primitives.sphere(20, 60, 40);
+        assertTrue(m.triCount > 1000);
+        GalleryMesh d = m.decimated(1000);
+        assertTrue("kept " + d.triCount, d.triCount <= 1000);
         assertTrue(d.triCount > 0);
-        // Order preserved: first kept tri starts at x=0.
-        assertEquals(0f, d.xyz[0], 1e-6f);
+    }
+
+    @Test
+    public void testDecimatedThinStripKeepsFullMesh() {
+        // quad() is a 1-unit-tall strip: any weld cell that fits the budget
+        // of 30 collapses it entirely. Full mesh (not a holey subset) is the
+        // correct fallback — coverage is the invariant, budget the target.
+        GalleryMesh m = quad(100);
+        assertSame(m, m.decimated(30));
     }
 
     @Test
@@ -46,10 +55,12 @@ public class PreviewPerfTest {
     public void testDecimatedNormalsFollowFaces() {
         GalleryMesh m = quad(100);
         GalleryMesh d = m.decimated(30);
-        // Face normal of first tri (+Z) must survive at slot 0.
-        assertEquals(0f, d.normals[0], 1e-6f);
-        assertEquals(0f, d.normals[1], 1e-6f);
-        assertEquals(1f, d.normals[2], 1e-6f);
+        // Normals are recomputed from kept faces: every tri is +Z here.
+        for (int t = 0; t < d.triCount; t++) {
+            assertEquals(0f, d.normals[t * 3], 1e-6f);
+            assertEquals(0f, d.normals[t * 3 + 1], 1e-6f);
+            assertEquals(1f, d.normals[t * 3 + 2], 1e-6f);
+        }
     }
 
     @Test

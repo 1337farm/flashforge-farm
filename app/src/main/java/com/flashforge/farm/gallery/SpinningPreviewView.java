@@ -48,6 +48,10 @@ public class SpinningPreviewView extends View {
             });
     private int renderGen = 0;
     private volatile boolean renderInFlight = false;
+    /** Angles of the last kicked frame: re-kick whenever the view moved,
+     * including mid-drag (otherwise dragging freezes on a stale bitmap). */
+    private float renderedYaw = Float.NaN;
+    private float renderedPitch = Float.NaN;
 
     private boolean dragging;
     private boolean moved;
@@ -180,7 +184,8 @@ public class SpinningPreviewView extends View {
             canvas.drawBitmap(bitmap, null, dstRect, paint);
         }
         if (mesh != null && mesh.triCount > 0
-                && (bitmap == null || bufSize != size)) {
+                && (bitmap == null || bufSize != size
+                    || yaw != renderedYaw || pitch != renderedPitch)) {
             kickRender(size);
         }
         if (running && isShown()) {
@@ -188,8 +193,6 @@ public class SpinningPreviewView extends View {
             if (lastFrameMs == 0) lastFrameMs = now;
             if (!dragging && now >= resumeAtMs) {
                 yaw += AUTO_SPEED * (now - lastFrameMs) / 1000f;
-                // Turntable spins: re-render at the new angle when idle.
-                kickRender(size);
             }
             lastFrameMs = now;
             postInvalidateDelayed(FRAME_MS);
@@ -203,6 +206,8 @@ public class SpinningPreviewView extends View {
         if (m == null || m.triCount <= 0) return;
         renderInFlight = true;
         final float yaw0 = yaw, pitch0 = pitch;
+        renderedYaw = yaw0;
+        renderedPitch = pitch0;
         final float cx0 = cx, cy0 = cy, cz0 = cz, radius0 = radius;
         final int gen = renderGen;
         RENDER_POOL.execute(() -> {

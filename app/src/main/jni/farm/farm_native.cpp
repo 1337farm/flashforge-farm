@@ -19,12 +19,14 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <memory>
 #include <numbers>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -1736,11 +1738,14 @@ namespace {
         ref->model.init_from(ref->mesh.its);
     }
 
-    JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1from_1model_1lod(JNIEnv *env, jclass, jlong ptr, jlong model, jint i, jint stride) {
-        // Display-only decimated mesh: stride-subsampled triangles for
-        // million-triangle models that stall mobile GPUs at full res.
-        // Raycast/paint/slice paths keep using the full mesh; no topology
-        // is invented (unlike retriangulation), so silhouettes stay true.
+    JNIEXPORT void JNICALL Java_com_flashforge_farm_slic3r_Native_glmodel_1init_1from_1model_1lod(JNIEnv *env, jclass, jlong ptr, jlong model, jint i, jint maxTris) {
+        // Display-only decimated mesh via vertex clustering: vertices in the
+        // same grid cell are welded, sub-cell (degenerate) triangles dropped.
+        // The old stride-subsample (keep every Nth triangle) deleted (N-1)/N
+        // of the surface and rendered huge models as see-through holey shells;
+        // clustering keeps full coverage at coarser facets. Raycast/paint/
+        // slice paths keep using the full mesh. JNI signature unchanged
+        // (pinned by test_jni_contract.py): only the budget semantics changed.
         (void) env;
         GLModelRef* ref = (GLModelRef*) (intptr_t) ptr;
         ModelRef* mRef = (ModelRef*) (intptr_t) model;
@@ -1748,15 +1753,85 @@ namespace {
         Domain::ModelObject* obj = check_object(mRef, i);
         if (obj == nullptr) return;
         ref->mesh = BizAlgo::ModelObject::mesh(*obj);
-        const size_t n = ref->mesh.its.indices.size();
-        if (stride <= 1 || n <= (size_t) stride) {
+        const auto &srcVerts = ref->mesh.its.vertices;
+        const auto &srcIdx = ref->mesh.its.indices;
+        const size_t n = srcIdx.size();
+        if (maxTris <= 0 || n <= (size_t) maxTris || srcVerts.empty()) {
             ref->model.init_from(ref->mesh.its);
             return;
         }
+        // One pass: total area + min corner (cells ~ area/cell^2, aim maxTris/2).
+        double area = 0;
+        float minX = FLT_MAX, minY = FLT_MAX, minZ = FLT_MAX;
+        for (size_t t = 0; t < n; ++t) {
+            const Vec3f &a = srcVerts[srcIdx[t][0]];
+            const Vec3f &b = srcVerts[srcIdx[t][1]];
+            const Vec3f &c = srcVerts[srcIdx[t][2]];
+            float ux = b.x() - a.x(), uy = b.y() - a.y(), uz = b.z() - a.z();
+            float wx = c.x() - a.x(), wy = c.y() - a.y(), wz = c.z() - a.z();
+            float cx = uy * wz - uz * wy, cy = uz * wx - ux * wz, cz = ux * wy - uy * wx;
+            area += 0.5 * std::sqrt(double(cx) * cx + double(cy) * cy + double(cz) * cz);
+            for (int k = 0; k < 3; ++k) {
+                const Vec3f &v = k == 0 ? a : (k == 1 ? b : c);
+                if (v.x() < minX) minX = v.x();
+                if (v.y() < minY) minY = v.y();
+                if (v.z() < minZ) minZ = v.z();
+            }
+        }
+        double cell = (area > 0) ? std::sqrt(2.0 * area / (double) maxTris) : 0;
+        if (!(cell > 0)) {
+            ref->model.init_from(ref->mesh.its);
+            return;
+        }
+        auto q = [](double cell, float v, float mn) -> int64_t {
+            int64_t c = (int64_t) std::floor((double(v) - double(mn)) / cell);
+            if (c < 0) return 0;
+            const int64_t m = (int64_t(1) << 21) - 1;
+            return c > m ? m : c;
+        };
+        // Weld passes with growing cells until the output fits the budget
+        // (or stops shrinking). Coverage is the invariant; budget is a target.
         ::indexed_triangle_set sub;
-        sub.vertices = ref->mesh.its.vertices;
-        for (size_t t = 0; t < n; t += (size_t) stride)
-            sub.indices.push_back(ref->mesh.its.indices[t]);
+        size_t lastKept = SIZE_MAX;
+        for (int pass = 0; pass < 8; ++pass) {
+            std::unordered_map<int64_t, uint32_t> cellToVert;
+            cellToVert.reserve(srcVerts.size());
+            std::vector<Vec3f> verts;
+            verts.reserve(srcVerts.size() / 4);
+            std::vector<uint32_t> remap(srcVerts.size(), UINT32_MAX);
+            for (size_t v = 0; v < srcVerts.size(); ++v) {
+                const Vec3f &p = srcVerts[v];
+                int64_t key = (q(cell, p.x(), minX) << 42)
+                            | (q(cell, p.y(), minY) << 21)
+                            | q(cell, p.z(), minZ);
+                auto it = cellToVert.find(key);
+                if (it != cellToVert.end()) {
+                    remap[v] = it->second;
+                } else {
+                    uint32_t idx = (uint32_t) verts.size();
+                    verts.push_back(p); // first-seen vertex wins
+                    cellToVert[key] = idx;
+                    remap[v] = idx;
+                }
+            }
+            sub.vertices = std::move(verts);
+            sub.indices.clear();
+            sub.indices.reserve(n / 4);
+            for (size_t t = 0; t < n; ++t) {
+                uint32_t a = remap[srcIdx[t][0]], b = remap[srcIdx[t][1]], c = remap[srcIdx[t][2]];
+                if (a == b || b == c || a == c) continue; // collapsed sub-cell tri
+                sub.indices.push_back({(int) a, (int) b, (int) c});
+            }
+            size_t kept = sub.indices.size();
+            if (kept == 0) break; // pathological: fall through to full mesh below
+            if (kept <= (size_t) maxTris || kept >= lastKept) break;
+            lastKept = kept;
+            cell *= 1.5;
+        }
+        if (sub.indices.empty()) {
+            ref->model.init_from(ref->mesh.its); // pathological: keep full mesh
+            return;
+        }
         ref->model.init_from(sub);
     }
 

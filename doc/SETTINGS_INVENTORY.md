@@ -1,10 +1,10 @@
 # Settings Code Inventory (generated — do not hand-edit)
 
 > Regenerate: `python3.14 scripts/settings-inventory.py`.
-> Engine FDM defs: **371**. Total stale UI keys: **0**.
+> Engine FDM defs: **376**. Total stale UI keys: **0**.
 
 ## `app/src/main/java/com/flashforge/farm/fragment/ProfilePrintSettingsBuilder.java`
-- methods: 12, sections: 34, keys referenced: 144, stale: 0
+- methods: 12, sections: 34, keys referenced: 149, stale: 0
   - L76 `Layer height` (3 keys)
   - L77 `Line width` (8 keys)
   - L78 `Seam` (2 keys)
@@ -35,7 +35,7 @@
   - L148 `Skirt` (4 keys)
   - L149 `Brim` (2 keys)
   - L150 `Special mode` (1 keys)
-  - L151 `Fuzzy Skin` (3 keys)
+  - L151 `Fuzzy Skin` (8 keys)
   - L152 `G-code output` (2 keys)
   - L153 `Notes` (1 keys)
   - L154 `Profile dependencies` (2 keys)

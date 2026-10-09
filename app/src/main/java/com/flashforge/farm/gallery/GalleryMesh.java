@@ -95,8 +95,8 @@ public final class GalleryMesh {
      */
     public GalleryMesh decimated(int maxTris) {
         if (triCount <= maxTris || maxTris <= 0) return this;
-        // Total area in one pass: cells covering the surface ~ area/cell^2;
-        // aim for ~maxTris/2 cells so output lands near the budget.
+        // Total area in one pass: cells covering the surface ~ area/cell^2,
+        // so the first cell aims at ~maxTris cells.
         double area = 0;
         float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE, minZ = Float.MAX_VALUE;
         for (int t = 0; t < triCount; t++) {
@@ -114,32 +114,89 @@ public final class GalleryMesh {
             }
         }
         if (!(area > 0)) return this;
-        double cell = Math.sqrt(2.0 * area / maxTris);
+        // First cell aims at the budget (cells ~= area/cell^2), then bisect
+        // between the finest exceeding cell and the coarsest fitting one so
+        // the result lands near the budget: accepting the first fitting
+        // pass settled ~40% under budget, which rendered as "low poly".
+        // Coverage stays the invariant; best-under-budget wins.
+        double cell = Math.sqrt(area / maxTris);
         if (!(cell > 0)) return this;
-        // Weld passes with growing cells until the output fits the budget
-        // (or stops shrinking: disjoint coarse soup cannot merge further).
-        // Coverage is the invariant; the budget is a target.
-        java.util.ArrayList<Integer> kept = new java.util.ArrayList<>(maxTris * 3);
+        double over = 0;  // finest cell known to exceed the budget (0 = none)
+        double under = 0; // coarsest cell known to fit (0 = none)
+        java.util.ArrayList<Integer> kept =
+                new java.util.ArrayList<>(Math.min(maxTris * 3, 1 << 20));
         java.util.ArrayList<Float> verts = new java.util.ArrayList<>();
-        int lastKept = Integer.MAX_VALUE;
+        java.util.ArrayList<Integer> bestKept = null;
+        java.util.ArrayList<Float> bestVerts = null;
+        int bestN = 0;
+        java.util.ArrayList<Integer> lastKept = null;
+        java.util.ArrayList<Float> lastVerts = null;
         for (int pass = 0; pass < 8; pass++) {
             kept.clear();
             verts.clear();
             weld(cell, minX, minY, minZ, verts, kept);
             int n = kept.size() / 3;
-            if (n <= maxTris || n >= lastKept) break;
-            lastKept = n;
-            cell *= 1.5;
+            lastKept = new java.util.ArrayList<>(kept);
+            lastVerts = new java.util.ArrayList<>(verts);
+            if (n <= maxTris) {
+                under = cell;
+                // Coverage gate: a fitting pass that lost most of the
+                // surface is a fragment, not a decimation (thin-strip soup
+                // collapses at any fitting cell) — it must never win over
+                // the full mesh.
+                if (n > bestN && keptArea(kept, verts) >= area * 0.7) {
+                    bestN = n;
+                    bestKept = lastKept;
+                    bestVerts = lastVerts;
+                }
+                cell = (over > 0) ? (over + under) / 2 : cell / 1.5;
+            } else {
+                over = cell;
+                cell = (under > 0) ? (over + under) / 2 : cell * 1.5;
+            }
+            if (over > 0 && under > 0 && (under - over) / under < 0.05) break;
         }
-        if (kept.isEmpty()) return this; // pathological: keep full mesh
-        float[] outXyz = new float[kept.size() * 3];
-        for (int i = 0; i < kept.size(); i++) {
-            int v = kept.get(i);
-            outXyz[i * 3] = verts.get(v * 3);
-            outXyz[i * 3 + 1] = verts.get(v * 3 + 1);
-            outXyz[i * 3 + 2] = verts.get(v * 3 + 2);
+        // Best coverage-preserving fit wins. If no fitting pass kept the
+        // surface, the budget is unachievable without holes: return the full
+        // mesh when some cell fit (fragmented), or the coarsest attempt when
+        // nothing ever fit (closest to the budget).
+        java.util.ArrayList<Integer> outIdx;
+        java.util.ArrayList<Float> outVerts;
+        if (bestN > 0) {
+            outIdx = bestKept;
+            outVerts = bestVerts;
+        } else if (under == 0 && lastKept != null && !lastKept.isEmpty()) {
+            outIdx = lastKept;
+            outVerts = lastVerts;
+        } else {
+            return this;
+        }
+        float[] outXyz = new float[outIdx.size() * 3];
+        for (int i = 0; i < outIdx.size(); i++) {
+            int v = outIdx.get(i);
+            outXyz[i * 3] = outVerts.get(v * 3);
+            outXyz[i * 3 + 1] = outVerts.get(v * 3 + 1);
+            outXyz[i * 3 + 2] = outVerts.get(v * 3 + 2);
         }
         return new GalleryMesh(outXyz);
+    }
+
+    /** Surface area of a weld pass result (index triplets into a vertex list). */
+    private static double keptArea(java.util.ArrayList<Integer> kept,
+                                   java.util.ArrayList<Float> verts) {
+        double a = 0;
+        for (int i = 0; i < kept.size(); i += 3) {
+            int ia = kept.get(i) * 3, ib = kept.get(i + 1) * 3, ic = kept.get(i + 2) * 3;
+            float ux = verts.get(ib) - verts.get(ia);
+            float uy = verts.get(ib + 1) - verts.get(ia + 1);
+            float uz = verts.get(ib + 2) - verts.get(ia + 2);
+            float wx = verts.get(ic) - verts.get(ia);
+            float wy = verts.get(ic + 1) - verts.get(ia + 1);
+            float wz = verts.get(ic + 2) - verts.get(ia + 2);
+            float cx = uy * wz - uz * wy, cy = uz * wx - ux * wz, cz = ux * wy - uy * wx;
+            a += 0.5 * Math.sqrt(cx * cx + cy * cy + cz * cz);
+        }
+        return a;
     }
 
     /** One weld pass at the given cell size: fills verts + kept index triplets. */

@@ -242,7 +242,7 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0'
     implementation 'com.github.instacart:truetime-android:4.0.0.alpha'
     implementation 'com.github.mrudultora:Colorpicker:1.2.0'
-    implementation 'com.github.bumptech.glide:glide:5.0.9'
+    implementation 'com.github.bumptech.glide:glide:5.0.10'
     implementation 'androidx.appcompat:appcompat:1.8.0'
     implementation 'com.google.android.material:material:1.14.0'
     implementation 'com.loopj.android:android-async-http:1.4.11'
